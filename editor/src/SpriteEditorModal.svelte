@@ -5,6 +5,7 @@
   export let isVisible = false;
   export let targetAssetId = '';
   export let category = 'decorations';
+  export let isMuted = false;
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -57,6 +58,7 @@
   }
 
   function playDrawSound(type: 'draw' | 'clear' | 'chime') {
+    if (isMuted) return;
     try {
       const ctx = getAudioContext();
       const now = ctx.currentTime;

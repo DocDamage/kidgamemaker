@@ -5,13 +5,32 @@
 
   export let isVisible = false;
   export let inventory: AssetInventory = {};
+  export let isMuted = false;
 
   const dispatch = createEventDispatcher<{
     itemSelected: ToyboxAsset;
     close: void;
   }>();
 
-  $: categories = Object.entries(inventory);
+  let activeCategory = 'terrain';
+
+  const CATEGORY_MAP: Record<string, { label: string; emoji: string; color: string }> = {
+    terrain: { label: 'Floor', emoji: '🧱', color: '#fbbf24' },
+    heroes: { label: 'Hero', emoji: '🦸', color: '#60a5fa' },
+    enemies: { label: 'Monster', emoji: '👾', color: '#f87171' },
+    collectibles: { label: 'Reward', emoji: '🪙', color: '#34d399' },
+    portals: { label: 'Portal', emoji: '🚪', color: '#a78bfa' },
+    decorations: { label: 'Toy', emoji: '🎪', color: '#ec4899' }
+  };
+
+  // Keep first available category active if 'terrain' doesn't exist
+  $: if (isVisible && inventory) {
+    const keys = Object.keys(CATEGORY_MAP);
+    const available = keys.filter(k => inventory[k] && inventory[k].length > 0);
+    if (available.length > 0 && !available.includes(activeCategory)) {
+      activeCategory = available[0];
+    }
+  }
 
   function isEmoji(str: string | undefined): boolean {
     if (!str) return true;
@@ -26,21 +45,71 @@
     const dir = asset.sidecar_path.substring(0, lastSlash + 1);
     return convertFileSrc(dir + asset.visual);
   }
+
+  // Local synthesizer sound trigger
+  let audioCtx: AudioContext | null = null;
+  function getAudioContext() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  function playTabSound() {
+    if (isMuted) return;
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.exponentialRampToValueAtTime(750, now + 0.08);
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } catch (_) {}
+  }
 </script>
 
 {#if isVisible}
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="backdrop" role="button" tabindex="-1" on:click={() => dispatch('close')} on:keydown={(e) => e.key === 'Escape' && dispatch('close')}>
     <div class="modal" role="dialog" aria-modal="true" aria-label="Toybox" tabindex="0" on:click|stopPropagation on:keydown|stopPropagation>
       <header>
-        <h2>Toybox</h2>
-        <button on:click={() => dispatch('close')}>Close</button>
+        <h2>🧸 Toybox</h2>
+        <button class="close-btn" on:click={() => dispatch('close')}>✕ Close</button>
       </header>
 
-      {#each categories as [category, items]}
-        <article class="category">
-          <h3>{category}</h3>
+      <!-- Emoji tabs -->
+      <div class="tabs-container">
+        {#each Object.entries(CATEGORY_MAP) as [catId, info]}
+          {#if inventory[catId] && inventory[catId].length > 0}
+            <button
+              class="tab-btn"
+              class:active={activeCategory === catId}
+              style="--accent-color: {info.color}"
+              on:click={() => { activeCategory = catId; playTabSound(); }}
+            >
+              <span class="tab-emoji">{info.emoji}</span>
+              <span class="tab-label">{info.label}</span>
+            </button>
+          {/if}
+        {/each}
+      </div>
+
+      <!-- Active category toys -->
+      <div class="active-category-section">
+        {#if inventory[activeCategory] && inventory[activeCategory].length > 0}
           <div class="grid">
-            {#each items as item}
+            {#each inventory[activeCategory] as item}
               <button class="toy" on:click={() => dispatch('itemSelected', item)}>
                 <span class="toy-visual-container">
                   {#if item.visual && !isEmoji(item.visual)}
@@ -73,8 +142,10 @@
               </button>
             {/each}
           </div>
-        </article>
-      {/each}
+        {:else}
+          <p class="empty-state">No toys here yet!</p>
+        {/if}
+      </div>
     </div>
   </div>
 {/if}
@@ -83,21 +154,23 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.58);
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
     display: grid;
     place-items: center;
-    z-index: 50;
+    z-index: 100;
   }
 
   .modal {
-    width: min(920px, 92vw);
+    width: min(850px, 92vw);
     max-height: 86vh;
     overflow: auto;
-    border-radius: 28px;
-    background: #111827;
+    border-radius: 40px;
+    border: 6px solid #fbbf24;
+    background: #1e293b;
     color: white;
-    padding: 24px;
-    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5);
+    padding: 32px;
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6);
   }
 
   header {
@@ -107,43 +180,136 @@
     gap: 16px;
   }
 
-  h2, h3 {
+  h2 {
     margin: 0;
+    font-size: 2.2rem;
+    color: #fbbf24;
   }
 
-  .category {
+  .close-btn {
+    background: #ef4444;
+    color: white;
+    border: 0;
+    border-radius: 20px;
+    padding: 10px 24px;
+    font-size: 1.1rem;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #b91c1c;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+
+  .close-btn:active {
+    transform: translateY(4px);
+    box-shadow: 0 0 0 #b91c1c;
+  }
+
+  /* Emoji Tabs layout */
+  .tabs-container {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
     margin-top: 24px;
+    background: rgba(15, 23, 42, 0.4);
+    padding: 12px;
+    border-radius: 24px;
+    border: 2px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .tab-btn {
+    border: 0;
+    background: #334155;
+    color: #94a3b8;
+    border-radius: 20px;
+    padding: 10px 24px;
+    font-size: 1.1rem;
+    font-weight: 900;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
+    transition: transform 0.1s, background 0.2s, color 0.2s, box-shadow 0.2s;
+  }
+
+  .tab-btn:hover {
+    background: #475569;
+    color: white;
+  }
+
+  .tab-btn.active {
+    background: var(--accent-color);
+    color: #0f172a;
+    transform: scale(1.06);
+    box-shadow: 0 4px 14px var(--accent-color);
+  }
+
+  .tab-btn:active {
+    transform: translateY(3px) scale(0.97);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+  }
+
+  .tab-emoji {
+    font-size: 1.6rem;
+  }
+
+  .active-category-section {
+    margin-top: 24px;
+    padding: 10px 0;
   }
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-    gap: 14px;
-    margin-top: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+    gap: 16px;
   }
 
   .toy {
-    min-height: 112px;
-    display: grid;
-    place-items: center;
-    gap: 8px;
+    min-height: 116px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
     border: 0;
-    border-radius: 22px;
+    border-radius: 24px;
     background: #f8fafc;
-    color: #111827;
+    color: #0f172a;
     cursor: pointer;
-    font-weight: 800;
+    font-weight: 900;
+    padding: 12px;
+    box-shadow: 0 5px 0 #cbd5e1;
+    transition: transform 0.1s, box-shadow 0.1s, background 0.2s;
+  }
+
+  .toy:hover {
+    background: #ffffff;
+    transform: translateY(-4px);
+    box-shadow: 0 9px 0 #cbd5e1;
+  }
+
+  .toy:active {
+    transform: translateY(3px);
+    box-shadow: 0 2px 0 #cbd5e1;
   }
 
   .toy span {
-    font-size: 2.5rem;
+    font-size: 2.8rem;
   }
 
   .toy-visual-container {
-    width: 56px;
-    height: 56px;
+    width: 60px;
+    height: 60px;
     display: grid;
     place-items: center;
     overflow: hidden;
+  }
+
+  .empty-state {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 1.3rem;
+    margin-top: 48px;
   }
 </style>

@@ -33,6 +33,7 @@ var hud_health_label: Label = null
 var hud_score_label: Label = null
 var _js_pause_cb: JavaScriptObject
 var _js_restart_cb: JavaScriptObject
+var _js_mute_cb: JavaScriptObject
 
 
 func _ready() -> void:
@@ -41,8 +42,17 @@ func _ready() -> void:
 		if window != null:
 			_js_pause_cb = JavaScriptBridge.create_callback(_on_js_pause)
 			_js_restart_cb = JavaScriptBridge.create_callback(_on_js_restart)
+			_js_mute_cb = JavaScriptBridge.create_callback(_on_js_mute)
 			window.set("godotPauseGame", _js_pause_cb)
 			window.set("godotRestartGame", _js_restart_cb)
+			window.set("godotMuteGame", _js_mute_cb)
+
+			# Check if window parent already has a muted setting on load
+			var initial_mute = JavaScriptBridge.eval("window.parent.currentGameMuted")
+			if not initial_mute:
+				initial_mute = JavaScriptBridge.eval("window.currentGameMuted")
+			if initial_mute:
+				AudioServer.set_bus_mute(0, true)
 
 		var json_str = JavaScriptBridge.eval("window.parent.currentGameLevel")
 		if not json_str:
@@ -65,6 +75,12 @@ func _on_js_pause(args: Array) -> void:
 func _on_js_restart(_args: Array) -> void:
 	print("Game restarting via JS...")
 	get_tree().reload_current_scene()
+
+
+func _on_js_mute(args: Array) -> void:
+	var mute_val: bool = args[0] if args.size() > 0 else false
+	AudioServer.set_bus_mute(0, mute_val)
+	print("Game mute state set via JS: ", mute_val)
 
 
 func _unhandled_input(event: InputEvent) -> void:

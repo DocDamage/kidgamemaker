@@ -59,6 +59,23 @@
     isGamePaused = false;
   }
 
+  function toggleMute() {
+    isMuted = !isMuted;
+    (window as any).currentGameMuted = isMuted;
+
+    const iframe = document.querySelector('.game-iframe') as HTMLIFrameElement;
+    if (iframe && iframe.contentWindow) {
+      try {
+        (iframe.contentWindow as any).godotMuteGame(isMuted);
+      } catch (e) {
+        console.error("Failed to mute game inside iframe:", e);
+      }
+    }
+    if (!isMuted) {
+      playUiSound('pop');
+    }
+  }
+
   let audioCtx: AudioContext | null = null;
   function getAudioContext() {
     if (!audioCtx) {
@@ -71,6 +88,7 @@
   }
 
   function playUiSound(type: 'pop' | 'squeak' | 'chime') {
+    if (isMuted) return;
     try {
       const ctx = getAudioContext();
       const now = ctx.currentTime;
@@ -800,6 +818,7 @@
 
       const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
       (window as any).currentGameLevel = JSON.stringify(payload);
+      (window as any).currentGameMuted = isMuted;
 
       status = 'Preparing WebGL game...';
       try {
@@ -875,6 +894,9 @@
       </button>
       <button class="cycle-btn weather-btn" on:click={(e) => { animateClick(e); cycleWeather(); }} title="Change Weather">
         {#if worldSettings.weather === 'clear'}🌤{:else if worldSettings.weather === 'rain'}🌧{:else}❄️{/if}
+      </button>
+      <button class="cycle-btn mute-btn" class:active={isMuted} on:click={(e) => { animateClick(e); toggleMute(); }} title="Toggle Sound">
+        {isMuted ? "🔇" : "🔊"}
       </button>
     </div>
 
@@ -1127,6 +1149,7 @@
   <ToyboxModal
     isVisible={toyboxOpen}
     inventory={inventory}
+    isMuted={isMuted}
     on:itemSelected={(event) => selectAsset(event.detail)}
     on:close={() => (toyboxOpen = false)}
   />
@@ -1146,6 +1169,7 @@
     isVisible={spriteEditorOpen}
     targetAssetId={editingAssetId}
     category={editingCategory}
+    isMuted={isMuted}
     on:close={() => (spriteEditorOpen = false)}
     on:saved={handleDrawingSaved}
   />
@@ -1192,6 +1216,9 @@
         <header class="play-header">
           <h2>🎮 Playing Game! 🎮</h2>
           <div class="play-controls-overlay">
+            <button class="play-control-btn mute-btn-overlay" on:click={toggleMute} title="Toggle Sound" style="background: #374151; box-shadow: 0 5px 0 #1f2937;">
+              {isMuted ? "🔇" : "🔊"}
+            </button>
             <button class="play-control-btn pause-btn" on:click={togglePauseGame} title={isGamePaused ? "Resume" : "Pause"}>
               {isGamePaused ? "▶ Resume" : "⏸ Pause"}
             </button>
