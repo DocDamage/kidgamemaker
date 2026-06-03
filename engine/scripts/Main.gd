@@ -387,21 +387,67 @@ func _add_visuals(parent: Node2D, sidecar: Dictionary, size: Vector2, default_co
 		texture = _load_texture_dynamic(visual, str(sidecar.get("sidecar_path", "")))
 		
 	if texture != null:
-		var sprite := Sprite2D.new()
-		sprite.texture = texture
-		parent.set_meta("collision_size", size)
-		
 		var runtime_template := str(sidecar.get("runtime_template", ""))
-		if runtime_template == "terrain":
-			sprite.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
-			sprite.region_enabled = true
-			sprite.region_rect = Rect2(Vector2.ZERO, size)
-		else:
-			var tex_size := texture.get_size()
-			if tex_size.x > 0 and tex_size.y > 0:
-				sprite.scale = size / tex_size
+		var is_spritesheet: bool = bool(sidecar.get("is_spritesheet", false))
+		var frames: Array = sidecar.get("frames", [])
+		
+		if is_spritesheet and frames.size() > 0 and (runtime_template == "player" or runtime_template == "enemy"):
+			var animated_sprite := AnimatedSprite2D.new()
+			var sprite_frames := SpriteFrames.new()
+			sprite_frames.add_animation("default")
+			sprite_frames.set_animation_speed("default", 8.0)
+			sprite_frames.set_animation_loop("default", true)
+			
+			for f in frames:
+				if typeof(f) == TYPE_DICTIONARY:
+					var frame_rect = Rect2(float(f.get("x", 0)), float(f.get("y", 0)), float(f.get("w", 0)), float(f.get("h", 0)))
+					var atlas_tex := AtlasTexture.new()
+					atlas_tex.atlas = texture
+					atlas_tex.region = frame_rect
+					sprite_frames.add_frame("default", atlas_tex)
+					
+			animated_sprite.sprite_frames = sprite_frames
+			parent.add_child(animated_sprite)
+			
+			var first_frame_dict: Dictionary = frames[0]
+			var f_size = Vector2(float(first_frame_dict.get("w", size.x)), float(first_frame_dict.get("h", size.y)))
+			if f_size.x > 0 and f_size.y > 0:
+				animated_sprite.scale = size / f_size
 				
-		parent.add_child(sprite)
+			animated_sprite.play("default")
+			parent.set_meta("collision_size", size)
+			
+		elif is_spritesheet and frames.size() > 0:
+			var sprite := Sprite2D.new()
+			sprite.texture = texture
+			sprite.region_enabled = true
+			
+			var f: Dictionary = frames[0]
+			var frame_rect = Rect2(float(f.get("x", 0)), float(f.get("y", 0)), float(f.get("w", 0)), float(f.get("h", 0)))
+			sprite.region_rect = frame_rect
+			
+			parent.add_child(sprite)
+			
+			if frame_rect.size.x > 0 and frame_rect.size.y > 0:
+				sprite.scale = size / frame_rect.size
+				
+			parent.set_meta("collision_size", size)
+			
+		else:
+			var sprite := Sprite2D.new()
+			sprite.texture = texture
+			parent.set_meta("collision_size", size)
+			
+			if runtime_template == "terrain":
+				sprite.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+				sprite.region_enabled = true
+				sprite.region_rect = Rect2(Vector2.ZERO, size)
+			else:
+				var tex_size := texture.get_size()
+				if tex_size.x > 0 and tex_size.y > 0:
+					sprite.scale = size / tex_size
+					
+			parent.add_child(sprite)
 	else:
 		_add_placeholder_polygon(parent, size, default_color)
 		if visual != "":

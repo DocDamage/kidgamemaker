@@ -6,6 +6,11 @@
   "runtime_template": "player",
   "visual": "player_knight.png",
   "visual_tags": ["player","knight"],
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1,
+  "frames": [{"x":4,"y":8,"w":24,"h":36}],
   "placement_logic": {
     "snapping_type": "gravity_snap",
     "parallax_bucket": "play_layer"
@@ -13,8 +18,8 @@
   "collision": {
     "shape": "rectangle",
     "size": [
-      32,
-      48
+      24,
+      36
     ]
   }
 }

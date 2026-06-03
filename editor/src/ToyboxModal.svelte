@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { convertFileSrc } from '@tauri-apps/api/core';
   import type { AssetInventory, ToyboxAsset } from './lib/canvasState';
 
   export let isVisible = false;
@@ -11,6 +12,20 @@
   }>();
 
   $: categories = Object.entries(inventory);
+
+  function isEmoji(str: string | undefined): boolean {
+    if (!str) return true;
+    return !str.includes('.') && !str.includes('/') && !str.includes('\\');
+  }
+
+  function getAssetUrl(asset: ToyboxAsset): string {
+    if (!asset.visual || isEmoji(asset.visual)) return '';
+    if (!asset.sidecar_path) return asset.visual;
+    const lastSlash = Math.max(asset.sidecar_path.lastIndexOf('/'), asset.sidecar_path.lastIndexOf('\\'));
+    if (lastSlash === -1) return asset.visual;
+    const dir = asset.sidecar_path.substring(0, lastSlash + 1);
+    return convertFileSrc(dir + asset.visual);
+  }
 </script>
 
 {#if isVisible}
@@ -27,7 +42,33 @@
           <div class="grid">
             {#each items as item}
               <button class="toy" on:click={() => dispatch('itemSelected', item)}>
-                <span>{item.visual ?? '🎮'}</span>
+                <span class="toy-visual-container">
+                  {#if item.visual && !isEmoji(item.visual)}
+                    {#if item.is_spritesheet && item.frames && item.frames[0]}
+                      <img
+                        src={getAssetUrl(item)}
+                        alt={item.name}
+                        style="
+                          width: {item.frames[0].w}px;
+                          height: {item.frames[0].h}px;
+                          object-fit: none;
+                          object-position: -{item.frames[0].x}px -{item.frames[0].y}px;
+                          transform: scale({Math.min(1.5, 48 / Math.max(item.frames[0].w, item.frames[0].h))});
+                          transform-origin: center;
+                          display: block;
+                        "
+                      />
+                    {:else}
+                      <img
+                        src={getAssetUrl(item)}
+                        alt={item.name}
+                        style="max-width: 48px; max-height: 48px; object-fit: contain; display: block;"
+                      />
+                    {/if}
+                  {:else}
+                    <span>{item.visual ?? '🎮'}</span>
+                  {/if}
+                </span>
                 <strong>{item.name}</strong>
               </button>
             {/each}
@@ -96,5 +137,13 @@
 
   .toy span {
     font-size: 2.5rem;
+  }
+
+  .toy-visual-container {
+    width: 56px;
+    height: 56px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
   }
 </style>

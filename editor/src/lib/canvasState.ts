@@ -22,6 +22,9 @@ export type ToyboxAsset = {
   category: string;
   visual?: string;
   type?: string;
+  sidecar_path?: string;
+  is_spritesheet?: boolean;
+  frames?: Array<{ x: number; y: number; w: number; h: number }>;
 };
 
 export type AssetInventory = Record<string, ToyboxAsset[]>;

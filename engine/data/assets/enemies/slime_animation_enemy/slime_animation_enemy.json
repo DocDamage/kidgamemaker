@@ -1,16 +1,16 @@
 {
   "schema_version": 1,
-  "asset_id": "red_slime_enemy",
-  "asset_name": "Red Slime Enemy",
+  "asset_id": "slime_animation_enemy",
+  "asset_name": "Slime Animation Enemy",
   "category": "enemies",
   "runtime_template": "enemy",
-  "visual": "red_slime_enemy.png",
-  "visual_tags": ["red","slime","enemy"],
+  "visual": "slime_animation_enemy.png",
+  "visual_tags": ["slime","animation","enemy"],
   "is_spritesheet": true,
   "is_uniform_grid": true,
   "grid_cell_size": 32,
   "slicing_confidence": 1,
-  "frames": [{"x":0,"y":0,"w":32,"h":32},{"x":32,"y":0,"w":32,"h":32},{"x":0,"y":32,"w":32,"h":32},{"x":32,"y":32,"w":32,"h":32}],
+  "frames": [{"x":0,"y":0,"w":32,"h":32},{"x":32,"y":0,"w":32,"h":32},{"x":64,"y":0,"w":32,"h":32}],
   "placement_logic": {
     "snapping_type": "gravity_snap",
     "parallax_bucket": "play_layer"

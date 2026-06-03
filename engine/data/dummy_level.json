@@ -34,7 +34,7 @@
     },
     {
       "instance_id": "enemy_001",
-      "asset_id": "slime_patrol",
+      "asset_id": "slime_animation_enemy",
       "category": "enemies",
       "type": "enemy",
       "position": { "x": 470, "y": 335 },

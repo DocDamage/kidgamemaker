@@ -16,6 +16,8 @@ pub struct AssetSummary {
     #[serde(rename = "type")]
     pub asset_type: Option<String>,
     pub sidecar_path: String,
+    pub is_spritesheet: Option<bool>,
+    pub frames: Option<Vec<Value>>,
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -260,6 +262,9 @@ fn read_asset_summary(
         .and_then(Value::as_str)
         .map(ToString::to_string);
 
+    let is_spritesheet = json.get("is_spritesheet").and_then(Value::as_bool);
+    let frames = json.get("frames").and_then(Value::as_array).cloned();
+
     Ok(AssetSummary {
         id,
         name,
@@ -267,6 +272,8 @@ fn read_asset_summary(
         visual,
         asset_type,
         sidecar_path: sidecar_path.display().to_string(),
+        is_spritesheet,
+        frames,
     })
 }
 
@@ -282,6 +289,8 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
             visual: Some("🛡️".to_string()),
             asset_type: Some("player".to_string()),
             sidecar_path: "engine/data/assets/heroes/hero_knight/hero_knight.json".to_string(),
+            is_spritesheet: None,
+            frames: None,
         }],
     );
 
@@ -294,6 +303,8 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
             visual: Some("🪨".to_string()),
             asset_type: Some("terrain".to_string()),
             sidecar_path: "engine/data/assets/terrain/stone_floor/stone_floor.json".to_string(),
+            is_spritesheet: None,
+            frames: None,
         }],
     );
 
@@ -306,6 +317,8 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
             visual: Some("👾".to_string()),
             asset_type: Some("enemy".to_string()),
             sidecar_path: "engine/data/assets/enemies/slime_patrol/slime_patrol.json".to_string(),
+            is_spritesheet: None,
+            frames: None,
         }],
     );
 

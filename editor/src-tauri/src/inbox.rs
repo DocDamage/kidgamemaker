@@ -154,9 +154,29 @@ fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBuf, S
         _ => (48, 48),
     };
 
-    // If it's a PNG image, parse the header to read actual dimensions
+    // If it's a PNG image, parse the header to read actual dimensions and run slicing
+    let mut is_spritesheet = false;
+    let mut is_uniform = false;
+    let mut grid_cell_size = None;
+    let mut confidence = 1.0;
+    let mut frames_json = "[]".to_string();
+
     if filename.to_lowercase().ends_with(".png") {
-        if let Some((w, h)) = read_png_dimensions(file_path) {
+        if let Ok(slice_res) = crate::slicer::slice_sprite_sheet(file_path, category) {
+            is_spritesheet = slice_res.is_spritesheet;
+            is_uniform = slice_res.is_uniform;
+            grid_cell_size = slice_res.grid_cell_size;
+            confidence = slice_res.confidence;
+
+            if let Some(first_frame) = slice_res.frames.first() {
+                width = first_frame.w;
+                height = first_frame.h;
+            }
+
+            if let Ok(json_str) = serde_json::to_string(&slice_res.frames) {
+                frames_json = json_str;
+            }
+        } else if let Some((w, h)) = read_png_dimensions(file_path) {
             width = w;
             height = h;
         }
@@ -172,6 +192,11 @@ fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBuf, S
     let asset_name = humanize_name(asset_id);
     let tags = extract_tags(asset_id);
     
+    let grid_cell_size_json = match grid_cell_size {
+        Some(val) => val.to_string(),
+        None => "null".to_string(),
+    };
+
     let sidecar_content = format!(
         r#"{{
   "schema_version": 1,
@@ -181,6 +206,11 @@ fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBuf, S
   "runtime_template": "{template}",
   "visual": "{filename}",
   "visual_tags": {tags_json},
+  "is_spritesheet": {is_spritesheet},
+  "is_uniform_grid": {is_uniform},
+  "grid_cell_size": {grid_cell_size_json},
+  "slicing_confidence": {confidence},
+  "frames": {frames_json},
   "placement_logic": {{
     "snapping_type": "{snapping}",
     "parallax_bucket": "play_layer"
@@ -201,7 +231,12 @@ fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBuf, S
         snapping = snapping,
         width = width,
         height = height,
-        tags_json = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string())
+        tags_json = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string()),
+        is_spritesheet = is_spritesheet,
+        is_uniform = is_uniform,
+        grid_cell_size_json = grid_cell_size_json,
+        confidence = confidence,
+        frames_json = frames_json
     );
 
     let sidecar_path = dest_dir.join(format!("{}.json", asset_id));

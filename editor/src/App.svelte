@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import ToyboxModal from './ToyboxModal.svelte';
   import {
     eraseEntity,
@@ -265,8 +265,22 @@
     toyboxOpen = false;
   }
 
-  function iconFor(item: PlacedEntity): string {
-    return Object.values(inventory).flat().find((asset) => asset.id === item.asset_id)?.visual ?? '🎮';
+  function findAsset(assetId: string): ToyboxAsset | undefined {
+    return Object.values(inventory).flat().find((asset) => asset.id === assetId);
+  }
+
+  function isEmoji(str: string | undefined): boolean {
+    if (!str) return true;
+    return !str.includes('.') && !str.includes('/') && !str.includes('\\');
+  }
+
+  function getAssetUrl(asset: ToyboxAsset): string {
+    if (!asset.visual || isEmoji(asset.visual)) return '';
+    if (!asset.sidecar_path) return asset.visual;
+    const lastSlash = Math.max(asset.sidecar_path.lastIndexOf('/'), asset.sidecar_path.lastIndexOf('\\'));
+    if (lastSlash === -1) return asset.visual;
+    const dir = asset.sidecar_path.substring(0, lastSlash + 1);
+    return convertFileSrc(dir + asset.visual);
   }
 </script>
 
@@ -286,8 +300,36 @@
 
     <button class="play" on:click={play}>▶ PLAY</button>
     <button class="save" on:click={saveCurrentRoom}>💾 SAVE</button>
-    <button class:active={!eraserMode} on:click={() => (eraserMode = false)}>
-      Stamp: {activeAsset.visual ?? '🎮'} {activeAsset.name}
+    <button class:active={!eraserMode} on:click={() => (eraserMode = false)} style="display: flex; align-items: center; gap: 8px;">
+      <span>Stamp:</span>
+      <span class="active-visual-container">
+        {#if activeAsset.visual && !isEmoji(activeAsset.visual)}
+          {#if activeAsset.is_spritesheet && activeAsset.frames && activeAsset.frames[0]}
+            <img
+              src={getAssetUrl(activeAsset)}
+              alt={activeAsset.name}
+              style="
+                width: {activeAsset.frames[0].w}px;
+                height: {activeAsset.frames[0].h}px;
+                object-fit: none;
+                object-position: -{activeAsset.frames[0].x}px -{activeAsset.frames[0].y}px;
+                transform: scale({Math.min(1.5, 24 / Math.max(activeAsset.frames[0].w, activeAsset.frames[0].h))});
+                transform-origin: center;
+                display: block;
+              "
+            />
+          {:else}
+            <img
+              src={getAssetUrl(activeAsset)}
+              alt={activeAsset.name}
+              style="max-width: 24px; max-height: 24px; object-fit: contain; display: block;"
+            />
+          {/if}
+        {:else}
+          <span>{activeAsset.visual ?? '🎮'}</span>
+        {/if}
+      </span>
+      <span>{activeAsset.name}</span>
     </button>
     <button class:active={eraserMode} on:click={() => (eraserMode = !eraserMode)}>🧽 Eraser</button>
     <button class:active={snapEnabled} on:click={() => (snapEnabled = !snapEnabled)}>🧲 Snap</button>
@@ -301,7 +343,33 @@
         on:click={() => selectAsset(asset)}
         title={asset.name}
       >
-        <span>{asset.visual ?? '🎮'}</span>
+        <span class="ribbon-visual-container">
+          {#if asset.visual && !isEmoji(asset.visual)}
+            {#if asset.is_spritesheet && asset.frames && asset.frames[0]}
+              <img
+                src={getAssetUrl(asset)}
+                alt={asset.name}
+                style="
+                  width: {asset.frames[0].w}px;
+                  height: {asset.frames[0].h}px;
+                  object-fit: none;
+                  object-position: -{asset.frames[0].x}px -{asset.frames[0].y}px;
+                  transform: scale({Math.min(1.5, 48 / Math.max(asset.frames[0].w, asset.frames[0].h))});
+                  transform-origin: center;
+                  display: block;
+                "
+              />
+            {:else}
+              <img
+                src={getAssetUrl(asset)}
+                alt={asset.name}
+                style="max-width: 48px; max-height: 48px; object-fit: contain; display: block;"
+              />
+            {/if}
+          {:else}
+            <span>{asset.visual ?? '🎮'}</span>
+          {/if}
+        </span>
         <small>{asset.name}</small>
       </button>
     {/each}
@@ -329,6 +397,7 @@
     >
       <div class="horizon"></div>
       {#each placed as item (item.instance_id)}
+        {@const asset = findAsset(item.asset_id)}
         <button
           class="stamp {item.category}"
           style:left={`${item.position.x}px`}
@@ -338,8 +407,37 @@
             if (eraserMode) placed = eraseEntity(placed, item.instance_id);
           }}
           on:mousedown|stopPropagation
+          style:border-radius={item.category === 'terrain' ? '14px' : '50%'}
+          style:width={item.category === 'terrain' ? '160px' : '56px'}
+          style:overflow="hidden"
         >
-          {iconFor(item)}
+          <span class="stamp-visual-container">
+            {#if asset && asset.visual && !isEmoji(asset.visual)}
+              {#if asset.is_spritesheet && asset.frames && asset.frames[0]}
+                <img
+                  src={getAssetUrl(asset)}
+                  alt={asset.name}
+                  style="
+                    width: {asset.frames[0].w}px;
+                    height: {asset.frames[0].h}px;
+                    object-fit: none;
+                    object-position: -{asset.frames[0].x}px -{asset.frames[0].y}px;
+                    transform: scale({item.category === 'terrain' ? Math.min(2.0, 160 / asset.frames[0].w) : Math.min(1.5, 48 / Math.max(asset.frames[0].w, asset.frames[0].h))});
+                    transform-origin: center;
+                    display: block;
+                  "
+                />
+              {:else}
+                <img
+                  src={getAssetUrl(asset)}
+                  alt={asset.name}
+                  style="max-width: {item.category === 'terrain' ? '150px' : '48px'}; max-height: 48px; object-fit: contain; display: block;"
+                />
+              {/if}
+            {:else}
+              <span>{asset?.visual ?? '🎮'}</span>
+            {/if}
+          </span>
         </button>
       {/each}
 
@@ -348,8 +446,37 @@
           class="hover-guide {activeAsset.category}"
           style:left={`${hoverPos.x}px`}
           style:top={`${hoverPos.y}px`}
+          style:border-radius={activeAsset.category === 'terrain' ? '14px' : '50%'}
+          style:width={activeAsset.category === 'terrain' ? '160px' : '56px'}
+          style:overflow="hidden"
         >
-          {activeAsset.visual ?? '🎮'}
+          <span class="stamp-visual-container">
+            {#if activeAsset.visual && !isEmoji(activeAsset.visual)}
+              {#if activeAsset.is_spritesheet && activeAsset.frames && activeAsset.frames[0]}
+                <img
+                  src={getAssetUrl(activeAsset)}
+                  alt={activeAsset.name}
+                  style="
+                    width: {activeAsset.frames[0].w}px;
+                    height: {activeAsset.frames[0].h}px;
+                    object-fit: none;
+                    object-position: -{activeAsset.frames[0].x}px -{activeAsset.frames[0].y}px;
+                    transform: scale({activeAsset.category === 'terrain' ? Math.min(2.0, 160 / activeAsset.frames[0].w) : Math.min(1.5, 48 / Math.max(activeAsset.frames[0].w, activeAsset.frames[0].h))});
+                    transform-origin: center;
+                    display: block;
+                  "
+                />
+              {:else}
+                <img
+                  src={getAssetUrl(activeAsset)}
+                  alt={activeAsset.name}
+                  style="max-width: {activeAsset.category === 'terrain' ? '150px' : '48px'}; max-height: 48px; object-fit: contain; display: block;"
+                />
+              {/if}
+            {:else}
+              <span>{activeAsset.visual ?? '🎮'}</span>
+            {/if}
+          </span>
         </div>
       {/if}
     </div>
@@ -373,6 +500,23 @@
     height: 100vh;
     display: grid;
     grid-template-rows: auto auto 1fr auto;
+  }
+
+  .ribbon-visual-container,
+  .stamp-visual-container {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+
+  .active-visual-container {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
   }
 
   .topbar,
