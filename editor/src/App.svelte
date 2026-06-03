@@ -112,11 +112,73 @@
     };
   }
 
+  function getSnappedPosition(rawCoords: { x: number; y: number }, asset: ToyboxAsset): { x: number; y: number } {
+    if (!snapEnabled) return rawCoords;
+
+    const snapping = asset.snapping_type ?? (asset.category === 'terrain' ? 'edge_to_edge' : 'gravity_snap');
+
+    if (snapping === 'edge_to_edge') {
+      // Terrain edge-to-edge snapping to 32px grid
+      return {
+        x: Math.round(rawCoords.x / 32) * 32,
+        y: Math.round(rawCoords.y / 32) * 32
+      };
+    } else if (snapping === 'gravity_snap') {
+      // Gravity snap: snap X to 8px, snap Y to stand on top of terrain block below cursor
+      const snapX = Math.round(rawCoords.x / 8) * 8;
+      
+      let stampHeight = 32;
+      if (asset.category === 'heroes') stampHeight = 48;
+      if (asset.frames && asset.frames[0]) {
+        stampHeight = asset.frames[0].h;
+      }
+
+      // Scan placed terrain blocks to find the topmost terrain block below the cursor
+      let bestTopY: number | null = null;
+      for (const item of placed) {
+        if (item.category === 'terrain') {
+          // Default terrain width is 128 (64px half-width margin)
+          const left = item.position.x - 64;
+          const right = item.position.x + 64;
+          
+          if (snapX >= left && snapX <= right) {
+            const topEdge = item.position.y - 16; // Terrain half-height margin
+            // If the block top edge is below the cursor y position (with small buffer)
+            if (topEdge >= rawCoords.y - 16) {
+              if (bestTopY === null || topEdge < bestTopY) {
+                bestTopY = topEdge;
+              }
+            }
+          }
+        }
+      }
+
+      if (bestTopY !== null) {
+        return {
+          x: snapX,
+          y: bestTopY - stampHeight / 2
+        };
+      }
+
+      // Fallback: grid snap if no terrain block is directly below
+      return {
+        x: snapX,
+        y: Math.round(rawCoords.y / 8) * 8
+      };
+    }
+
+    // Default 8px snap
+    return {
+      x: Math.round(rawCoords.x / 8) * 8,
+      y: Math.round(rawCoords.y / 8) * 8
+    };
+  }
+
   function handleCanvasClick(event: MouseEvent) {
     const target = event.currentTarget as HTMLDivElement;
     const rect = target.getBoundingClientRect();
     const rawCoords = getCanvasCoords(event.clientX, event.clientY, rect);
-    const position = snapPosition(rawCoords, 8, snapEnabled);
+    const position = getSnappedPosition(rawCoords, activeAsset);
 
     if (eraserMode) {
       const hit = [...placed].reverse().find((item) => {
@@ -143,7 +205,7 @@
     const target = event.currentTarget as HTMLDivElement;
     const rect = target.getBoundingClientRect();
     const rawCoords = getCanvasCoords(event.clientX, event.clientY, rect);
-    const position = snapPosition(rawCoords, 8, snapEnabled);
+    const position = getSnappedPosition(rawCoords, activeAsset);
 
     const spacingThreshold = activeAsset.category === 'terrain' ? 48 : 24;
 
@@ -198,7 +260,7 @@
       const target = event.currentTarget as HTMLDivElement;
       const rect = target.getBoundingClientRect();
       const rawCoords = getCanvasCoords(event.clientX, event.clientY, rect);
-      hoverPos = snapPosition(rawCoords, 8, snapEnabled);
+      hoverPos = getSnappedPosition(rawCoords, activeAsset);
       isHovering = true;
 
       if (isDrawing && !eraserMode) {

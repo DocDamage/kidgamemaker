@@ -18,6 +18,8 @@ pub struct AssetSummary {
     pub sidecar_path: String,
     pub is_spritesheet: Option<bool>,
     pub frames: Option<Vec<Value>>,
+    pub snapping_type: Option<String>,
+    pub parallax_bucket: Option<String>,
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -265,6 +267,15 @@ fn read_asset_summary(
     let is_spritesheet = json.get("is_spritesheet").and_then(Value::as_bool);
     let frames = json.get("frames").and_then(Value::as_array).cloned();
 
+    let snapping_type = json.get("placement_logic")
+        .and_then(|p| p.get("snapping_type"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let parallax_bucket = json.get("placement_logic")
+        .and_then(|p| p.get("parallax_bucket"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+
     Ok(AssetSummary {
         id,
         name,
@@ -274,6 +285,8 @@ fn read_asset_summary(
         sidecar_path: sidecar_path.display().to_string(),
         is_spritesheet,
         frames,
+        snapping_type,
+        parallax_bucket,
     })
 }
 
@@ -291,6 +304,8 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
             sidecar_path: "engine/data/assets/heroes/hero_knight/hero_knight.json".to_string(),
             is_spritesheet: None,
             frames: None,
+            snapping_type: Some("gravity_snap".to_string()),
+            parallax_bucket: Some("play_layer".to_string()),
         }],
     );
 
@@ -305,6 +320,8 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
             sidecar_path: "engine/data/assets/terrain/stone_floor/stone_floor.json".to_string(),
             is_spritesheet: None,
             frames: None,
+            snapping_type: Some("edge_to_edge".to_string()),
+            parallax_bucket: Some("play_layer".to_string()),
         }],
     );
 
@@ -319,6 +336,8 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
             sidecar_path: "engine/data/assets/enemies/slime_patrol/slime_patrol.json".to_string(),
             is_spritesheet: None,
             frames: None,
+            snapping_type: Some("gravity_snap".to_string()),
+            parallax_bucket: Some("play_layer".to_string()),
         }],
     );
 

@@ -143,7 +143,7 @@ fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBuf, S
     let filename = file_path.file_name().and_then(|n| n.to_str()).ok_or("Invalid filename")?;
     let asset_id = file_path.file_stem().and_then(|s| s.to_str()).ok_or("Invalid asset stem")?;
     
-    let (category, template, snapping) = classify_asset(filename);
+    let (category, template, snapping, parallax) = classify_asset(filename);
     
     // Determine default sizes based on template
     let (mut width, mut height) = match template {
@@ -159,7 +159,7 @@ fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBuf, S
     let mut is_uniform = false;
     let mut grid_cell_size = None;
     let mut confidence = 1.0;
-    let mut frames_json = "[]".to_string();
+    let mut frames = Vec::new();
 
     if filename.to_lowercase().ends_with(".png") {
         if let Ok(slice_res) = crate::slicer::slice_sprite_sheet(file_path, category) {
@@ -167,19 +167,29 @@ fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBuf, S
             is_uniform = slice_res.is_uniform;
             grid_cell_size = slice_res.grid_cell_size;
             confidence = slice_res.confidence;
+            frames = slice_res.frames;
 
-            if let Some(first_frame) = slice_res.frames.first() {
+            if let Some(first_frame) = frames.first() {
                 width = first_frame.w;
                 height = first_frame.h;
-            }
-
-            if let Ok(json_str) = serde_json::to_string(&slice_res.frames) {
-                frames_json = json_str;
             }
         } else if let Some((w, h)) = read_png_dimensions(file_path) {
             width = w;
             height = h;
+            frames = vec![crate::slicer::SpriteFrame {
+                x: 0,
+                y: 0,
+                w,
+                h,
+            }];
         }
+    } else {
+        frames = vec![crate::slicer::SpriteFrame {
+            x: 0,
+            y: 0,
+            w: width,
+            h: height,
+        }];
     }
 
     let dest_dir = repo_root.join("engine").join("data").join("assets").join(category).join(asset_id);
@@ -192,74 +202,110 @@ fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBuf, S
     let asset_name = humanize_name(asset_id);
     let tags = extract_tags(asset_id);
     
-    let grid_cell_size_json = match grid_cell_size {
-        Some(val) => val.to_string(),
-        None => "null".to_string(),
-    };
+    let mut sidecar_value = serde_json::json!({
+        "schema_version": 1,
+        "asset_id": asset_id,
+        "asset_name": asset_name,
+        "category": category,
+        "runtime_template": template,
+        "visual": filename,
+        "visual_tags": tags,
+        "is_spritesheet": is_spritesheet,
+        "is_uniform_grid": is_uniform,
+        "grid_cell_size": grid_cell_size,
+        "slicing_confidence": confidence,
+        "frames": frames,
+        "placement_logic": {
+            "snapping_type": snapping,
+            "parallax_bucket": parallax
+        },
+        "collision": {
+            "shape": "rectangle",
+            "size": [width, height]
+        }
+    });
 
-    let sidecar_content = format!(
-        r#"{{
-  "schema_version": 1,
-  "asset_id": "{asset_id}",
-  "asset_name": "{asset_name}",
-  "category": "{category}",
-  "runtime_template": "{template}",
-  "visual": "{filename}",
-  "visual_tags": {tags_json},
-  "is_spritesheet": {is_spritesheet},
-  "is_uniform_grid": {is_uniform},
-  "grid_cell_size": {grid_cell_size_json},
-  "slicing_confidence": {confidence},
-  "frames": {frames_json},
-  "placement_logic": {{
-    "snapping_type": "{snapping}",
-    "parallax_bucket": "play_layer"
-  }},
-  "collision": {{
-    "shape": "rectangle",
-    "size": [
-      {width},
-      {height}
-    ]
-  }}
-}}"#,
-        asset_id = asset_id,
-        asset_name = asset_name,
-        category = category,
-        template = template,
-        filename = filename,
-        snapping = snapping,
-        width = width,
-        height = height,
-        tags_json = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string()),
-        is_spritesheet = is_spritesheet,
-        is_uniform = is_uniform,
-        grid_cell_size_json = grid_cell_size_json,
-        confidence = confidence,
-        frames_json = frames_json
-    );
+    let lower_id = asset_id.to_lowercase();
 
+    // 1. Lighting logic
+    if lower_id.contains("torch") || lower_id.contains("light") || lower_id.contains("lamp") || lower_id.contains("candle") || lower_id.contains("fire") || lower_id.contains("lantern") {
+        sidecar_value["lighting_logic"] = serde_json::json!({
+            "emits_light": true,
+            "light_color": "#ffae34",
+            "light_energy": 1.2,
+            "light_radius": 150.0
+        });
+    }
+
+    // 2. Baseline attributes for player/enemies
+    if template == "player" {
+        sidecar_value["baseline_attributes"] = serde_json::json!({
+            "max_health": 100,
+            "movement_speed": 220.0,
+            "jump_force": -460.0,
+            "gravity_scale": 1.0
+        });
+    } else if template == "enemy" {
+        let max_health = if lower_id.contains("boss") { 500 } else { 20 };
+        let speed = if lower_id.contains("boss") { 50.0 } else { 70.0 };
+        let damage = if lower_id.contains("boss") { 25 } else { 10 };
+        sidecar_value["baseline_attributes"] = serde_json::json!({
+            "max_health": max_health,
+            "movement_speed": speed,
+            "damage_value": damage,
+            "gravity_scale": 1.0
+        });
+    }
+
+    // 3. Gameplay logic for collectibles
+    if template == "collectible" {
+        if lower_id.contains("ruby") || lower_id.contains("gem") {
+            sidecar_value["gameplay_logic"] = serde_json::json!({
+                "score_value": 50
+            });
+        } else if lower_id.contains("heart") || lower_id.contains("heal") {
+            sidecar_value["gameplay_logic"] = serde_json::json!({
+                "heal_value": 25
+            });
+        } else {
+            sidecar_value["gameplay_logic"] = serde_json::json!({
+                "score_value": 10
+            });
+        }
+    }
+
+    let sidecar_content = serde_json::to_string_pretty(&sidecar_value).unwrap_or_default();
     let sidecar_path = dest_dir.join(format!("{}.json", asset_id));
     fs::write(&sidecar_path, sidecar_content).map_err(|err| err.to_string())?;
 
     Ok(target_file_path)
 }
 
-fn classify_asset(filename: &str) -> (&'static str, &'static str, &'static str) {
+fn classify_asset(filename: &str) -> (&'static str, &'static str, &'static str, &'static str) {
     let lower = filename.to_lowercase();
     
-    if lower.contains("hero") || lower.contains("knight") || lower.contains("player") || lower.contains("character") {
-        ("heroes", "player", "gravity_snap")
-    } else if lower.contains("enemy") || lower.contains("slime") || lower.contains("boss") || lower.contains("monster") || lower.contains("hazard") {
-        ("enemies", "enemy", "gravity_snap")
-    } else if lower.contains("floor") || lower.contains("tile") || lower.contains("block") || lower.contains("ground") || lower.contains("platform") || lower.contains("wall") || lower.contains("brick") || lower.contains("stone") {
-        ("terrain", "terrain", "edge_to_edge")
-    } else if lower.contains("coin") || lower.contains("ruby") || lower.contains("gold") || lower.contains("gem") || lower.contains("collectible") || lower.contains("item") || lower.contains("heart") {
-        ("collectibles", "collectible", "free_float")
-    } else if lower.contains("checkpoint") || lower.contains("flag") || lower.contains("savepoint") {
-        ("decorations", "checkpoint", "free_float")
+    let parallax = if lower.contains("bg") || lower.contains("sky") || lower.contains("cloud") || lower.contains("mountain") || lower.contains("background") {
+        "deep_background"
+    } else if lower.contains("midground") || lower.contains("bush") || lower.contains("tree") || lower.contains("hill") {
+        "midground"
+    } else if lower.contains("fg") || lower.contains("foreground") {
+        "foreground"
     } else {
-        ("decorations", "decoration", "free_float")
+        "play_layer"
+    };
+
+    if lower.contains("hero") || lower.contains("knight") || lower.contains("player") || lower.contains("character") {
+        ("heroes", "player", "gravity_snap", parallax)
+    } else if lower.contains("enemy") || lower.contains("slime") || lower.contains("boss") || lower.contains("monster") || lower.contains("hazard") {
+        ("enemies", "enemy", "gravity_snap", parallax)
+    } else if lower.contains("floor") || lower.contains("tile") || lower.contains("block") || lower.contains("ground") || lower.contains("platform") || lower.contains("wall") || lower.contains("brick") || lower.contains("stone") {
+        ("terrain", "terrain", "edge_to_edge", parallax)
+    } else if lower.contains("coin") || lower.contains("ruby") || lower.contains("gold") || lower.contains("gem") || lower.contains("collectible") || lower.contains("item") || lower.contains("heart") {
+        ("collectibles", "collectible", "free_float", parallax)
+    } else if lower.contains("checkpoint") || lower.contains("flag") || lower.contains("savepoint") {
+        ("decorations", "checkpoint", "free_float", parallax)
+    } else {
+        ("decorations", "decoration", "free_float", parallax)
     }
 }
 
@@ -311,11 +357,11 @@ mod tests {
 
     #[test]
     fn test_classify_asset() {
-        assert_eq!(classify_asset("hero_knight.png"), ("heroes", "player", "gravity_snap"));
-        assert_eq!(classify_asset("slime_enemy.png"), ("enemies", "enemy", "gravity_snap"));
-        assert_eq!(classify_asset("stone_floor.png"), ("terrain", "terrain", "edge_to_edge"));
-        assert_eq!(classify_asset("ruby_coin.png"), ("collectibles", "collectible", "free_float"));
-        assert_eq!(classify_asset("bg_tree.png"), ("decorations", "decoration", "free_float"));
+        assert_eq!(classify_asset("hero_knight.png"), ("heroes", "player", "gravity_snap", "play_layer"));
+        assert_eq!(classify_asset("slime_enemy.png"), ("enemies", "enemy", "gravity_snap", "play_layer"));
+        assert_eq!(classify_asset("stone_floor.png"), ("terrain", "terrain", "edge_to_edge", "play_layer"));
+        assert_eq!(classify_asset("ruby_coin.png"), ("collectibles", "collectible", "free_float", "play_layer"));
+        assert_eq!(classify_asset("bg_tree.png"), ("decorations", "decoration", "free_float", "deep_background"));
     }
 
     #[test]
@@ -395,6 +441,62 @@ mod tests {
         assert_eq!(sidecar_json["visual"], "blue_slime_enemy.png");
         assert_eq!(sidecar_json["collision"]["size"][0], 64);
         assert_eq!(sidecar_json["collision"]["size"][1], 64);
+
+        let _ = fs::remove_dir_all(&temp_base);
+    }
+
+    #[test]
+    fn test_behavior_enrichment() {
+        let temp_base = std::env::temp_dir().join("kdm_test_repo_enrich");
+        let _ = fs::remove_dir_all(&temp_base);
+        fs::create_dir_all(&temp_base).unwrap();
+
+        // Test light source enrichment
+        let source_file = temp_base.join("yellow_torch.png");
+        let mut mock_png = vec![0u8; 24];
+        mock_png[0..8].copy_from_slice(&[137, 80, 78, 71, 13, 10, 26, 10]);
+        mock_png[12..16].copy_from_slice(b"IHDR");
+        mock_png[16..20].copy_from_slice(&u32::to_be_bytes(32));
+        mock_png[20..24].copy_from_slice(&u32::to_be_bytes(32));
+        fs::write(&source_file, &mock_png).unwrap();
+
+        let res = process_single_asset(&source_file, &temp_base);
+        assert!(res.is_ok());
+
+        let sidecar_file = temp_base
+            .join("engine")
+            .join("data")
+            .join("assets")
+            .join("decorations")
+            .join("yellow_torch")
+            .join("yellow_torch.json");
+        assert!(sidecar_file.exists());
+
+        let sidecar_content = fs::read_to_string(&sidecar_file).unwrap();
+        let sidecar_json: serde_json::Value = serde_json::from_str(&sidecar_content).unwrap();
+
+        assert_eq!(sidecar_json["placement_logic"]["snapping_type"], "free_float");
+        assert_eq!(sidecar_json["lighting_logic"]["emits_light"], true);
+        assert_eq!(sidecar_json["lighting_logic"]["light_energy"], 1.2);
+
+        // Test boss enemy enrichment
+        let boss_file = temp_base.join("dragon_boss.png");
+        fs::write(&boss_file, &mock_png).unwrap();
+        let res = process_single_asset(&boss_file, &temp_base);
+        assert!(res.is_ok());
+
+        let boss_sidecar = temp_base
+            .join("engine")
+            .join("data")
+            .join("assets")
+            .join("enemies")
+            .join("dragon_boss")
+            .join("dragon_boss.json");
+        let boss_content = fs::read_to_string(&boss_sidecar).unwrap();
+        let boss_json: serde_json::Value = serde_json::from_str(&boss_content).unwrap();
+
+        assert_eq!(boss_json["baseline_attributes"]["max_health"], 500);
+        assert_eq!(boss_json["baseline_attributes"]["damage_value"], 25);
 
         let _ = fs::remove_dir_all(&temp_base);
     }

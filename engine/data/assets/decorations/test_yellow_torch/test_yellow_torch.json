@@ -1,0 +1,42 @@
+{
+  "asset_id": "test_yellow_torch",
+  "asset_name": "Test Yellow Torch",
+  "category": "decorations",
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      8,
+      22
+    ]
+  },
+  "frames": [
+    {
+      "h": 22,
+      "w": 8,
+      "x": 4,
+      "y": 2
+    }
+  ],
+  "grid_cell_size": null,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "lighting_logic": {
+    "emits_light": true,
+    "light_color": "#ffae34",
+    "light_energy": 1.2,
+    "light_radius": 150.0
+  },
+  "placement_logic": {
+    "parallax_bucket": "play_layer",
+    "snapping_type": "free_float"
+  },
+  "runtime_template": "decoration",
+  "schema_version": 1,
+  "slicing_confidence": 1.0,
+  "visual": "test_yellow_torch.png",
+  "visual_tags": [
+    "test",
+    "yellow",
+    "torch"
+  ]
+}
