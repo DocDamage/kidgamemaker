@@ -17,6 +17,14 @@ var shield_active: bool = false
 var double_jump_enabled: bool = false
 var _jumps_remaining: int = 1
 
+# Water & Speed pad physics states
+var inside_water: bool = false
+var water_buoyancy: float = 0.5
+var water_type: String = "normal"
+var water_hurt_timer: float = 0.0
+var speed_pad_velocity: Vector2 = Vector2.ZERO
+
+
 
 func _ready() -> void:
 	current_health = max_health
@@ -104,6 +112,14 @@ func take_damage(amount: int) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Handle water damage tick
+	if inside_water and (water_type == "toxic" or water_type == "lava"):
+		water_hurt_timer -= delta
+		if water_hurt_timer <= 0.0:
+			var dmg = 8 if water_type == "toxic" else 25
+			take_damage(dmg)
+			water_hurt_timer = 0.8 # tick every 0.8 seconds
+
 	var active_speed := movement_speed
 	if speed_boost_timer > 0.0:
 		speed_boost_timer -= delta
@@ -118,7 +134,16 @@ func _physics_process(delta: float) -> void:
 	var input_dir := Input.get_axis("ui_left", "ui_right")
 	velocity.x = input_dir * active_speed
 
-	if not is_on_floor():
+	# Apply speed boost pad impulse vector if active
+	if speed_pad_velocity.length_squared() > 10.0:
+		velocity += speed_pad_velocity
+		speed_pad_velocity = speed_pad_velocity.move_toward(Vector2.ZERO, delta * 900.0)
+
+	# Water buoyancy or standard gravity
+	if inside_water:
+		velocity.y += gravity * (1.0 - water_buoyancy) * delta
+		velocity.y = clamp(velocity.y, -220.0, 180.0)
+	elif not is_on_floor():
 		velocity.y += gravity * gravity_scale * delta
 	
 	if is_on_floor():
@@ -126,7 +151,14 @@ func _physics_process(delta: float) -> void:
 
 	if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
 		var did_jump := false
-		if is_on_floor():
+		if inside_water:
+			# Swim stroke
+			velocity.y = -220.0
+			did_jump = true
+			var main := get_tree().get_root().get_node_or_null("Main")
+			if main != null and main.has_method("play_sfx"):
+				main.play_sfx("jump")
+		elif is_on_floor():
 			velocity.y = jump_force
 			_jumps_remaining = 1 if double_jump_enabled else 0
 			did_jump = true

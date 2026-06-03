@@ -29,6 +29,236 @@
   let isMuted = false;
   let selectedPlacedEntity: PlacedEntity | null = null;
 
+  let beatComposerOpen = false;
+  let previewingBgm = false;
+  let currentPreviewStep = 0;
+  let previewIntervalId: any = null;
+  let customBgmSequence = [
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0]
+  ];
+
+  function selectEntity(item: PlacedEntity) {
+    if (!item.modifiers) {
+      item.modifiers = { variant: 'default', scale_multiplier: 1.0 };
+    }
+    if (item.type === 'jelly' && item.modifiers.bounce_force === undefined) {
+      item.modifiers.bounce_force = 500;
+    }
+    if (item.type === 'speed_pad') {
+      if (item.modifiers.boost_direction === undefined) item.modifiers.boost_direction = 1;
+      if (item.modifiers.boost_force === undefined) item.modifiers.boost_force = 550;
+    }
+    if (item.type === 'speech_sign' && item.modifiers.speech_text === undefined) {
+      item.modifiers.speech_text = "Hello adventurer! 🧙‍♂️";
+    }
+    if (item.type === 'water_block') {
+      if (item.modifiers.water_flavor === undefined) item.modifiers.water_flavor = "normal";
+      if (item.modifiers.water_buoyancy === undefined) item.modifiers.water_buoyancy = 0.5;
+    }
+    if (item.type === 'pet' && item.modifiers.pet_power === undefined) {
+      item.modifiers.pet_power = "magnet";
+    }
+    if (item.type === 'crumbling_cloud') {
+      if (item.modifiers.crumble_delay === undefined) item.modifiers.crumble_delay = 0.5;
+      if (item.modifiers.respawn_time === undefined) item.modifiers.respawn_time = 3.0;
+    }
+    if (item.type === 'hazard' && item.modifiers.damage_value === undefined) {
+      item.modifiers.damage_value = 15;
+    }
+    selectedPlacedEntity = item;
+    playUiSound('chime');
+  }
+
+  function openBeatComposer() {
+    if (worldSettings.custom_bgm_sequence) {
+      customBgmSequence = JSON.parse(JSON.stringify(worldSettings.custom_bgm_sequence));
+    } else {
+      customBgmSequence = [
+        [1, 0, 0, 0, 1, 0, 0, 0],
+        [0, 0, 1, 0, 0, 0, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 0, 0, 0]
+      ];
+    }
+    beatComposerOpen = true;
+    playUiSound('chime');
+  }
+
+  function saveBeatSequence() {
+    worldSettings.custom_bgm_sequence = customBgmSequence;
+    (worldSettings as any).theme = 'custom';
+    saveCurrentRoom();
+    playUiSound('chime');
+    closeBeatComposer();
+  }
+
+  function togglePreviewBgm() {
+    previewingBgm = !previewingBgm;
+    if (previewingBgm) {
+      currentPreviewStep = 0;
+      previewIntervalId = setInterval(tickPreviewBgm, 150);
+      playUiSound('pop');
+    } else {
+      if (previewIntervalId) {
+        clearInterval(previewIntervalId);
+        previewIntervalId = null;
+      }
+    }
+  }
+
+  function tickPreviewBgm() {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+      
+      // Kick
+      if (customBgmSequence[0][currentPreviewStep]) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(45, now + 0.1);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.1);
+      }
+      
+      // Snare
+      if (customBgmSequence[1][currentPreviewStep]) {
+        const bufferSize = ctx.sampleRate * 0.12;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1000, now);
+        filter.frequency.exponentialRampToValueAtTime(100, now + 0.12);
+        
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        noise.start(now);
+        noise.stop(now + 0.12);
+      }
+      
+      // Hi-Hat
+      if (customBgmSequence[2][currentPreviewStep]) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(8000, now);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.04);
+      }
+      
+      // Synth Bass
+      if (customBgmSequence[3][currentPreviewStep]) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        const notes = [130.81, 155.56, 196.00, 233.08, 261.63, 196.00, 155.56, 130.81];
+        const freq = notes[currentPreviewStep % notes.length];
+        
+        osc.frequency.setValueAtTime(freq, now);
+        gain.gain.setValueAtTime(0.07, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(400, now);
+        
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      }
+      
+      currentPreviewStep = (currentPreviewStep + 1) % 8;
+    } catch (_) {}
+  }
+
+  function toggleBeatCell(row: number, col: number) {
+    customBgmSequence[row][col] = customBgmSequence[row][col] ? 0 : 1;
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+      if (row === 0) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(45, now + 0.15);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      } else if (row === 1) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(350, now);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.12);
+      } else if (row === 2) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(6000, now);
+        gain.gain.setValueAtTime(0.06, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.05);
+      } else {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(130.81, now);
+        gain.gain.setValueAtTime(0.07, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      }
+    } catch (_) {}
+  }
+
+  function closeBeatComposer() {
+    if (previewIntervalId) {
+      clearInterval(previewIntervalId);
+      previewIntervalId = null;
+    }
+    previewingBgm = false;
+    beatComposerOpen = false;
+  }
+
 
   function togglePauseGame() {
     const iframe = document.querySelector('.game-iframe') as HTMLIFrameElement;
@@ -915,6 +1145,9 @@
       <button class="cycle-btn mute-btn" class:active={isMuted} on:click={(e) => { animateClick(e); toggleMute(); }} title="Toggle Sound">
         {isMuted ? "🔇" : "🔊"}
       </button>
+      <button class="cycle-btn composer-btn" on:click={(e) => { animateClick(e); openBeatComposer(); }} title="🎹 Compose Beat Loop">
+        🎹
+      </button>
     </div>
 
     <!-- Active Stamp -->
@@ -1082,8 +1315,7 @@
               placed = eraseEntity(placed, item.instance_id);
               playUiSound('squeak');
             } else {
-              selectedPlacedEntity = item;
-              playUiSound('chime');
+              selectEntity(item);
             }
           }}
           on:mousedown|stopPropagation
@@ -1231,6 +1463,58 @@
     </div>
   {/if}
 
+  {#if beatComposerOpen}
+    <div class="backdrop" role="button" tabindex="-1" on:click={closeBeatComposer}>
+      <div class="modal composer-modal" role="dialog" tabindex="0" on:click|stopPropagation style="max-width: 500px; padding: 20px;">
+        <h2>🎹 Chiptune Beat Composer 🎹</h2>
+        <p style="font-size: 0.9rem; color: #94a3b8; text-align: center; margin-bottom: 16px;">
+          Click the boxes to compose your own chiptune loop! Hit play to listen.
+        </p>
+        
+        <div class="sequencer-grid" style="display: grid; gap: 8px; margin-bottom: 20px;">
+          {#each ['🥁 Kick', '🥁 Snare', '🔔 Hi-Hat', '🎵 Bass'] as instName, rIndex}
+            <div class="seq-row" style="display: grid; grid-template-columns: 80px repeat(8, 1fr); align-items: center; gap: 6px;">
+              <span style="font-size: 0.85rem; font-weight: bold; color: white; text-align: left;">{instName}</span>
+              {#each Array(8) as _, cIndex}
+                {@const isActive = customBgmSequence[rIndex][cIndex] === 1}
+                <button
+                  class="seq-cell"
+                  aria-label="Instrument {rIndex} Step {cIndex + 1}"
+                  style:background={isActive ? (rIndex === 0 ? '#ef4444' : rIndex === 1 ? '#3b82f6' : rIndex === 2 ? '#eab308' : '#a855f7') : '#334155'}
+                  style:border="2px solid {previewingBgm && currentPreviewStep === cIndex ? '#ffffff' : 'transparent'}"
+                  style="aspect-ratio: 1; border-radius: 6px; cursor: pointer; transition: transform 0.1s; width: 100%; border: 2px solid transparent;"
+                  on:click={() => toggleBeatCell(rIndex, cIndex)}
+                ></button>
+              {/each}
+            </div>
+          {/each}
+        </div>
+
+        <div style="display: flex; gap: 12px; justify-content: center; width: 100%;">
+          <button 
+            style="flex: 1; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; background: {previewingBgm ? '#ef4444' : '#10b981'}; color: white;"
+            on:click={togglePreviewBgm}
+          >
+            {previewingBgm ? '⏹️ STOP' : '▶️ PLAY PREVIEW'}
+          </button>
+          <button 
+            style="flex: 1; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; background: #6366f1; color: white;"
+            on:click={saveBeatSequence}
+          >
+            💾 SAVE BEAT
+          </button>
+          <button 
+            style="padding: 10px 16px; border-radius: 8px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; background: #475569; color: white;"
+            on:click={closeBeatComposer}
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+
   {#if playModalOpen}
     <div class="backdrop" role="button" tabindex="-1" on:click={closePlayModal}>
       <div class="modal play-modal" role="dialog" tabindex="0" on:click|stopPropagation>
@@ -1289,6 +1573,64 @@
             on:change={saveCurrentRoom} 
           />
         </div>
+
+        {#if selectedPlacedEntity.category === 'terrain' || selectedPlacedEntity.type === 'terrain'}
+          <div class="option-group flex-row">
+            <span class="option-label-text">Is Moving Platform? 🚋</span>
+            <input 
+              type="checkbox" 
+              class="option-toggle" 
+              bind:checked={selectedPlacedEntity.modifiers.is_moving_platform} 
+              on:change={saveCurrentRoom} 
+            />
+          </div>
+
+          {#if selectedPlacedEntity.modifiers.is_moving_platform}
+            <div class="option-group">
+              <span class="option-label-text">Movement Axis:</span>
+              <select 
+                class="option-select" 
+                bind:value={selectedPlacedEntity.modifiers.move_axis} 
+                on:change={saveCurrentRoom}
+              >
+                <option value="horizontal">↔️ Horizontal</option>
+                <option value="vertical">↕️ Vertical</option>
+              </select>
+            </div>
+
+            <div class="option-group">
+              <div class="option-label">
+                <span>Move Speed:</span>
+                <span>{selectedPlacedEntity.modifiers.move_speed ?? 100}</span>
+              </div>
+              <input 
+                type="range" 
+                min="20" 
+                max="200" 
+                step="10" 
+                class="option-slider" 
+                bind:value={selectedPlacedEntity.modifiers.move_speed} 
+                on:change={saveCurrentRoom} 
+              />
+            </div>
+
+            <div class="option-group">
+              <div class="option-label">
+                <span>Travel Distance:</span>
+                <span>{selectedPlacedEntity.modifiers.move_travel ?? 128}px</span>
+              </div>
+              <input 
+                type="range" 
+                min="32" 
+                max="512" 
+                step="16" 
+                class="option-slider" 
+                bind:value={selectedPlacedEntity.modifiers.move_travel} 
+                on:change={saveCurrentRoom} 
+              />
+            </div>
+          {/if}
+        {/if}
 
         {#if selectedPlacedEntity.category === 'enemies' || selectedPlacedEntity.type === 'enemy'}
           <div class="option-group">
@@ -1497,6 +1839,176 @@
               <option value="left">⬅️ Blow Left</option>
               <option value="right">➡️ Blow Right</option>
             </select>
+          </div>
+        {:else if selectedPlacedEntity.type === 'trigger'}
+          <div class="option-group">
+            <span class="option-label-text">Link Target Gate:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.target_id} 
+              on:change={saveCurrentRoom}
+            >
+              <option value="">❌ None</option>
+              {#each placed.filter(ent => ent.type === 'gate' || ent.type === 'locked_door' || ent.type === 'portal') as ent}
+                <option value={ent.instance_id}>
+                  {ent.type.toUpperCase()}: {findAsset(ent.asset_id)?.name ?? ent.asset_id} ({ent.instance_id.slice(0, 8)}...)
+                </option>
+              {/each}
+            </select>
+          </div>
+        {:else if selectedPlacedEntity.type === 'jelly'}
+          <div class="option-group">
+            <span class="option-label-text">Bounce Power 🚀:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.bounce_force} 
+              on:change={saveCurrentRoom}
+            >
+              <option value={350}>🌸 Soft Spring (Low)</option>
+              <option value={500}>🦘 Kangaroo Hop (Medium)</option>
+              <option value={750}>🚀 Sky Launch (High)</option>
+              <option value={1000}>🌌 Orbit Rocket (Super)</option>
+            </select>
+          </div>
+        {:else if selectedPlacedEntity.type === 'speed_pad'}
+          <div class="option-group">
+            <span class="option-label-text">Boost Direction:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.boost_direction} 
+              on:change={saveCurrentRoom}
+            >
+              <option value={1}>➡️ Boost Right</option>
+              <option value={-1}>⬅️ Boost Left</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <span class="option-label-text">Boost Speed:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.boost_force} 
+              on:change={saveCurrentRoom}
+            >
+              <option value={300}>🏃 Jog Speed</option>
+              <option value={550}>⚡ Turbo Zoom</option>
+              <option value={800}>🔥 Hyper Drive</option>
+            </select>
+          </div>
+        {:else if selectedPlacedEntity.type === 'speech_sign'}
+          <div class="option-group">
+            <span class="option-label-text">Choose Pre-made Message:</span>
+            <select 
+              class="option-select" 
+              on:change={(e) => {
+                selectedPlacedEntity.modifiers.speech_text = e.currentTarget.value;
+                saveCurrentRoom();
+              }}
+            >
+              <option value="">(Select or write custom text below)</option>
+              <option value="Watch out! 🌋">Watch out! 🌋</option>
+              <option value="Collect all the gems! 💎">Collect all the gems! 💎</option>
+              <option value="Double Jump to reach the top! 👟">Double Jump to reach the top! 👟</option>
+              <option value="Almost there! Find the portal! 🏁">Almost there! Find the portal! 🏁</option>
+              <option value="Hello adventurer! 🧙‍♂️">Hello adventurer! 🧙‍♂️</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <span class="option-label-text">Custom Bubble Text:</span>
+            <textarea 
+              class="option-textarea" 
+              style="width: 100%; height: 60px; border-radius: 6px; padding: 6px; font-size: 0.9rem; background: #1e293b; color: white; border: 1px solid #475569;"
+              bind:value={selectedPlacedEntity.modifiers.speech_text}
+              placeholder="Type speech bubble text..."
+              on:input={saveCurrentRoom}
+            ></textarea>
+          </div>
+        {:else if selectedPlacedEntity.type === 'water_block'}
+          <div class="option-group">
+            <span class="option-label-text">Water Flavor:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.water_flavor} 
+              on:change={saveCurrentRoom}
+            >
+              <option value="normal">🌊 Blue Water (Swimmable)</option>
+              <option value="toxic">🧪 Toxic Sludge (Hurts Slowly)</option>
+              <option value="lava">🔥 Boiling Lava (Hurts Fast!)</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <div class="option-label">
+              <span>Water Floatiness (Buoyancy):</span>
+              <span>{Math.round((selectedPlacedEntity.modifiers.water_buoyancy ?? 0.5) * 100)}%</span>
+            </div>
+            <input 
+              type="range" 
+              min="0.1" 
+              max="0.9" 
+              step="0.05" 
+              class="option-slider" 
+              bind:value={selectedPlacedEntity.modifiers.water_buoyancy} 
+              on:change={saveCurrentRoom} 
+            />
+          </div>
+        {:else if selectedPlacedEntity.type === 'pet'}
+          <div class="option-group">
+            <span class="option-label-text">Magic Power 🔮:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.pet_power} 
+              on:change={saveCurrentRoom}
+            >
+              <option value="magnet">🧲 Coin Magnet (Pulls Coins)</option>
+              <option value="light">💡 Lantern Fly (Lights Dark Rooms)</option>
+              <option value="shield">🛡️ Shield Link (Protects Player)</option>
+            </select>
+          </div>
+        {:else if selectedPlacedEntity.type === 'crumbling_cloud'}
+          <div class="option-group">
+            <div class="option-label">
+              <span>Crumble Delay:</span>
+              <span>{selectedPlacedEntity.modifiers.crumble_delay ?? 0.5}s</span>
+            </div>
+            <input 
+              type="range" 
+              min="0.1" 
+              max="2.0" 
+              step="0.1" 
+              class="option-slider" 
+              bind:value={selectedPlacedEntity.modifiers.crumble_delay} 
+              on:change={saveCurrentRoom} 
+            />
+          </div>
+          <div class="option-group">
+            <div class="option-label">
+              <span>Respawn Time:</span>
+              <span>{selectedPlacedEntity.modifiers.respawn_time ?? 3.0}s</span>
+            </div>
+            <input 
+              type="range" 
+              min="1.0" 
+              max="10.0" 
+              step="0.5" 
+              class="option-slider" 
+              bind:value={selectedPlacedEntity.modifiers.respawn_time} 
+              on:change={saveCurrentRoom} 
+            />
+          </div>
+        {:else if selectedPlacedEntity.type === 'hazard'}
+          <div class="option-group">
+            <div class="option-label">
+              <span>Spike/Cactus Damage:</span>
+              <span>{selectedPlacedEntity.modifiers.damage_value ?? 15} HP</span>
+            </div>
+            <input 
+              type="range" 
+              min="5" 
+              max="75" 
+              step="5" 
+              class="option-slider" 
+              bind:value={selectedPlacedEntity.modifiers.damage_value} 
+              on:change={saveCurrentRoom} 
+            />
           </div>
         {/if}
       </div>

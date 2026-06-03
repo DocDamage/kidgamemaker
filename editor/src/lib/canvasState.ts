@@ -103,11 +103,33 @@ export function toRoomPayload(
 }
 
 export const fallbackInventory: AssetInventory = {
-  heroes: [{ id: 'hero_knight', name: 'Hero Knight', category: 'heroes', visual: '🛡️', type: 'player', snapping_type: 'gravity_snap' }],
-  terrain: [{ id: 'stone_floor', name: 'Stone Floor', category: 'terrain', visual: '🪨', type: 'terrain', snapping_type: 'edge_to_edge' }],
-  enemies: [{ id: 'slime_patrol', name: 'Slime Patrol', category: 'enemies', visual: '👾', type: 'enemy', snapping_type: 'gravity_snap' }],
+  heroes: [
+    { id: 'hero_knight', name: 'Hero Knight', category: 'heroes', visual: '🛡️', type: 'player', snapping_type: 'gravity_snap' },
+    { id: 'pet_dog', name: 'Magnet Dog', category: 'heroes', visual: '🐶', type: 'pet', snapping_type: 'free_float' },
+    { id: 'pet_fairy', name: 'Lantern Fairy', category: 'heroes', visual: '🧚‍♀️', type: 'pet', snapping_type: 'free_float' },
+    { id: 'pet_robot', name: 'Shield Robot', category: 'heroes', visual: '🤖', type: 'pet', snapping_type: 'free_float' }
+  ],
+  terrain: [
+    { id: 'stone_floor', name: 'Stone Floor', category: 'terrain', visual: '🪨', type: 'terrain', snapping_type: 'edge_to_edge' },
+    { id: 'water_block', name: 'Water Block', category: 'terrain', visual: '💧', type: 'water_block', snapping_type: 'free_float' },
+    { id: 'crumbling_cloud', name: 'Crumbling Cloud', category: 'terrain', visual: '☁️', type: 'crumbling_cloud', snapping_type: 'free_float' }
+  ],
+  enemies: [
+    { id: 'slime_patrol', name: 'Slime Patrol', category: 'enemies', visual: '👾', type: 'enemy', snapping_type: 'gravity_snap' },
+    { id: 'cactus_hazard', name: 'Prickly Cactus', category: 'enemies', visual: '🌵', type: 'hazard', snapping_type: 'gravity_snap' },
+    { id: 'spike_hazard', name: 'Ice Spike', category: 'enemies', visual: '🧊', type: 'hazard', snapping_type: 'free_float' }
+  ],
   collectibles: [{ id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', visual: '💎', type: 'collectible', snapping_type: 'free_float' }],
-  decorations: [{ id: 'neon_sign', name: 'Neon Sign', category: 'decorations', visual: '💡', type: 'decoration', snapping_type: 'free_float' }],
+  decorations: [
+    { id: 'neon_sign', name: 'Neon Sign', category: 'decorations', visual: '💡', type: 'decoration', snapping_type: 'free_float' },
+    { id: 'trigger_button', name: 'Floor Button', category: 'decorations', visual: '🔘', type: 'trigger', snapping_type: 'free_float' },
+    { id: 'trigger_lever', name: 'Wall Lever', category: 'decorations', visual: '🕹️', type: 'trigger', snapping_type: 'free_float' },
+    { id: 'gate_block', name: 'Switch Gate', category: 'decorations', visual: '🚪', type: 'gate', snapping_type: 'free_float' },
+    { id: 'jelly_trampoline', name: 'Bouncy Jelly', category: 'decorations', visual: '🪼', type: 'jelly', snapping_type: 'free_float' },
+    { id: 'speed_pad', name: 'Turbo Arrow', category: 'decorations', visual: '⏩', type: 'speed_pad', snapping_type: 'free_float' },
+    { id: 'speech_sign', name: 'Chatty Sign', category: 'decorations', visual: '🪧', type: 'speech_sign', snapping_type: 'free_float' },
+    { id: 'wizard_buddy', name: 'Wandering Wizard', category: 'decorations', visual: '🧙‍♂️', type: 'speech_sign', snapping_type: 'free_float' }
+  ],
   particles: [
     { id: 'effects_fire', name: 'Fire Effect', category: 'particles', visual: '🔥', type: 'particles', snapping_type: 'free_float' },
     { id: 'effects_sparkles', name: 'Magic Sparkles', category: 'particles', visual: '✨', type: 'particles', snapping_type: 'free_float' },

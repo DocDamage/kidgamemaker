@@ -28,6 +28,15 @@ var current_weather: String = "clear"
 var score: int = 0
 var keys_collected: Dictionary = {}  # key_color -> count
 
+# Chiptune synthesizer state
+var bpm_sequence: Array = []
+var _playback: AudioStreamGeneratorPlayback = null
+var current_step_index: int = 0
+var step_timer: float = 0.0
+var step_duration: float = 0.15
+var sample_rate: float = 44100.0
+
+
 var hud_canvas: CanvasLayer = null
 var hud_health_label: Label = null
 var hud_score_label: Label = null
@@ -89,10 +98,24 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_tree().reload_current_scene()
 
 
-func _physics_process(_delta: float) -> void:
+var _pulse_timer: float = 0.0
+func _physics_process(delta: float) -> void:
+	if _playback != null and _bgm_player != null and _bgm_player.playing:
+		_fill_audio_buffer()
+
 	if active_player != null:
 		if active_player.global_position.y > death_y_threshold:
 			_respawn_player()
+
+	# Sound-to-light beat pulse (approx. 120 BPM = 2.0 Hz sine wave)
+	_pulse_timer += delta
+	var beat_wave := (sin(_pulse_timer * PI * 4.0) + 1.0) * 0.5 # Pulses twice per second
+	for child in get_children():
+		if child.has_meta("emits_light") and child.get_meta("emits_light") == true:
+			var light = child.get_node_or_null("PointLight2D")
+			if light != null:
+				var base_energy = float(child.get_meta("light_energy"))
+				light.energy = base_energy + beat_wave * 0.5
 
 
 func _resolve_level_path() -> String:
@@ -264,6 +287,24 @@ func spawn_entity(data: Dictionary) -> Node2D:
 			node = _make_locked_door(data, sidecar)
 		"particles":
 			node = _make_particles(data, sidecar)
+		"trigger":
+			node = _make_trigger(data, sidecar)
+		"gate":
+			node = _make_gate(data, sidecar)
+		"jelly":
+			node = _make_jelly(data, sidecar)
+		"speed_pad":
+			node = _make_speed_pad(data, sidecar)
+		"speech_sign":
+			node = _make_speech_sign(data, sidecar)
+		"water_block":
+			node = _make_water_block(data, sidecar)
+		"pet":
+			node = _make_pet(data, sidecar)
+		"crumbling_cloud":
+			node = _make_crumbling_cloud(data, sidecar)
+		"hazard":
+			node = _make_hazard(data, sidecar)
 		_:
 			node = _make_decoration(data, sidecar)
 
@@ -329,12 +370,49 @@ func _make_player(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
 	return body
 
 
-func _make_terrain(data: Dictionary, sidecar: Dictionary) -> StaticBody2D:
-	var body := StaticBody2D.new()
-	var size := _collision_size(sidecar, Vector2(128, 32), data)
-	_add_box_collision(body, size)
-	_add_visuals(body, sidecar, size, Color(0.45, 0.45, 0.45, 1.0))
-	return body
+func _make_terrain(data: Dictionary, sidecar: Dictionary) -> CollisionObject2D:
+	var modifiers: Dictionary = data.get("modifiers", {})
+	var is_moving: bool = bool(modifiers.get("is_moving_platform", false))
+
+	if is_moving:
+		var body := AnimatableBody2D.new()
+		var size := _collision_size(sidecar, Vector2(128, 32), data)
+		_add_box_collision(body, size)
+		_add_visuals(body, sidecar, size, Color(0.45, 0.45, 0.45, 1.0))
+		
+		var axis: String = str(modifiers.get("move_axis", "horizontal"))
+		var speed: float = float(modifiers.get("move_speed", 100.0))
+		var travel: float = float(modifiers.get("move_travel", 128.0))
+		
+		var plat_script := GDScript.new()
+		plat_script.source_code = "extends AnimatableBody2D\n" + \
+			"var axis: String = 'horizontal'\n" + \
+			"var speed: float = 100.0\n" + \
+			"var travel: float = 128.0\n" + \
+			"var start_pos: Vector2\n" + \
+			"var time_passed: float = 0.0\n" + \
+			"func _ready() -> void:\n" + \
+			"\tstart_pos = global_position\n" + \
+			"func _physics_process(delta: float) -> void:\n" + \
+			"\ttime_passed += delta\n" + \
+			"\tvar wave = sin(time_passed * (speed / 50.0))\n" + \
+			"\tif axis == 'horizontal':\n" + \
+			"\t\tglobal_position.x = start_pos.x + wave * travel * 0.5\n" + \
+			"\telse:\n" + \
+			"\t\tglobal_position.y = start_pos.y + wave * travel * 0.5\n"
+		plat_script.reload()
+		body.set_script(plat_script)
+		body.set("axis", axis)
+		body.set("speed", speed)
+		body.set("travel", travel)
+		
+		return body
+	else:
+		var body := StaticBody2D.new()
+		var size := _collision_size(sidecar, Vector2(128, 32), data)
+		_add_box_collision(body, size)
+		_add_visuals(body, sidecar, size, Color(0.45, 0.45, 0.45, 1.0))
+		return body
 
 
 func _make_enemy(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
@@ -396,6 +474,7 @@ func _make_collectible(data: Dictionary, sidecar: Dictionary) -> Area2D:
 		if modifiers.has("powerup_type"):
 			area.set("powerup_type", str(modifiers.get("powerup_type")))
 
+	area.set_meta("is_collectible", true)
 	return area
 
 
@@ -404,6 +483,7 @@ func _make_key_collectible(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	var size := _collision_size(sidecar, Vector2(20, 20), data)
 	_add_box_collision(area, size)
 	_add_visuals(area, sidecar, size, Color(1.0, 0.85, 0.0, 0.95))
+	area.set_meta("is_collectible", true)
 
 	var script := load(COLLECTIBLE_SCRIPT)
 	if script != null:
@@ -1097,6 +1177,7 @@ func _apply_world_settings(settings: Dictionary) -> void:
 		_:
 			modulate_node.color = Color.WHITE
 
+	bpm_sequence = settings.get("custom_bgm_sequence", [])
 	var theme := str(settings.get("theme", "default"))
 	_play_theme_bgm(theme)
 
@@ -1125,6 +1206,8 @@ func _apply_lighting_if_needed(node: Node2D, sidecar: Dictionary) -> void:
 
 	light.texture = grad_tex
 	node.add_child(light)
+	node.set_meta("emits_light", true)
+	node.set_meta("light_energy", light.energy)
 
 
 func _apply_weather_particles() -> void:
@@ -1301,6 +1384,18 @@ func _play_theme_bgm(theme: String) -> void:
 			bgm_path = "res://data/assets/audio/ice_bgm.wav"
 		"volcano":
 			bgm_path = "res://data/assets/audio/volcano_bgm.wav"
+		"custom":
+			var generator := AudioStreamGenerator.new()
+			generator.mix_rate = sample_rate
+			generator.buffer_length = 0.1
+			_bgm_player = AudioStreamPlayer.new()
+			_bgm_player.stream = generator
+			_bgm_player.volume_db = -10.0
+			add_child(_bgm_player)
+			_bgm_player.play()
+			_playback = _bgm_player.get_stream_playback()
+			print("Playing custom synthesized beat composer sequence")
+			return
 
 	if bgm_path != "":
 		var stream = _load_wav_file(bgm_path)
@@ -1312,6 +1407,66 @@ func _play_theme_bgm(theme: String) -> void:
 			add_child(_bgm_player)
 			_bgm_player.play()
 			print("Playing BGM theme: ", theme)
+
+
+func _fill_audio_buffer() -> void:
+	if _playback == null:
+		return
+
+	var frames_to_fill := _playback.get_frames_available()
+	if frames_to_fill <= 0:
+		return
+
+	var buffer := PackedVector2Array()
+	buffer.resize(frames_to_fill)
+
+	for i in range(frames_to_fill):
+		step_timer += 1.0 / sample_rate
+		if step_timer >= step_duration:
+			step_timer = 0.0
+			current_step_index = (current_step_index + 1) % 8
+
+		var sample_val := 0.0
+
+		if bpm_sequence.size() >= 4:
+			# Kick (row 0)
+			if int(bpm_sequence[0][current_step_index]) == 1:
+				var t := step_timer
+				if t < 0.1:
+					var freq := lerp(150.0, 40.0, t / 0.1)
+					var env := (1.0 - t / 0.1)
+					sample_val += sin(t * TAU * freq) * 0.3 * env
+
+			# Snare (row 1)
+			if int(bpm_sequence[1][current_step_index]) == 1:
+				var t := step_timer
+				if t < 0.12:
+					var noise_val := (randf() * 2.0 - 1.0)
+					var env := (1.0 - t / 0.12)
+					sample_val += noise_val * 0.15 * env
+
+			# Hi-Hat (row 2)
+			if int(bpm_sequence[2][current_step_index]) == 1:
+				var t := step_timer
+				if t < 0.04:
+					var noise_val := (randf() * 2.0 - 1.0)
+					var env := (1.0 - t / 0.04)
+					sample_val += noise_val * 0.05 * env
+
+			# Bass Synth (row 3)
+			if int(bpm_sequence[3][current_step_index]) == 1:
+				var notes := [130.81, 155.56, 196.00, 233.08, 261.63, 196.00, 155.56, 130.81]
+				var freq := notes[current_step_index % notes.size()]
+				var t := step_timer
+				if t < 0.15:
+					var wave_val := 1.0 if sin(t * TAU * freq) > 0.0 else -1.0
+					var env := (1.0 - t / 0.15)
+					sample_val += wave_val * 0.1 * env
+
+		sample_val = clamp(sample_val, -1.0, 1.0)
+		buffer[i] = Vector2(sample_val, sample_val)
+
+	_playback.push_many(buffer)
 
 
 func play_sfx(type: String) -> void:
@@ -1419,4 +1574,377 @@ func _load_wav_file(path: String) -> AudioStreamWav:
 	stream.stereo = false
 	stream.data = bytes.slice(44)
 	return stream
+
+
+func _make_trigger(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(32, 32), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color(1.0, 0.6, 0.2, 0.8))
+
+	var modifiers: Dictionary = data.get("modifiers", {})
+	var target_id: String = str(modifiers.get("target_id", ""))
+
+	var trigger_script := GDScript.new()
+	trigger_script.source_code = "extends Area2D\n" + \
+		"var target_id: String = ''\n" + \
+		"var triggered: bool = false\n" + \
+		"func _ready() -> void:\n" + \
+		"\tbody_entered.connect(_on_body_entered)\n" + \
+		"func _on_body_entered(body: Node) -> void:\n" + \
+		"\tif triggered or not body is CharacterBody2D:\n" + \
+		"\t\treturn\n" + \
+		"\ttriggered = true\n" + \
+		"\tvar main = get_tree().get_root().get_node_or_null('Main')\n" + \
+		"\tif main != null and main.has_method('play_sfx'):\n" + \
+		"\t\tmain.play_sfx('coin')\n" + \
+		"\tvar target = get_parent().get_node_or_null(target_id)\n" + \
+		"\tif target != null and target.has_method('toggle_gate'):\n" + \
+		"\t\ttarget.toggle_gate()\n"
+	trigger_script.reload()
+	area.set_script(trigger_script)
+	area.set("target_id", target_id)
+
+	return area
+
+
+func _make_gate(data: Dictionary, sidecar: Dictionary) -> AnimatableBody2D:
+	var body := AnimatableBody2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_box_collision(body, size)
+	_add_visuals(body, sidecar, size, Color(0.1, 0.8, 0.5, 0.95))
+
+	var gate_script := GDScript.new()
+	gate_script.source_code = "extends AnimatableBody2D\n" + \
+		"var is_open: bool = false\n" + \
+		"func toggle_gate() -> void:\n" + \
+		"\tis_open = !is_open\n" + \
+		"\tvar main = get_tree().get_root().get_node_or_null('Main')\n" + \
+		"\tif is_open:\n" + \
+		"\t\tcollision_layer = 0\n" + \
+		"\t\tcollision_mask = 0\n" + \
+		"\t\tvar tween = create_tween()\n" + \
+		"\t\ttween.tween_property(self, 'modulate:a', 0.15, 0.3)\n" + \
+		"\t\tif main != null and main.has_method('spawn_floating_text'):\n" + \
+		"\t\t\tmain.spawn_floating_text('GATE OPENED!', global_position, Color.GREEN)\n" + \
+		"\telse:\n" + \
+		"\t\tcollision_layer = 1\n" + \
+		"\t\tcollision_mask = 1\n" + \
+		"\t\tvar tween = create_tween()\n" + \
+		"\t\ttween.tween_property(self, 'modulate:a', 1.0, 0.3)\n" + \
+		"\t\tif main != null and main.has_method('spawn_floating_text'):\n" + \
+		"\t\t\tmain.spawn_floating_text('GATE CLOSED!', global_position, Color.RED)\n"
+	gate_script.reload()
+	body.set_script(gate_script)
+
+	return body
+
+
+func _make_jelly(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color.YELLOW)
+
+	var jelly_script := GDScript.new()
+	jelly_script.source_code = """extends Area2D
+var bounce_force: float = 500.0
+var scale_multiplier: float = 1.0
+func _ready() -> void:
+	body_entered.connect(_on_body_entered)
+func _on_body_entered(body: Node) -> void:
+	if body.has_method("take_damage") and body is CharacterBody2D:
+		body.velocity.y = -bounce_force
+		var main = get_tree().get_root().get_node_or_null("Main")
+		if main != null:
+			if main.has_method("play_sfx"): main.play_sfx("jump")
+			if main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("BOING!", global_position, Color.YELLOW)
+		var tween = create_tween()
+		tween.tween_property(self, "scale", Vector2(1.3 * scale_multiplier, 0.6 * scale_multiplier), 0.08)
+		tween.tween_property(self, "scale", Vector2(1.0 * scale_multiplier, 1.0 * scale_multiplier), 0.12)
+"""
+	jelly_script.reload()
+	area.set_script(jelly_script)
+	var mods: Dictionary = data.get("modifiers", {})
+	area.set("bounce_force", float(mods.get("bounce_force", 500.0)))
+	area.set("scale_multiplier", float(mods.get("scale_multiplier", 1.0)))
+	return area
+
+
+func _make_speed_pad(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color.CYAN)
+
+	var speed_script := GDScript.new()
+	speed_script.source_code = """extends Area2D
+var boost_direction: float = 1.0
+var boost_force: float = 550.0
+func _ready() -> void:
+	body_entered.connect(_on_body_entered)
+func _on_body_entered(body: Node) -> void:
+	if body is CharacterBody2D and "speed_pad_velocity" in body:
+		body.speed_pad_velocity = Vector2(boost_direction * boost_force, 0.0)
+		var main = get_tree().get_root().get_node_or_null("Main")
+		if main != null:
+			if main.has_method("play_sfx"): main.play_sfx("coin")
+			if main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("ZOOM!", global_position, Color.CYAN)
+"""
+	speed_script.reload()
+	area.set_script(speed_script)
+	var mods: Dictionary = data.get("modifiers", {})
+	area.set("boost_direction", float(mods.get("boost_direction", 1.0)))
+	area.set("boost_force", float(mods.get("boost_force", 550.0)))
+	return area
+
+
+func _make_speech_sign(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color.DARK_ORANGE)
+
+	var bubble := PanelContainer.new()
+	bubble.name = "SpeechBubble"
+	bubble.visible = false
+	bubble.position = Vector2(-75, -70)
+	bubble.custom_minimum_size = Vector2(150, 45)
+	
+	var style_box = StyleBoxFlat.new()
+	style_box.bg_color = Color(0.08, 0.12, 0.2, 0.88)
+	style_box.border_width_left = 2
+	style_box.border_width_right = 2
+	style_box.border_width_top = 2
+	style_box.border_width_bottom = 2
+	style_box.border_color = Color(0.3, 0.6, 0.9, 0.9)
+	style_box.corner_radius_top_left = 6
+	style_box.corner_radius_top_right = 6
+	style_box.corner_radius_bottom_left = 6
+	style_box.corner_radius_bottom_right = 6
+	bubble.add_theme_stylebox_override("panel", style_box)
+
+	var label := Label.new()
+	label.name = "SpeechLabel"
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var lbl_settings := LabelSettings.new()
+	lbl_settings.font_size = 11
+	lbl_settings.font_color = Color.WHITE
+	label.label_settings = lbl_settings
+	bubble.add_child(label)
+	area.add_child(bubble)
+
+	var sign_script := GDScript.new()
+	sign_script.source_code = """extends Area2D
+var speech_text: String = ""
+func _ready() -> void:
+	body_entered.connect(_on_body_entered)
+	body_exited.connect(_on_body_exited)
+func _on_body_entered(body: Node) -> void:
+	if body is CharacterBody2D:
+		var lbl = get_node_or_null("SpeechBubble/SpeechLabel")
+		var bub = get_node_or_null("SpeechBubble")
+		if lbl != null and bub != null:
+			lbl.text = speech_text
+			bub.visible = true
+			var main = get_tree().get_root().get_node_or_null("Main")
+			if main != null and main.has_method("play_sfx"): main.play_sfx("jump")
+func _on_body_exited(body: Node) -> void:
+	var bub = get_node_or_null("SpeechBubble")
+	if bub != null: bub.visible = false
+"""
+	sign_script.reload()
+	area.set_script(sign_script)
+	var mods: Dictionary = data.get("modifiers", {})
+	area.set("speech_text", str(mods.get("speech_text", "Hello adventurer! 🧙‍♂️")))
+	return area
+
+
+func _make_water_block(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(128, 128), data)
+	_add_box_collision(area, size)
+
+	var rect := ColorRect.new()
+	var mods: Dictionary = data.get("modifiers", {})
+	var flavor := str(mods.get("water_flavor", "normal"))
+	var tint := Color(0.2, 0.5, 0.8, 0.4)
+	if flavor == "toxic":
+		tint = Color(0.2, 0.8, 0.2, 0.4)
+	elif flavor == "lava":
+		tint = Color(0.9, 0.2, 0.1, 0.4)
+	rect.color = tint
+	rect.size = size
+	rect.position = -size * 0.5
+	area.add_child(rect)
+
+	_add_visuals(area, sidecar, size * 0.5, tint)
+
+	var water_script := GDScript.new()
+	water_script.source_code = """extends Area2D
+var buoyancy: float = 0.5
+var flavor: String = "normal"
+func _ready() -> void:
+	body_entered.connect(_on_body_entered)
+	body_exited.connect(_on_body_exited)
+func _on_body_entered(body: Node) -> void:
+	if body is CharacterBody2D and "inside_water" in body:
+		body.inside_water = true
+		body.water_buoyancy = buoyancy
+		body.water_type = flavor
+		body.water_hurt_timer = 0.0
+		var main = get_tree().get_root().get_node_or_null("Main")
+		if main != null and main.has_method("spawn_floating_text"):
+			main.spawn_floating_text("SPLASH!", global_position, Color.CYAN)
+func _on_body_exited(body: Node) -> void:
+	if body is CharacterBody2D and "inside_water" in body:
+		body.inside_water = false
+"""
+	water_script.reload()
+	area.set_script(water_script)
+	area.set("buoyancy", float(mods.get("water_buoyancy", 0.5)))
+	area.set("flavor", flavor)
+	return area
+
+
+func _make_crumbling_cloud(data: Dictionary, sidecar: Dictionary) -> StaticBody2D:
+	var body := StaticBody2D.new()
+	var size := _collision_size(sidecar, Vector2(128, 32), data)
+	_add_box_collision(body, size)
+	_add_visuals(body, sidecar, size, Color(0.8, 0.9, 1.0, 0.8))
+
+	var sensor := Area2D.new()
+	var shape := RectangleShape2D.new()
+	shape.size = Vector2(size.x - 8, 10)
+	var col := CollisionShape2D.new()
+	col.shape = shape
+	col.position = Vector2(0, -size.y * 0.5 - 5)
+	sensor.add_child(col)
+	body.add_child(sensor)
+
+	var cloud_script := GDScript.new()
+	cloud_script.source_code = """extends StaticBody2D
+var crumble_delay: float = 0.5
+var respawn_time: float = 3.0
+var is_crumbled: bool = false
+func _ready() -> void:
+	var sens = get_child(get_child_count() - 1)
+	sens.body_entered.connect(_on_player_step)
+func _on_player_step(body: Node) -> void:
+	if is_crumbled or not body is CharacterBody2D:
+		return
+	is_crumbled = true
+	var tween = create_tween()
+	var pos_y = position.y
+	tween.tween_property(self, "position:y", pos_y + 4.0, 0.05)
+	tween.tween_property(self, "position:y", pos_y - 4.0, 0.05)
+	tween.set_loops(int(crumble_delay / 0.1))
+	await get_tree().create_timer(crumble_delay).timeout
+	collision_layer = 0
+	collision_mask = 0
+	var ft = create_tween()
+	ft.tween_property(self, "modulate:a", 0.0, 0.2)
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.has_method("play_sfx"): main.play_sfx("hit")
+	await get_tree().create_timer(respawn_time).timeout
+	collision_layer = 1
+	collision_mask = 1
+	var rt = create_tween()
+	rt.tween_property(self, "modulate:a", 1.0, 0.25)
+	is_crumbled = false
+"""
+	cloud_script.reload()
+	body.set_script(cloud_script)
+	var mods: Dictionary = data.get("modifiers", {})
+	body.set("crumble_delay", float(mods.get("crumble_delay", 0.5)))
+	body.set("respawn_time", float(mods.get("respawn_time", 3.0)))
+	return body
+
+
+func _make_hazard(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color.RED)
+
+	var hazard_script := GDScript.new()
+	hazard_script.source_code = """extends Area2D
+var damage_value: int = 15
+func _ready() -> void:
+	body_entered.connect(_on_body_entered)
+func _on_body_entered(body: Node) -> void:
+	if body.has_method("take_damage") and body is CharacterBody2D:
+		body.take_damage(damage_value)
+"""
+	hazard_script.reload()
+	area.set_script(hazard_script)
+	var mods: Dictionary = data.get("modifiers", {})
+	area.set("damage_value", int(mods.get("damage_value", 15)))
+	return area
+
+
+func _make_pet(data: Dictionary, sidecar: Dictionary) -> Node2D:
+	var node := Node2D.new()
+	var size := _collision_size(sidecar, Vector2(32, 32), data)
+	_add_visuals(node, sidecar, size, Color.MAGENTA)
+
+	var pet_script := GDScript.new()
+	pet_script.source_code = """extends Node2D
+var pet_power: String = "magnet"
+var _magnet_timer: float = 0.0
+func _process(delta: float) -> void:
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main == null or main.active_player == null: return
+	var p_pos = main.active_player.global_position
+	var target_pos = p_pos + Vector2(-36, -32)
+	global_position = global_position.lerp(target_pos, delta * 4.0)
+	match pet_power:
+		"magnet":
+			_magnet_timer += delta
+			if _magnet_timer >= 0.3:
+				_magnet_timer = 0.0
+				for ent in main.spawned_entities:
+					if is_instance_valid(ent) and ent.has_meta("is_collectible"):
+						var dist = global_position.distance_to(ent.global_position)
+						if dist < 160.0:
+							var t = ent.create_tween()
+							t.tween_property(ent, "global_position", p_pos, 0.25)
+		"shield":
+			if not main.active_player.shield_active:
+				_magnet_timer += delta
+				if _magnet_timer >= 5.0:
+					_magnet_timer = 0.0
+					main.active_player.shield_active = true
+					if main.has_method("spawn_floating_text"):
+						main.spawn_floating_text("SHIELD RECHARGED!", main.active_player.global_position, Color.MAGENTA)
+"""
+	pet_script.reload()
+	node.set_script(pet_script)
+	var mods: Dictionary = data.get("modifiers", {})
+	var power = str(mods.get("pet_power", "magnet"))
+	node.set("pet_power", power)
+
+	if power == "light":
+		var light := PointLight2D.new()
+		light.color = Color(1.0, 0.9, 0.6)
+		light.energy = 1.3
+		light.texture_scale = 200.0 / 128.0
+		
+		var gradient := Gradient.new()
+		gradient.colors = PackedColorArray([Color.WHITE, Color(1.0, 1.0, 1.0, 0.0)])
+		var grad_tex := GradientTexture2D.new()
+		grad_tex.gradient = gradient
+		grad_tex.fill = GradientTexture2D.FILL_RADIAL
+		grad_tex.fill_from = Vector2(0.5, 0.5)
+		grad_tex.fill_to = Vector2(1.0, 0.5)
+		grad_tex.width = 128
+		grad_tex.height = 128
+		light.texture = grad_tex
+		node.add_child(light)
+
+	return node
 
