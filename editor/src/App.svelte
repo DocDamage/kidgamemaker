@@ -26,6 +26,7 @@
   let themeSelectorOpen = false;
   let playModalOpen = false;
   let isGamePaused = false;
+  let isMuted = false;
 
   function togglePauseGame() {
     const iframe = document.querySelector('.game-iframe') as HTMLIFrameElement;
