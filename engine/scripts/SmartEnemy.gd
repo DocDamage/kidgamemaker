@@ -34,6 +34,11 @@ func _ready() -> void:
 		scale = Vector2(1.8, 1.8)
 		patrol_speed *= 1.5
 
+	# Difficulty adjustment: easy mode makes enemies 50% slower
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.get("difficulty") == "easy":
+		patrol_speed *= 0.5
+
 	# Damage hitbox — slightly smaller than collision box so it feels fair
 	_damage_area = Area2D.new()
 	var shape := RectangleShape2D.new()
@@ -48,6 +53,10 @@ func _ready() -> void:
 
 
 func _on_damage_area_body_entered(body: Node) -> void:
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.get("calm_mode") == true:
+		return # Enemies are friendly in Calm Mode!
+
 	if body.has_method("take_damage"):
 		if body is CharacterBody2D:
 			var diff_y = body.global_position.y - global_position.y
@@ -99,6 +108,19 @@ func _physics_process(delta: float) -> void:
 
 		_: # patrol
 			velocity.x = float(direction) * patrol_speed
+
+	# Apply conveyor belt movement to enemy velocity
+	var conveyor_velocity := Vector2.ZERO
+	if is_on_floor():
+		for i in get_slide_collision_count():
+			var collision = get_slide_collision(i)
+			var collider = collision.get_collider()
+			if collider != null and collider.has_meta("is_conveyor") and collider.get_meta("is_conveyor") == true:
+				var dir: float = collider.get_meta("conveyor_direction")
+				var spd: float = collider.get_meta("conveyor_speed")
+				conveyor_velocity.x = dir * spd
+	
+	velocity.x += conveyor_velocity.x
 
 	move_and_slide()
 
@@ -164,6 +186,10 @@ func _shoot_projectile() -> void:
 	bullet.global_position = global_position
 
 	bullet.body_entered.connect(func(body):
+		var main_ref = get_tree().get_root().get_node_or_null("Main")
+		if main_ref != null and main_ref.get("calm_mode") == true:
+			bullet.queue_free()
+			return
 		if body.has_method("take_damage"):
 			body.take_damage(damage_value)
 		bullet.queue_free()

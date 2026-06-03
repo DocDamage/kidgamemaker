@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "asset_id": "conveyor_belt",
+  "asset_name": "Conveyor Belt ⚙️",
+  "category": "decorations",
+  "runtime_template": "conveyor",
+  "visual": "⚙️",
+  "visual_tags": [
+    "conveyor",
+    "belt",
+    "speed",
+    "decorations"
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      128,
+      32
+    ]
+  }
+}

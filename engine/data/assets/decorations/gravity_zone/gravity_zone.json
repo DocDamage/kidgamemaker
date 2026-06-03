@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "asset_id": "gravity_zone",
+  "asset_name": "Gravity Zone 🌀",
+  "category": "decorations",
+  "runtime_template": "gravity_zone",
+  "visual": "🌀",
+  "visual_tags": [
+    "gravity",
+    "zone",
+    "flip",
+    "invert",
+    "decorations"
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      96,
+      96
+    ]
+  }
+}

@@ -10,6 +10,7 @@ extends CharacterBody2D
 var current_health: int = max_health
 var gravity: float = ProjectSettings.get_setting("physics/2d/default_gravity")
 var _invincible := false
+var trail_particles: CPUParticles2D = null
 
 # Powerup states
 var speed_boost_timer: float = 0.0
@@ -19,6 +20,8 @@ var _jumps_remaining: int = 1
 var giant_timer: float = 0.0
 var is_giant: bool = false
 var gravity_inverted: bool = false
+var costume_tint: String = ""
+
 
 # Water & Speed pad physics states
 var inside_water: bool = false
@@ -39,6 +42,33 @@ var lantern_light: PointLight2D = null
 
 func _ready() -> void:
 	current_health = max_health
+	_ready_trail_particles()
+
+
+func _ready_trail_particles() -> void:
+	trail_particles = CPUParticles2D.new()
+	trail_particles.name = "HeroTrailParticles"
+	trail_particles.amount = 15
+	trail_particles.lifetime = 0.4
+	trail_particles.speed_scale = 1.0
+	trail_particles.explosiveness = 0.0
+	trail_particles.randomness = 0.2
+	trail_particles.direction = Vector2(-1, 0)
+	trail_particles.spread = 15.0
+	trail_particles.gravity = Vector2.ZERO
+	trail_particles.initial_velocity_min = 20.0
+	trail_particles.initial_velocity_max = 50.0
+	
+	var curve := Curve.new()
+	curve.add_point(Vector2(0, 1.0))
+	curve.add_point(Vector2(1.0, 0.0))
+	trail_particles.scale_amount_curve = curve
+	trail_particles.scale_amount_min = 4.0
+	trail_particles.scale_amount_max = 8.0
+	
+	trail_particles.color = Color(0.2, 0.6, 1.0, 0.6)
+	trail_particles.emitting = false
+	add_child(trail_particles)
 
 
 func heal(amount: int) -> void:
@@ -107,6 +137,14 @@ func apply_powerup(type: String) -> void:
 
 
 func take_damage(amount: int) -> void:
+	var main_ref = get_tree().get_root().get_node_or_null("Main")
+	if main_ref != null:
+		var diff = main_ref.get("difficulty")
+		if diff == "creative":
+			return
+		elif diff == "easy":
+			amount = int(max(1.0, float(amount) * 0.5))
+
 	if _invincible:
 		return
 
@@ -160,6 +198,11 @@ func take_damage(amount: int) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	var is_creative := false
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.get("difficulty") == "creative":
+		is_creative = true
+
 	# Configure up direction dynamically
 	if gravity_inverted:
 		up_direction = Vector2.DOWN
@@ -203,7 +246,9 @@ func _physics_process(delta: float) -> void:
 		scale = Vector2(1.0, 1.0)
 
 	var active_speed := movement_speed
-	if speed_boost_timer > 0.0:
+	if is_creative:
+		modulate = Color(1.0, 0.9, 0.4) # Gold modulation for creative mode
+	elif speed_boost_timer > 0.0:
 		speed_boost_timer -= delta
 		active_speed = movement_speed * 1.6
 		modulate = Color(0.4, 1.0, 1.0) # Cyan modulation for speed
@@ -215,10 +260,24 @@ func _physics_process(delta: float) -> void:
 		modulate = Color(0.6, 0.4, 1.0) # Purple modulation for gravity
 	else:
 		if not _invincible:
-			modulate = Color(1.0, 1.0, 1.0)
+			if costume_tint != "" and costume_tint != "default":
+				modulate = Color(costume_tint)
+			else:
+				modulate = Color(1.0, 1.0, 1.0)
+
+
+	var conveyor_velocity := Vector2.ZERO
+	if is_on_floor():
+		for i in get_slide_collision_count():
+			var collision = get_slide_collision(i)
+			var collider = collision.get_collider()
+			if collider != null and collider.has_meta("is_conveyor") and collider.get_meta("is_conveyor") == true:
+				var dir: float = collider.get_meta("conveyor_direction")
+				var spd: float = collider.get_meta("conveyor_speed")
+				conveyor_velocity.x = dir * spd
 
 	var input_dir := Input.get_axis("ui_left", "ui_right")
-	velocity.x = input_dir * active_speed
+	velocity.x = input_dir * active_speed + conveyor_velocity.x
 
 	# Apply speed boost pad impulse vector if active
 	if speed_pad_velocity.length_squared() > 10.0:
@@ -226,14 +285,18 @@ func _physics_process(delta: float) -> void:
 		speed_pad_velocity = speed_pad_velocity.move_toward(Vector2.ZERO, delta * 900.0)
 
 	# Water buoyancy, jetpack thrust, glider cape glide, or standard gravity
-	if inside_water:
+	if is_creative:
+		var v_input := Input.get_axis("ui_up", "ui_down")
+		velocity.y = v_input * active_speed
+		if Input.is_action_pressed("ui_accept"):
+			velocity.y = -active_speed if not gravity_inverted else active_speed
+	elif inside_water:
 		velocity.y += gravity * (1.0 - water_buoyancy) * delta
 		velocity.y = clamp(velocity.y, -220.0, 180.0)
 	elif has_jetpack and jetpack_fuel > 0.0 and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
 		velocity.y = -260.0 if not gravity_inverted else 260.0
 		jetpack_fuel -= delta * 35.0
 		modulate = Color(1.0, 0.5, 0.2) # Jetpack orange visual tint
-		var main := get_tree().get_root().get_node_or_null("Main")
 		if main != null and main.has_method("spawn_floating_text") and randf() < delta * 4.0:
 			main.spawn_floating_text("🔥", global_position, Color.ORANGE)
 	elif has_glider and not is_on_floor() and (velocity.y > 0.0 if not gravity_inverted else velocity.y < 0.0) and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
@@ -248,13 +311,12 @@ func _physics_process(delta: float) -> void:
 	if is_on_floor():
 		_jumps_remaining = 2 if double_jump_enabled else 1
 
-	if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
+	if not is_creative and (Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up")):
 		var did_jump := false
 		if inside_water:
 			# Swim stroke
 			velocity.y = -220.0 if not gravity_inverted else 220.0
 			did_jump = true
-			var main := get_tree().get_root().get_node_or_null("Main")
 			if main != null and main.has_method("play_sfx"):
 				main.play_sfx("jump")
 		elif is_on_floor():
@@ -270,7 +332,6 @@ func _physics_process(delta: float) -> void:
 			t.tween_property(self, "scale", Vector2(1.0, 1.0), 0.15)
 
 		if did_jump:
-			var main := get_tree().get_root().get_node_or_null("Main")
 			if main != null and main.has_method("play_custom_sfx"):
 				main.play_custom_sfx(asset_id, "jump")
 
@@ -283,11 +344,9 @@ func _physics_process(delta: float) -> void:
 		if collider != null and collider.has_meta("is_destructible") and collider.get_meta("is_destructible") == true:
 			if has_hammer:
 				collider.call_deferred("shatter")
-				var main = get_tree().get_root().get_node_or_null("Main")
 				if main != null and main.has_method("play_sfx"):
 					main.play_sfx("hit")
 			else:
-				var main = get_tree().get_root().get_node_or_null("Main")
 				if main != null and main.has_method("spawn_floating_text") and randf() < delta * 1.5:
 					main.spawn_floating_text("NEED HAMMER! 🔨", global_position, Color.GOLD)
 
@@ -307,7 +366,66 @@ func _physics_process(delta: float) -> void:
 					var stomp_dmg = 40 if is_giant else 20
 					collider.take_damage(stomp_dmg)
 					
-					var main = get_tree().get_root().get_node_or_null("Main")
 					if main != null and main.has_method("play_sfx"):
 						main.play_sfx("jump")
 					break
+
+	# Update trail particles
+	if trail_particles != null:
+		if velocity.length_squared() > 100.0:
+			trail_particles.emitting = true
+			trail_particles.direction = -velocity.normalized()
+		else:
+			trail_particles.emitting = false
+		trail_particles.color = modulate
+		trail_particles.color.a = 0.6
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed:
+		var emoji := ""
+		match event.keycode:
+			KEY_1: emoji = "😊"
+			KEY_2: emoji = "😡"
+			KEY_3: emoji = "😱"
+			KEY_4: emoji = "🎉"
+			KEY_5: emoji = "💤"
+		if emoji != "":
+			show_emote(emoji)
+
+
+func show_emote(emoji: String) -> void:
+	var old_lbl = get_node_or_null("EmoteLabel")
+	if old_lbl != null:
+		old_lbl.queue_free()
+		
+	var label := Label.new()
+	label.name = "EmoteLabel"
+	label.text = emoji
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	var settings := LabelSettings.new()
+	settings.font_size = 28
+	settings.outline_size = 4
+	settings.outline_color = Color.BLACK
+	label.label_settings = settings
+	
+	label.size = Vector2(80, 40)
+	label.position = Vector2(-40, -60)
+	add_child(label)
+	
+	label.scale = Vector2(0.2, 0.2)
+	label.pivot_offset = Vector2(40, 20)
+	
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(label, "position:y", -90.0, 1.2).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "scale", Vector2(1.2, 1.2), 0.15).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "scale", Vector2(1.0, 1.0), 0.15).set_delay(0.15)
+	
+	var fade_tween := create_tween()
+	fade_tween.tween_interval(0.9)
+	fade_tween.tween_property(label, "modulate:a", 0.0, 0.3)
+	fade_tween.chain().tween_callback(label.queue_free)
+

@@ -35,6 +35,15 @@ export type AssetInventory = Record<string, ToyboxAsset[]>;
 export type WorldSettings = {
   time_of_day: 'day' | 'morning' | 'sunset' | 'night';
   weather: 'clear' | 'rain' | 'snow';
+  rising_hazard_type?: 'water' | 'lava' | '';
+  rising_hazard_speed?: number;
+  victory_rules?: { win_condition: string; celebration: string };
+  loss_rules?: { lose_condition: string; action: string };
+  room_rules?: any[];
+  theme?: string;
+  story_title?: string;
+  story_intro_text?: string;
+  custom_bgm_sequence?: number[][];
 };
 
 export type RoomPayload = {
@@ -145,7 +154,12 @@ export const fallbackInventory: AssetInventory = {
     { id: 'speed_pad', name: 'Turbo Arrow', category: 'decorations', visual: '⏩', type: 'speed_pad', snapping_type: 'free_float' },
     { id: 'speech_sign', name: 'Chatty Sign', category: 'decorations', visual: '🪧', type: 'speech_sign', snapping_type: 'free_float' },
     { id: 'wizard_buddy', name: 'Wandering Wizard', category: 'decorations', visual: '🧙‍♂️', type: 'speech_sign', snapping_type: 'free_float' },
-    { id: 'npc_shopkeeper', name: 'Toy Shopkeeper 🧸', category: 'decorations', visual: '🧸', type: 'shopkeeper', snapping_type: 'gravity_snap' }
+    { id: 'npc_shopkeeper', name: 'Toy Shopkeeper 🧸', category: 'decorations', visual: '🧸', type: 'shopkeeper', snapping_type: 'gravity_snap' },
+    { id: 'conveyor_belt', name: 'Conveyor Belt ⚙️', category: 'decorations', visual: '⚙️', type: 'conveyor', snapping_type: 'edge_to_edge' },
+    { id: 'mystery_box', name: 'Mystery Box ❓', category: 'decorations', visual: '❓', type: 'mystery_box', snapping_type: 'free_float' },
+    { id: 'gravity_zone', name: 'Gravity Zone 🌀', category: 'decorations', visual: '🌀', type: 'gravity_zone', snapping_type: 'free_float' },
+    { id: 'wind_zone', name: 'Wind Gust 💨', category: 'decorations', visual: '💨', type: 'wind_zone', snapping_type: 'free_float' },
+    { id: 'target_practice', name: 'Spinning Target 🎯', category: 'decorations', visual: '🎯', type: 'target_practice', snapping_type: 'free_float' }
   ],
   particles: [
     { id: 'effects_fire', name: 'Fire Effect', category: 'particles', visual: '🔥', type: 'particles', snapping_type: 'free_float' },

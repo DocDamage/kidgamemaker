@@ -29,6 +29,10 @@ var score: int = 0
 var keys_collected: Dictionary = {}  # key_color -> count
 var victory_rules: Dictionary = {"win_condition": "all_enemies", "celebration": "confetti"}
 var loss_rules: Dictionary = {"lose_condition": "health_0", "action": "game_over"}
+var difficulty: String = "normal"
+var calm_mode: bool = false
+var boss_intro_played: bool = false
+var current_boss_node: Node2D = null
 
 # Chiptune synthesizer state
 var bpm_sequence: Array = []
@@ -168,6 +172,8 @@ func load_level(file_path: String) -> void:
 
 
 func load_level_from_string(json_string: String) -> void:
+	boss_intro_played = false
+	current_boss_node = null
 	var json := JSON.new()
 	var error := json.parse(json_string)
 
@@ -202,6 +208,7 @@ func load_level_from_string(json_string: String) -> void:
 
 	_apply_weather_particles()
 	_configure_camera_limits()
+	_check_and_spawn_rising_hazard(level_data.get("world_settings", {}))
 	_create_hud()
 	_spawn_ghost()
 
@@ -337,6 +344,16 @@ func spawn_entity(data: Dictionary) -> Node2D:
 			node = _make_destructible_terrain(data, sidecar)
 		"shopkeeper":
 			node = _make_shopkeeper(data, sidecar)
+		"conveyor":
+			node = _make_conveyor(data, sidecar)
+		"mystery_box":
+			node = _make_mystery_box(data, sidecar)
+		"gravity_zone":
+			node = _make_gravity_zone(data, sidecar)
+		"wind_zone":
+			node = _make_wind_zone(data, sidecar)
+		"target_practice":
+			node = _make_target_practice(data, sidecar)
 		_:
 			node = _make_decoration(data, sidecar)
 
@@ -394,11 +411,17 @@ func _make_player(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
 	if script != null:
 		body.set_script(script)
 		var attrs: Dictionary = sidecar.get("baseline_attributes", {})
-		body.set("max_health", int(attrs.get("max_health", 100)))
+		var base_health = int(attrs.get("max_health", 100))
+		if difficulty == "easy":
+			base_health = base_health * 2
+		body.set("max_health", base_health)
 		body.set("movement_speed", float(attrs.get("movement_speed", 220)))
 		body.set("jump_force", float(attrs.get("jump_force", -460)))
 		body.set("gravity_scale", float(attrs.get("gravity_scale", 1.0)))
 		body.set("asset_id", str(data.get("asset_id", "")))
+		var modifiers: Dictionary = data.get("modifiers", {})
+		if modifiers.has("costume_tint"):
+			body.set("costume_tint", str(modifiers.get("costume_tint")))
 
 	return body
 
@@ -1133,6 +1156,8 @@ func notify_trigger(trigger_id: String) -> void:
 		
 		if asset_id == "trigger_lever":
 			trigger_type = "lever_flip"
+		elif asset_id == "target_practice":
+			trigger_type = "target_hit"
 			
 	print("notify_trigger called for: ", trigger_id, " type: ", trigger_type)
 	execute_rules(trigger_type, trigger_id)
@@ -1146,12 +1171,12 @@ func execute_rules(trigger_type: String, trigger_id: String = "") -> void:
 		var rule_trigger_type = str(rule.get("trigger_type", ""))
 		var rule_trigger_id = str(rule.get("trigger_id", ""))
 		
-		# Match trigger type (button_step, lever_flip, coins_5, coins_10)
+		# Match trigger type (button_step, lever_flip, target_hit, coins_5, coins_10)
 		if rule_trigger_type != trigger_type:
 			continue
 			
-		# Match trigger ID if button or lever
-		if (rule_trigger_type == "button_step" or rule_trigger_type == "lever_flip") and rule_trigger_id != trigger_id:
+		# Match trigger ID if button, lever, or target
+		if (rule_trigger_type == "button_step" or rule_trigger_type == "lever_flip" or rule_trigger_type == "target_hit") and rule_trigger_id != trigger_id:
 			continue
 			
 		var action_type = str(rule.get("action_type", ""))
@@ -1522,8 +1547,10 @@ func trigger_game_over() -> void:
 
 func handle_player_death() -> void:
 	var action = loss_rules.get("action", "game_over")
-	print("handle_player_death called. loss action rule: ", action)
-	if action == "respawn":
+	print("handle_player_death called. loss action rule: ", action, " calm_mode: ", calm_mode)
+	if calm_mode or action == "respawn":
+		if active_player != null and is_instance_valid(active_player) and "max_health" in active_player:
+			active_player.set("current_health", active_player.get("max_health"))
 		_respawn_player()
 	else:
 		trigger_game_over()
@@ -1647,9 +1674,11 @@ func _z_index_for_bucket(bucket: String) -> int:
 
 
 func _apply_world_settings(settings: Dictionary) -> void:
+	difficulty = str(settings.get("difficulty", "normal"))
+	calm_mode = bool(settings.get("calm_mode", false))
 	var time_of_day := str(settings.get("time_of_day", "day"))
 	current_weather = str(settings.get("weather", "clear"))
-	print("World settings: time=", time_of_day, " weather=", current_weather)
+	print("World settings: time=", time_of_day, " weather=", current_weather, " difficulty=", difficulty, " calm=", calm_mode)
 
 	var modulate_node := CanvasModulate.new()
 	modulate_node.name = "CanvasModulateDayNight"
@@ -1791,6 +1820,116 @@ func _apply_audio_if_needed(node: Node2D, sidecar: Dictionary) -> void:
 func _process(_delta: float) -> void:
 	_update_hud()
 
+	# Boss Intro trigger check
+	if not boss_intro_played and active_player != null and is_instance_valid(active_player):
+		var boss = _find_active_boss()
+		if boss != null and is_instance_valid(boss):
+			var dist = active_player.global_position.distance_to(boss.global_position)
+			if dist < 350.0:
+				trigger_boss_intro(boss)
+
+
+func _find_active_boss() -> Node2D:
+	for node in spawned_entities:
+		if is_instance_valid(node) and node.get("boss_mode") == true:
+			return node
+	return null
+
+
+func _find_camera() -> Camera2D:
+	if active_player != null and is_instance_valid(active_player):
+		for child in active_player.get_children():
+			if child is Camera2D:
+				return child
+	return null
+
+
+func play_dramatic_boss_chord() -> void:
+	for i in range(3):
+		var timer = get_tree().create_timer(i * 0.15)
+		timer.timeout.connect(func():
+			play_sfx("hit")
+		)
+
+
+func trigger_boss_intro(boss: Node2D) -> void:
+	boss_intro_played = true
+	current_boss_node = boss
+	print("🚨 BOSS INTRO TRIGGERED FOR: ", boss.name)
+
+	var camera = _find_camera()
+	if camera == null:
+		return
+
+	if active_player != null and is_instance_valid(active_player):
+		active_player.set_physics_process(false)
+		if "velocity" in active_player:
+			active_player.velocity = Vector2.ZERO
+	for entity in spawned_entities:
+		if is_instance_valid(entity) and entity != boss:
+			entity.set_physics_process(false)
+	boss.set_physics_process(false)
+
+	camera.top_level = true
+	var orig_zoom = camera.zoom
+	var target_pos = boss.global_position
+
+	var tween = create_tween().set_parallel(true)
+	tween.tween_property(camera, "global_position", target_pos, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(camera, "zoom", Vector2(1.6, 1.6), 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	
+	play_dramatic_boss_chord()
+
+	if hud_canvas != null and is_instance_valid(hud_canvas):
+		var banner = ColorRect.new()
+		banner.name = "BossBanner"
+		banner.color = Color(0, 0, 0, 0.75)
+		banner.size = Vector2(800, 120)
+		banner.anchors_preset = Control.PRESET_CENTER_TOP
+		banner.position = Vector2(-400, 100)
+		
+		var label = Label.new()
+		label.text = "🚨 WARNING: BOSS ENCOUNTER! 🚨"
+		if boss.has_meta("asset_id"):
+			label.text += "\n" + str(boss.get_meta("asset_id")).replace("_", " ").to_upper()
+		else:
+			label.text += "\nMEGA MONSTER"
+		
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_color_override("font_color", Color.RED)
+		label.add_theme_font_size_override("font_size", 28)
+		label.size = banner.size
+		banner.add_child(label)
+		
+		banner.modulate.a = 0
+		hud_canvas.get_child(0).add_child(banner)
+		
+		var label_tween = create_tween()
+		label_tween.tween_property(banner, "modulate:a", 1.0, 0.4)
+		label_tween.tween_interval(1.8)
+		label_tween.tween_property(banner, "modulate:a", 0.0, 0.4)
+		label_tween.tween_callback(banner.queue_free)
+
+	var timer = get_tree().create_timer(2.2)
+	timer.timeout.connect(func():
+		var return_tween = create_tween().set_parallel(true)
+		if is_instance_valid(camera) and is_instance_valid(active_player):
+			return_tween.tween_property(camera, "global_position", active_player.global_position, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			return_tween.tween_property(camera, "zoom", orig_zoom, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		
+		return_tween.chain().tween_callback(func():
+			if is_instance_valid(camera):
+				camera.top_level = false
+				camera.position = Vector2.ZERO
+			if is_instance_valid(active_player):
+				active_player.set_physics_process(true)
+			for entity in spawned_entities:
+				if is_instance_valid(entity):
+					entity.set_physics_process(true)
+		)
+	)
+
 
 func _create_hud() -> void:
 	if hud_canvas != null and is_instance_valid(hud_canvas):
@@ -1904,18 +2043,21 @@ func _update_hud() -> void:
 		var hp: int = active_player.get("current_health") if "current_health" in active_player else 100
 		var max_hp: int = active_player.get("max_health") if "max_health" in active_player else 100
 		
-		var total_hearts := 5
-		var hp_per_heart := float(max_hp) / float(total_hearts)
 		var hearts_str := ""
-		
-		for i in range(total_hearts):
-			var threshold := (i + 1) * hp_per_heart
-			if float(hp) >= threshold:
-				hearts_str += "❤️"
-			elif float(hp) >= threshold - (hp_per_heart * 0.5):
-				hearts_str += "💔"
-			else:
-				hearts_str += "🖤"
+		if difficulty == "creative":
+			hearts_str = "👑👑👑👑👑"
+		else:
+			var total_hearts := 5
+			var hp_per_heart := float(max_hp) / float(total_hearts)
+			
+			for i in range(total_hearts):
+				var threshold := (i + 1) * hp_per_heart
+				if float(hp) >= threshold:
+					hearts_str += "❤️"
+				elif float(hp) >= threshold - (hp_per_heart * 0.5):
+					hearts_str += "💔"
+				else:
+					hearts_str += "🖤"
 				
 		hud_health_label.text = "HP: " + hearts_str
 	else:
@@ -2470,6 +2612,169 @@ func _on_body_entered(body: Node) -> void:
 	return area
 
 
+func _make_conveyor(data: Dictionary, sidecar: Dictionary) -> StaticBody2D:
+	var body := StaticBody2D.new()
+	var size := _collision_size(sidecar, Vector2(128, 32), data)
+	_add_box_collision(body, size)
+	
+	var modifiers: Dictionary = data.get("modifiers", {})
+	var direction := float(modifiers.get("conveyor_direction", 1.0))
+	var speed := float(modifiers.get("conveyor_speed", 140.0))
+	
+	body.set_meta("is_conveyor", true)
+	body.set_meta("conveyor_direction", direction)
+	body.set_meta("conveyor_speed", speed)
+	
+	var color := Color(0.3, 0.6, 0.9, 0.9)
+	_add_visuals(body, sidecar, size, color)
+	
+	var conveyor_script := GDScript.new()
+	conveyor_script.source_code = """extends StaticBody2D
+var direction: float = 1.0
+var time_passed: float = 0.0
+var label: Label = null
+func _ready() -> void:
+	label = Label.new()
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 14)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	add_child(label)
+	_update_text()
+func _process(delta: float) -> void:
+	time_passed += delta
+	var offset = int(time_passed * 8.0) % 4
+	var arrows = ""
+	if direction > 0:
+		arrows = "   ".substr(0, offset) + "▶▶▶"
+	else:
+		arrows = "◀◀◀" + "   ".substr(0, 4 - offset)
+	label.text = arrows
+func _update_text() -> void:
+	var col_shape = get_node_or_null("CollisionShape2D")
+	if col_shape != null and col_shape.shape is RectangleShape2D:
+		var size = col_shape.shape.size
+		label.size = size
+		label.position = -size * 0.5
+"""
+	conveyor_script.reload()
+	body.set_script(conveyor_script)
+	body.set("direction", direction)
+	
+	return body
+
+
+func _make_mystery_box(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color(0.9, 0.7, 0.1, 0.95))
+	
+	var box_script := GDScript.new()
+	box_script.source_code = """extends Area2D
+var is_opened: bool = false
+var reward_pool = ["coin", "health", "speed", "shield", "slime"]
+func _ready() -> void:
+	body_entered.connect(_on_body_entered)
+func _on_body_entered(body: Node) -> void:
+	if is_opened: return
+	if body.has_method("take_damage") and body is CharacterBody2D:
+		is_opened = true
+		_play_reveal_sequence(body)
+func _play_reveal_sequence(player: Node2D) -> void:
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.has_method("play_sfx"):
+		main.play_sfx("coin")
+	
+	var spin_timer := create_tween()
+	for i in range(5):
+		var text = "❓"
+		match i % 4:
+			0: text = "🪙 COIN!"
+			1: text = "❤️ HEAL!"
+			2: text = "⚡ SPEED!"
+			3: text = "🛡️ SHIELD!"
+		spin_timer.tween_callback(func():
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text(text, global_position + Vector2(0, -32), Color.GOLD)
+		).set_delay(0.12)
+		
+	spin_timer.chain().tween_callback(func():
+		var final_reward = reward_pool[randi() % reward_pool.size()]
+		_give_reward(player, final_reward)
+		_fade_out()
+	)
+func _give_reward(player: Node2D, reward: String) -> void:
+	var main = get_tree().get_root().get_node_or_null("Main")
+	match reward:
+		"coin":
+			if main != null:
+				main.set("score", main.get("score") + 50)
+				main.spawn_floating_text("+50 POINTS! 🪙", global_position + Vector2(0, -40), Color.YELLOW)
+				main.play_sfx("coin")
+		"health":
+			if player.has_method("heal"):
+				player.heal(40)
+				if main != null:
+					main.play_sfx("coin")
+		"speed":
+			if player.has_method("apply_powerup"):
+				player.apply_powerup("speed")
+		"shield":
+			if player.has_method("apply_powerup"):
+				player.apply_powerup("shield")
+		"slime":
+			if main != null:
+				main.spawn_floating_text("OH NO! A SLIME! 👾", global_position + Vector2(0, -40), Color.RED)
+				main.play_sfx("hit")
+				var slime_data = {
+					"asset_id": "slime_patrol",
+					"category": "enemies",
+					"position": {"x": global_position.x, "y": global_position.y - 48},
+					"modifiers": {"patrol_speed": 80.0}
+				}
+				main.spawn_entity(slime_data)
+func _fade_out() -> void:
+	var tween = create_tween()
+	tween.tween_property(self, "modulate:a", 0.0, 0.4)
+	tween.chain().tween_callback(queue_free)
+"""
+	box_script.reload()
+	area.set_script(box_script)
+	return area
+
+
+func _make_gravity_zone(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(96, 96), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color(0.5, 0.2, 0.8, 0.4))
+
+	var zone_script := GDScript.new()
+	zone_script.source_code = """extends Area2D
+func _ready() -> void:
+	body_entered.connect(_on_body_entered)
+	body_exited.connect(_on_body_exited)
+func _on_body_entered(body: Node) -> void:
+	if body.has_method("take_damage") and body is CharacterBody2D:
+		body.set("gravity_inverted", true)
+		var main = get_tree().get_root().get_node_or_null("Main")
+		if main != null and main.has_method("spawn_floating_text"):
+			main.spawn_floating_text("GRAVITY FLIP! 🌀", body.global_position, Color.PURPLE)
+			main.play_sfx("jump")
+func _on_body_exited(body: Node) -> void:
+	if body.has_method("take_damage") and body is CharacterBody2D:
+		body.set("gravity_inverted", false)
+		var main = get_tree().get_root().get_node_or_null("Main")
+		if main != null and main.has_method("spawn_floating_text"):
+			main.spawn_floating_text("GRAVITY NORMAL! 🌀", body.global_position, Color.CYAN)
+			main.play_sfx("jump")
+"""
+	zone_script.reload()
+	area.set_script(zone_script)
+	return area
+
+
 func _make_pet(data: Dictionary, sidecar: Dictionary) -> Node2D:
 	var node := Node2D.new()
 	var size := _collision_size(sidecar, Vector2(32, 32), data)
@@ -2748,4 +3053,186 @@ func open_shop_ui() -> void:
 	panel.add_child(btn_close)
 
 	get_tree().paused = true
+
+
+func _check_and_spawn_rising_hazard(settings: Dictionary) -> void:
+	var hazard_type := str(settings.get("rising_hazard_type", ""))
+	if hazard_type == "water" or hazard_type == "lava":
+		var speed := float(settings.get("rising_hazard_speed", 20.0))
+		_spawn_rising_hazard(hazard_type, speed)
+
+
+func _spawn_rising_hazard(type: String, speed: float) -> void:
+	var rect := ColorRect.new()
+	rect.name = "RisingDanger"
+	
+	var col := Color(0.2, 0.4, 0.8, 0.5) # Translucent blue for water
+	if type == "lava":
+		col = Color(0.9, 0.25, 0.1, 0.6) # Magma red for lava
+	rect.color = col
+	
+	rect.size = Vector2(80000.0, 1500.0)
+	rect.position = Vector2(-40000.0, death_y_threshold - 50.0) # Start below
+	
+	var label := Label.new()
+	label.text = "🌋 RISING MAGMA! CLIMB! 🌋" if type == "lava" else "🌊 FLOOD WARNING! SWIM! 🌊"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var settings_lbl := LabelSettings.new()
+	settings_lbl.font_size = 32
+	settings_lbl.font_color = Color.WHITE
+	settings_lbl.outline_size = 6
+	settings_lbl.outline_color = Color.BLACK
+	label.label_settings = settings_lbl
+	label.size = Vector2(1000, 50)
+	label.position = Vector2(40000.0 - 500.0, 20.0)
+	rect.add_child(label)
+	
+	var script := GDScript.new()
+	script.source_code = """extends ColorRect
+var rising_speed: float = 20.0
+var hazard_type: String = "water"
+var damage_timer: float = 0.0
+var label_node: Label = null
+func _ready() -> void:
+	label_node = get_child(0)
+func _physics_process(delta: float) -> void:
+	position.y -= rising_speed * delta
+	
+	var main = get_parent()
+	if main != null and main.active_player != null and is_instance_valid(main.active_player):
+		var p = main.active_player
+		if label_node != null:
+			label_node.global_position.x = p.global_position.x - 500.0
+			
+		if p.global_position.y >= global_position.y:
+			damage_timer += delta
+			if damage_timer >= 0.5:
+				damage_timer = 0.0
+				var dmg = 8 if hazard_type == "water" else 20
+				p.take_damage(dmg)
+				if main.has_method("spawn_floating_text"):
+					var text = "🚨 DROWNING!" if hazard_type == "water" else "🔥 BURNING!"
+					main.spawn_floating_text(text, p.global_position, Color.RED)
+"""
+	script.reload()
+	rect.set_script(script)
+	rect.set("rising_speed", speed)
+	rect.set("hazard_type", type)
+	
+	add_child(rect)
+	spawned_entities.append(rect)
+	print("Spawned rising hazard type: ", type, " speed: ", speed)
+
+
+func _make_wind_zone(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(96, 96), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color(0.3, 0.7, 0.9, 0.15))
+	
+	var mods: Dictionary = data.get("modifiers", {})
+	var direction: String = str(mods.get("wind_direction", "right"))
+	var force: float = float(mods.get("wind_force", 300.0))
+	
+	var particles := CPUParticles2D.new()
+	particles.amount = 12
+	particles.lifetime = 1.0
+	particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	particles.emission_rect_extents = size * 0.5
+	particles.scale_amount_min = 2.0
+	particles.scale_amount_max = 4.0
+	particles.color = Color(1.0, 1.0, 1.0, 0.4)
+	
+	var dir_vec := Vector2.RIGHT
+	match direction:
+		"left":
+			dir_vec = Vector2.LEFT
+		"up":
+			dir_vec = Vector2.UP
+		"down":
+			dir_vec = Vector2.DOWN
+			
+	particles.direction = dir_vec
+	particles.spread = 10.0
+	particles.gravity = Vector2.ZERO
+	particles.initial_velocity_min = force * 0.5
+	particles.initial_velocity_max = force
+	area.add_child(particles)
+	
+	var wind_script := GDScript.new()
+	wind_script.source_code = """extends Area2D
+var force_vector := Vector2.ZERO
+func _ready() -> void:
+	body_entered.connect(_on_body_entered)
+	body_exited.connect(_on_body_exited)
+func _physics_process(delta: float) -> void:
+	for body in get_overlapping_bodies():
+		if body is CharacterBody2D:
+			if "velocity" in body:
+				body.velocity += force_vector * delta
+func _on_body_entered(body: Node) -> void:
+	if body is CharacterBody2D:
+		var main = get_tree().get_root().get_node_or_null("Main")
+		if main != null and main.has_method("spawn_floating_text") and randf() < 0.3:
+			main.spawn_floating_text("💨 WHOOSH!", body.global_position, Color.CYAN)
+func _on_body_exited(body: Node) -> void:
+	pass
+"""
+	wind_script.reload()
+	area.set_script(wind_script)
+	area.set("force_vector", dir_vec * force)
+	
+	return area
+
+
+func _make_target_practice(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color(0.9, 0.1, 0.1, 0.95))
+	
+	var target_script := GDScript.new()
+	target_script.source_code = """extends Area2D
+var hit_cooldown: float = 0.0
+func _ready() -> void:
+	area_entered.connect(_on_something_entered)
+	body_entered.connect(_on_something_entered)
+func _process(delta: float) -> void:
+	if hit_cooldown > 0.0:
+		hit_cooldown -= delta
+func _on_something_entered(node: Node) -> void:
+	if hit_cooldown > 0.0:
+		return
+	
+	var is_hit := false
+	if node.name.contains("Projectile") or node.name.contains("Bullet"):
+		is_hit = true
+		node.queue_free()
+	elif node is CharacterBody2D and node.name.begins_with("Player"):
+		if node.get("has_hammer") == true:
+			is_hit = true
+		else:
+			var diff_y = node.global_position.y - global_position.y
+			if diff_y < -16.0:
+				is_hit = true
+				if "velocity" in node:
+					node.velocity.y = -300.0
+	
+	if is_hit:
+		hit_cooldown = 0.5
+		var main = get_tree().get_root().get_node_or_null("Main")
+		if main != null:
+			if main.has_method("play_sfx"): main.play_sfx("coin")
+			if main.has_method("notify_trigger"): main.notify_trigger(name)
+			if main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("🎯 TARGET HIT!", global_position, Color.GOLD)
+				
+		var tween = create_tween()
+		tween.tween_property(self, "rotation_degrees", 360.0, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tween.tween_property(self, "rotation_degrees", 0.0, 0.0)
+"""
+	target_script.reload()
+	area.set_script(target_script)
+	return area
+
 

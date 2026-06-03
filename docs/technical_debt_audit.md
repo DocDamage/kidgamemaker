@@ -6,49 +6,27 @@ This document provides a comprehensive audit of the technical debt, security ris
 
 ## 1. Security Vulnerabilities
 
-### 🚨 Critical: Remote Command Injection via PowerShell in `inbox.rs`
-- **Location**: [`inbox.rs:L112-116`](file:///g:/kidgamemaker/editor/src-tauri/src/inbox.rs#L112-L116)
-- **Description**: The background asset ingestion watcher thread detects ZIP archives in `_Inbox/` and extracts them by running an external PowerShell process via `Command::new("powershell")`. The command is built using direct string formatting without parameterization or character escaping:
-  ```rust
-  let output = Command::new("powershell")
-      .arg("-Command")
-      .arg(format!("Expand-Archive -Path '{}' -DestinationPath '{}' -Force", zip_str, dest_str))
-  ```
-  Because the filenames are derived directly from user uploads inside `_Inbox/`, an attacker or a malicious asset pack can trigger command execution on the host machine by dropping a file named like:
-  `'; Start-Process calc.exe; '.zip`
-  This breaks out of the single-quote wrapping in PowerShell, executing arbitrary subcommands.
-- **Remediation**: Avoid spawning `powershell` shell subprocesses for archive extraction. Instead, use a native Rust crate such as `zip` to perform extraction programmatically in memory. If PowerShell *must* be used, pass the arguments using standard arguments array parameterization or escape single quotes by doubling them (`'` to `''`).
+### ✅ Resolved: Remote Command Injection via PowerShell in `inbox.rs`
+- **Location**: [`inbox.rs:L141-216`](file:///g:/kidgamemaker/editor/src-tauri/src/inbox.rs#L141-L216)
+- **Status**: **RESOLVED**
+- **Description**: Spawning external PowerShell processes for unzipping files has been completely removed. The watch daemon now uses the native Rust `zip` crate to open and extract archives in program memory, eliminating shell expansion vulnerabilities.
 
-### ⚠️ Medium/High: Command Injection risk on Workspace Path in `commands.rs`
-- **Location**: [`commands.rs:L587-590`](file:///g:/kidgamemaker/editor/src-tauri/src/commands.rs#L587-L590)
-- **Description**: During project export, the editor attempts to zip the package directory:
-  ```rust
-  let output = std::process::Command::new("powershell")
-      .arg("-NoProfile")
-      .arg("-Command")
-      .arg(format!(
-          "Compress-Archive -Path '{}/*' -DestinationPath '{}' -Force",
-          package_dir_str, zip_path_str
-      ))
-  ```
-  `safe_project_id` is sanitized to alphanumeric characters, but `package_dir_str` contains `repo_root` (the directory where the repository is cloned). If the user checks out the repository inside a directory containing single quotes (e.g. `C:\Users\User's Projects\kidgamemaker`), the PowerShell string interpolation will break, causing failures or arbitrary code execution.
-- **Remediation**: Use a native Rust ZIP compiler (like the `zip` crate) to assemble the export ZIP file instead of relying on a platform shell.
+### ✅ Resolved: Command Injection risk on Workspace Path in `commands.rs`
+- **Location**: [`commands.rs:L608-650`](file:///g:/kidgamemaker/editor/src-tauri/src/commands.rs#L608-L650)
+- **Status**: **RESOLVED**
+- **Description**: Spawning PowerShell processes to run `Compress-Archive` during project exports has been replaced with programmatic recursive ZIP compilation using `zip::ZipWriter` and `io::copy`, which runs safely inside the Rust engine runtime context without spawning shell child processes.
 
-### ⚠️ Medium: Content Security Policy (CSP) Disabled
+### ✅ Resolved: Content Security Policy (CSP) Enabled
 - **Location**: [`tauri.conf.json:L22-24`](file:///g:/kidgamemaker/editor/src-tauri/tauri.conf.json#L22-L24)
-- **Description**: The Tauri configuration has the CSP set to `null`:
-  ```json
-  "security": {
-    "csp": null
-  }
-  ```
-  Disabling the Content Security Policy allows the frontend webview to execute inline scripts and request external resources without restriction, which exposes the desktop app to Cross-Site Scripting (XSS) risks if asset data or metadata contains malicious HTML.
-- **Remediation**: Set a strict Content Security Policy restricting sources to `self` and safe localhost Tauri asset domains.
+- **Status**: **RESOLVED**
+- **Description**: Disabling Content Security Policy has been replaced with a strict local asset isolation policy:
+  `"csp": "default-src 'self' tauri: asset: https://asset.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: https://asset.localhost blob:;"`
+  This blocks arbitrary inline scripts and unapproved network payloads.
 
-### ⚠️ Medium: Zip Slip (Path Traversal) during Ingestion
-- **Location**: [`inbox.rs:L105-140`](file:///g:/kidgamemaker/editor/src-tauri/src/inbox.rs#L105-L140)
-- **Description**: Unzipping archives in `unzip_file` extracts contents directly to the destination directory. There is no validation check to verify if the archived files contain relative paths (such as `../../etc/shadow` or `../../Startup/malicious.bat`) that resolve outside the extraction sandbox.
-- **Remediation**: Implement checking of target paths for every extracted file to verify that the target path remains inside `dest_path`.
+### ✅ Resolved: Zip Slip (Path Traversal) during Ingestion
+- **Location**: [`inbox.rs:L141-216`](file:///g:/kidgamemaker/editor/src-tauri/src/inbox.rs#L141-L216)
+- **Status**: **RESOLVED**
+- **Description**: Added explicit checks on zip path components during extraction in `unzip_file`. Any entry carrying parent-directory components (`..`) or paths resolving outside the destination directory prefix is rejected immediately, shielding the app from Zip Slip exploits.
 
 ---
 

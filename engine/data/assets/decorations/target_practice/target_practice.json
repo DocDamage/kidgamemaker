@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "asset_id": "target_practice",
+  "asset_name": "Spinning Target 🎯",
+  "category": "decorations",
+  "runtime_template": "target_practice",
+  "visual": "🎯",
+  "visual_tags": [
+    "target",
+    "practice",
+    "shoot",
+    "hit",
+    "decorations"
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      48,
+      48
+    ]
+  }
+}

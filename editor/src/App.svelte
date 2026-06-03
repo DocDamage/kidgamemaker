@@ -95,6 +95,10 @@
     if (item.type === 'locked_door' && item.modifiers.key_color === undefined) {
       item.modifiers.key_color = 'gold';
     }
+    if (item.type === 'wind_zone') {
+      if (item.modifiers.wind_direction === undefined) item.modifiers.wind_direction = 'right';
+      if (item.modifiers.wind_force === undefined) item.modifiers.wind_force = 300.0;
+    }
     selectedPlacedEntity = item;
     playUiSound('chime');
   }
@@ -490,18 +494,54 @@
   let inventory: AssetInventory = fallbackInventory;
   let activeAsset: ToyboxAsset = fallbackInventory.terrain[0];
   let eraserMode = false;
+  let favorites: string[] = [];
   let toyboxOpen = false;
   let bookshelfOpen = false;
   let snapEnabled = true;
+
   let status = 'Ready';
 
   let worldSettings: WorldSettings = {
     time_of_day: 'day',
     weather: 'clear',
+    rising_hazard_type: '',
+    rising_hazard_speed: 20,
     victory_rules: { win_condition: 'all_enemies', celebration: 'confetti' },
     loss_rules: { lose_condition: 'health_0', action: 'game_over' },
     room_rules: []
   };
+
+  // --- Feature: Difficulty Modes & Calm Mode ---
+  let difficultyMode: 'easy' | 'normal' | 'creative' = 'normal';
+  let calmMode = false;
+
+  // --- Feature: Kid-friendly Room Naming ---
+  let selectedTheme: 'space' | 'candy' | 'jungle' | 'ice' | 'volcano' = 'space';
+  let selectedAdjective: string = 'Super';
+  let selectedNoun: string = 'World';
+  const adjectives = ['Super', 'Spooky', 'Bouncy', 'Magic', 'Secret', 'Happy', 'Mega', 'Rainbow', 'Cool'];
+  const nouns = {
+    space: ['Castle', 'Cave', 'Cloud', 'Station', 'Galaxy', 'Stars', 'Moon'],
+    candy: ['Land', 'Mountain', 'Hills', 'River', 'Forest', 'Castle', 'Kingdom'],
+    jungle: ['Island', 'Jungle', 'Valley', 'Treehouse', 'Temple', 'Ruins', 'Swamp'],
+    ice: ['Wonderland', 'Fortress', 'Glacier', 'Iceberg', 'Cave', 'Slide', 'Palace'],
+    volcano: ['Volcano', 'Pit', 'Core', 'Chamber', 'Forge', 'Peak', 'Lair']
+  };
+
+  function getThemeEmoji(theme: string): string {
+    if (theme === 'space') return '🚀';
+    if (theme === 'candy') return '🍭';
+    if (theme === 'jungle') return '🌴';
+    if (theme === 'ice') return '❄️';
+    if (theme === 'volcano') return '🌋';
+    return '🎮';
+  }
+
+  // --- Feature: Drag-to-Reposition ---
+  let draggingEntity: PlacedEntity | null = null;
+  let dragOffset = { x: 0, y: 0 };
+  let longPressTimer: any = null;
+  let longPressTriggered = false;
 
   // Multi-room state
   let rooms: string[] = ['test_chamber_01'];
@@ -520,6 +560,34 @@
   let isHovering = false;
 
   $: quickRibbon = Object.values(inventory).flat().slice(0, 8);
+  $: favoritesItems = Object.values(inventory).flat().filter(item => favorites.includes(item.id));
+  $: if (favorites) {
+    try {
+      localStorage.setItem('toybox_favorites', JSON.stringify(favorites));
+    } catch (_) {}
+  }
+
+  $: levelLengthLabel = (() => {
+    const terrains = placed.filter(ent => ent.category === 'terrain' || ent.type === 'terrain');
+    if (terrains.length === 0) return '🎈 Empty Room';
+    let minX = Infinity;
+    let maxX = -Infinity;
+    for (const ent of terrains) {
+      if (ent.position.x < minX) minX = ent.position.x;
+      if (ent.position.x > maxX) maxX = ent.position.x;
+    }
+    const width = maxX - minX;
+    if (width < 800) {
+      return '🎈 Short Adventure';
+    } else if (width < 1800) {
+      return '🚀 Medium Adventure';
+    } else if (width < 3000) {
+      return '🏰 Long Quest';
+    } else {
+      return '👑 Epic Quest!';
+    }
+  })();
+
 
   // Level editor undo/redo history stack
   let levelHistory: PlacedEntity[][] = [];
@@ -570,9 +638,17 @@
 
   onMount(async () => {
     try {
+      const stored = localStorage.getItem('toybox_favorites');
+      if (stored) {
+        favorites = JSON.parse(stored);
+      }
+    } catch (_) {}
+
+    try {
       inventory = await invoke<AssetInventory>('get_asset_inventory');
       activeAsset = inventory.terrain?.[0] ?? Object.values(inventory).flat()[0] ?? activeAsset;
       status = 'Loaded toybox assets.';
+
     } catch (error) {
       status = `Using fallback toybox: ${error}`;
     }
@@ -814,6 +890,8 @@
   function handleMouseUp(event: MouseEvent) {
     if (event.button === 1 || event.button === 2) {
       isPanning = false;
+    } else if (event.button === 0) {
+      handleStampLongPressEnd();
     }
   }
 
@@ -896,6 +974,9 @@
     status = `Saving room ${activeRoomId}...`;
     try {
       const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
+      // Inject difficulty and calm mode into world_settings for runner consumption
+      (payload.world_settings as any).difficulty = difficultyMode;
+      (payload.world_settings as any).calm_mode = calmMode;
       const jsonString = JSON.stringify(payload);
       status = await invoke<string>('save_room', { roomId: activeRoomId, jsonString });
       await loadRoomList();
@@ -935,6 +1016,8 @@
           worldSettings = {
             time_of_day: savedState.world_settings.time_of_day ?? 'day',
             weather: savedState.world_settings.weather ?? 'clear',
+            rising_hazard_type: savedState.world_settings.rising_hazard_type ?? '',
+            rising_hazard_speed: savedState.world_settings.rising_hazard_speed ?? 20,
             victory_rules: savedState.world_settings.victory_rules ?? { win_condition: 'all_enemies', celebration: 'confetti' },
             loss_rules: savedState.world_settings.loss_rules ?? { lose_condition: 'health_0', action: 'game_over' },
             room_rules: savedState.world_settings.room_rules ?? [],
@@ -943,10 +1026,15 @@
           if (savedState.world_settings.theme) {
             (worldSettings as any).theme = savedState.world_settings.theme;
           }
+          // Restore difficulty and calm mode
+          difficultyMode = savedState.world_settings.difficulty ?? 'normal';
+          calmMode = savedState.world_settings.calm_mode ?? false;
         } else {
           worldSettings = {
             time_of_day: 'day',
             weather: 'clear',
+            rising_hazard_type: '',
+            rising_hazard_speed: 20,
             victory_rules: { win_condition: 'all_enemies', celebration: 'confetti' },
             loss_rules: { lose_condition: 'health_0', action: 'game_over' },
             room_rules: []
@@ -1040,6 +1128,9 @@
   }
 
   function createNewRoom() {
+    selectedTheme = 'space';
+    selectedAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+    selectedNoun = nouns['space'][Math.floor(Math.random() * nouns['space'].length)];
     openThemeSelector();
   }
 
@@ -1047,21 +1138,36 @@
     themeSelectorOpen = true;
   }
 
-  async function applyTheme(themeName: 'space' | 'candy' | 'jungle' | 'ice' | 'volcano') {
+  async function applyNameAndTheme() {
+    const rawName = `${selectedAdjective} ${selectedNoun}`;
+    const sanitized = rawName.toLowerCase().replace(/[^a-z0-9]/g, "_");
+    const customId = `${selectedTheme}_${sanitized}_${Math.floor(Math.random() * 900 + 100)}`;
+    await applyTheme(selectedTheme, customId);
+  }
+
+  async function applyTheme(themeName: 'space' | 'candy' | 'jungle' | 'ice' | 'volcano', customRoomId?: string) {
     themeSelectorOpen = false;
-    const newId = `${themeName}_room_${Math.floor(Math.random() * 900 + 100)}`;
+    const newId = customRoomId || `${themeName}_room_${Math.floor(Math.random() * 900 + 100)}`;
     activeRoomId = newId;
 
+    const baseSettings = {
+      rising_hazard_type: '' as const,
+      rising_hazard_speed: 20,
+      victory_rules: { win_condition: 'all_enemies', celebration: 'confetti' },
+      loss_rules: { lose_condition: 'health_0', action: 'game_over' },
+      room_rules: []
+    };
+
     if (themeName === 'space') {
-      worldSettings = { time_of_day: 'night', weather: 'clear' };
+      worldSettings = { time_of_day: 'night', weather: 'clear', ...baseSettings };
     } else if (themeName === 'candy') {
-      worldSettings = { time_of_day: 'sunset', weather: 'clear' };
+      worldSettings = { time_of_day: 'sunset', weather: 'clear', ...baseSettings };
     } else if (themeName === 'ice') {
-      worldSettings = { time_of_day: 'morning', weather: 'snow' };
+      worldSettings = { time_of_day: 'morning', weather: 'snow', ...baseSettings };
     } else if (themeName === 'volcano') {
-      worldSettings = { time_of_day: 'sunset', weather: 'clear' };
+      worldSettings = { time_of_day: 'sunset', weather: 'clear', ...baseSettings };
     } else {
-      worldSettings = { time_of_day: 'day', weather: 'rain' };
+      worldSettings = { time_of_day: 'day', weather: 'rain', ...baseSettings };
     }
     (worldSettings as any).theme = themeName;
 
@@ -1196,6 +1302,247 @@
     const dir = asset.sidecar_path.substring(0, lastSlash + 1);
     return convertFileSrc(dir + asset.visual);
   }
+
+  // ── Feature: 🎲 Surprise Me! Level Generator ──────────────────────────────
+  async function surpriseMe() {
+    const themes: ('space' | 'candy' | 'jungle' | 'ice' | 'volcano')[] = ['space', 'candy', 'jungle', 'ice', 'volcano'];
+    const themeName = themes[Math.floor(Math.random() * themes.length)];
+    const newId = `surprise_${themeName}_${Math.floor(Math.random() * 900 + 100)}`;
+    activeRoomId = newId;
+
+    // Set world settings for the theme
+    const themeSettings: Record<string, any> = {
+      space: { time_of_day: 'night', weather: 'clear' },
+      candy: { time_of_day: 'sunset', weather: 'clear' },
+      jungle: { time_of_day: 'day', weather: 'rain' },
+      ice: { time_of_day: 'morning', weather: 'snow' },
+      volcano: { time_of_day: 'sunset', weather: 'clear' }
+    };
+    worldSettings = {
+      ...themeSettings[themeName],
+      victory_rules: { win_condition: 'all_coins', celebration: 'confetti' },
+      loss_rules: { lose_condition: 'health_0', action: 'respawn' },
+      room_rules: []
+    };
+    (worldSettings as any).theme = themeName;
+    (worldSettings as any).difficulty = difficultyMode;
+    (worldSettings as any).calm_mode = calmMode;
+
+    const terrainAsset = findAsset('stone_floor') ?? { id: 'stone_floor', name: 'Stone Floor', category: 'terrain', type: 'terrain' };
+    const heroAsset = findAsset('hero_knight') ?? { id: 'hero_knight', name: 'Hero Knight', category: 'heroes', type: 'player' };
+    const rubyAsset = findAsset('gold_ruby') ?? { id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', type: 'collectible' };
+    const slimeAsset = findAsset('slime_patrol') ?? { id: 'slime_patrol', name: 'Slime', category: 'enemies', type: 'enemy' };
+    const portalAsset = findAsset('exit_portal');
+
+    const newPlaced: PlacedEntity[] = [];
+
+    // Hero at start
+    newPlaced.push({
+      instance_id: makeInstanceId(heroAsset.id),
+      asset_id: heroAsset.id,
+      category: heroAsset.category,
+      type: heroAsset.type ?? heroAsset.category,
+      position: { x: 128, y: 300 },
+      is_camera_target: true,
+      modifiers: { variant: 'default', scale_multiplier: 1.0 }
+    });
+
+    // Procedural terrain generation — platform chain
+    let curX = 0;
+    let curY = 392;
+    const platformCount = 8 + Math.floor(Math.random() * 6); // 8-13 platforms
+    const platformPositions: { x: number; y: number }[] = [];
+
+    for (let i = 0; i < platformCount; i++) {
+      newPlaced.push({
+        instance_id: makeInstanceId(terrainAsset.id),
+        asset_id: terrainAsset.id,
+        category: terrainAsset.category,
+        type: terrainAsset.type ?? terrainAsset.category,
+        position: { x: curX, y: curY },
+        modifiers: { variant: 'default', scale_multiplier: 1.0 }
+      });
+      platformPositions.push({ x: curX, y: curY });
+
+      // Next platform: move right, maybe move up/down
+      curX += 128 + Math.floor(Math.random() * 64);
+      const verticalShift = Math.floor(Math.random() * 5) - 2; // -2 to +2
+      curY += verticalShift * 32;
+      curY = Math.max(200, Math.min(500, curY)); // clamp Y range
+    }
+
+    // Place collectibles on random platforms
+    const collectibleCount = 5 + Math.floor(Math.random() * 6);
+    for (let i = 0; i < collectibleCount; i++) {
+      const plat = platformPositions[Math.floor(Math.random() * platformPositions.length)];
+      const offsetXRnd = (Math.random() - 0.5) * 80;
+      newPlaced.push({
+        instance_id: makeInstanceId(rubyAsset.id),
+        asset_id: rubyAsset.id,
+        category: rubyAsset.category,
+        type: rubyAsset.type ?? rubyAsset.category,
+        position: { x: plat.x + offsetXRnd, y: plat.y - 60 - Math.random() * 40 },
+        modifiers: { variant: 'default', scale_multiplier: 1.0, score_value: 10 }
+      });
+    }
+
+    // Place enemies — more towards the end
+    if (slimeAsset) {
+      const enemyCount = 2 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < enemyCount; i++) {
+        const platIdx = Math.floor(platformPositions.length * 0.3 + Math.random() * platformPositions.length * 0.7);
+        const plat = platformPositions[Math.min(platIdx, platformPositions.length - 1)];
+        const behaviors: string[] = ['patrol', 'chase', 'jump'];
+        newPlaced.push({
+          instance_id: makeInstanceId(slimeAsset.id),
+          asset_id: slimeAsset.id,
+          category: slimeAsset.category,
+          type: slimeAsset.type ?? slimeAsset.category,
+          position: { x: plat.x + 40, y: plat.y - 48 },
+          modifiers: {
+            variant: 'default',
+            scale_multiplier: 1.0,
+            behavior_type: behaviors[Math.floor(Math.random() * behaviors.length)],
+            patrol_speed: 50 + Math.floor(Math.random() * 100)
+          }
+        });
+      }
+    }
+
+    // Exit portal at the end
+    if (portalAsset) {
+      const lastPlat = platformPositions[platformPositions.length - 1];
+      newPlaced.push({
+        instance_id: makeInstanceId(portalAsset.id),
+        asset_id: portalAsset.id,
+        category: portalAsset.category,
+        type: portalAsset.type ?? portalAsset.category,
+        position: { x: lastPlat.x, y: lastPlat.y - 48 },
+        modifiers: { variant: 'default', scale_multiplier: 1.0, target_room: '' }
+      });
+    }
+
+    placed = newPlaced;
+    levelHistory = [placed.map(ent => ({
+      ...ent,
+      position: { ...ent.position },
+      modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
+    }))];
+    levelHistoryIndex = 0;
+
+    status = `🎲 Surprise! Created ${themeName} adventure with ${platformCount} platforms!`;
+    playUiSound('chime');
+    await saveCurrentRoom();
+  }
+
+  async function remixCurrentRoom() {
+    if (placed.length === 0) return;
+    const heroEntities = placed.filter(ent => ent.category === 'heroes' && ent.type === 'player');
+    const terrainEntities = placed.filter(ent => ent.category === 'terrain');
+    const enemyEntities = placed.filter(ent => ent.category === 'enemies');
+    const collectibleEntities = placed.filter(ent => ent.category === 'collectibles');
+    const otherEntities = placed.filter(ent => 
+      ent.category !== 'heroes' && 
+      ent.category !== 'terrain' && 
+      ent.category !== 'enemies' && 
+      ent.category !== 'collectibles'
+    );
+
+    const remixedTerrain = terrainEntities.map(ent => {
+      const shiftX = (Math.floor(Math.random() * 3) - 1) * 32;
+      const shiftY = (Math.floor(Math.random() * 3) - 1) * 32;
+      return {
+        ...ent,
+        position: {
+          x: Math.max(0, ent.position.x + shiftX),
+          y: Math.max(0, ent.position.y + shiftY)
+        }
+      };
+    });
+
+    const enemyPositions = enemyEntities.map(ent => ({ ...ent.position }));
+    const shuffledPositions = [...enemyPositions].sort(() => Math.random() - 0.5);
+    const remixedEnemies = enemyEntities.map((ent, idx) => ({
+      ...ent,
+      position: shuffledPositions[idx] || ent.position
+    }));
+
+    const collectiblePositions = collectibleEntities.map(ent => ({ ...ent.position }));
+    const shuffledCollectibles = [...collectiblePositions].sort(() => Math.random() - 0.5);
+    const remixedCollectibles = collectibleEntities.map((ent, idx) => ({
+      ...ent,
+      position: shuffledCollectibles[idx] || ent.position
+    }));
+
+    const times: ('day' | 'morning' | 'sunset' | 'night')[] = ['day', 'morning', 'sunset', 'night'];
+    const weathers: ('clear' | 'rain' | 'snow')[] = ['clear', 'rain', 'snow'];
+    worldSettings.time_of_day = times[Math.floor(Math.random() * times.length)];
+    worldSettings.weather = weathers[Math.floor(Math.random() * weathers.length)];
+    worldSettings = { ...worldSettings };
+
+    placed = [
+      ...heroEntities,
+      ...remixedTerrain,
+      ...remixedEnemies,
+      ...remixedCollectibles,
+      ...otherEntities
+    ];
+
+    saveLevelState();
+    await saveCurrentRoom();
+    status = "🔀 Remixed! Room items shuffled and weather cycled!";
+    playUiSound('chime');
+  }
+
+  // ── Feature: Drag-to-Reposition (long-press to grab a stamp) ──────────────
+  function handleStampLongPressStart(event: MouseEvent, item: PlacedEntity) {
+    if (eraserMode) return;
+    longPressTriggered = false;
+    longPressTimer = setTimeout(() => {
+      longPressTriggered = true;
+      draggingEntity = item;
+      const canvasEl = event.currentTarget as HTMLElement;
+      const canvasRect = canvasEl.closest('.canvas')?.getBoundingClientRect();
+      if (canvasRect) {
+        dragOffset = {
+          x: item.position.x - ((event.clientX - canvasRect.left - offsetX) / zoom),
+          y: item.position.y - ((event.clientY - canvasRect.top - offsetY) / zoom)
+        };
+      }
+      playUiSound('pop');
+    }, 400); // 400ms long press
+  }
+
+  function handleStampLongPressEnd() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    if (draggingEntity) {
+      draggingEntity = null;
+      saveLevelState();
+      saveCurrentRoom();
+      playUiSound('chime');
+    }
+  }
+
+  function handleDragMove(event: MouseEvent) {
+    if (!draggingEntity) return;
+    const canvasEl = (event.currentTarget as HTMLElement);
+    const canvasRect = canvasEl.getBoundingClientRect();
+    const rawX = (event.clientX - canvasRect.left - offsetX) / zoom + dragOffset.x;
+    const rawY = (event.clientY - canvasRect.top - offsetY) / zoom + dragOffset.y;
+
+    // Snap position
+    if (snapEnabled) {
+      draggingEntity.position.x = Math.round(rawX / 8) * 8;
+      draggingEntity.position.y = Math.round(rawY / 8) * 8;
+    } else {
+      draggingEntity.position.x = rawX;
+      draggingEntity.position.y = rawY;
+    }
+    placed = [...placed]; // trigger reactivity
+  }
 </script>
 
 <main class="app-shell">
@@ -1266,6 +1613,8 @@
     <button class="redo-btn-top" disabled={levelHistoryIndex >= levelHistory.length - 1} on:click={(e) => { animateClick(e); redoLevel(); }} title="Redo action">↻ Redo</button>
     <button class="toybox-btn-top" on:click={(e) => { animateClick(e); toyboxOpen = true; }} title="Toybox">🧰 Toybox</button>
     <button class="draw-toy-btn-top" on:click={(e) => { animateClick(e); openCustomAssetCanvas(); }} title="Draw Toy">🎨 Draw</button>
+    <button class="surprise-btn-top" on:click={(e) => { animateClick(e); surpriseMe(); }} title="Generate a random level!">🎲 Surprise Me!</button>
+    <button class="remix-btn-top" on:click={(e) => { animateClick(e); remixCurrentRoom(); }} title="Shuffles the items in the room!">🔀 Remix!</button>
 
     <!-- Play Button (Big, green) -->
     <button id="btn-play" class="play-btn-top" on:click={(e) => { animateClick(e); play(); }} title="Play!">▶ PLAY</button>
@@ -1310,6 +1659,23 @@
             <span><strong>ID:</strong> {activeAsset.id}</span>
             <span><strong>Category:</strong> {activeAsset.category}</span>
             <span><strong>Snap Type:</strong> {activeAsset.snapping_type || 'default'}</span>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <h4>🛡️ Game Difficulty</h4>
+          <div class="panel-row">
+            <select id="difficulty-selector" value={difficultyMode} on:change={(e) => { difficultyMode = e.currentTarget.value as any; saveCurrentRoom(); }}>
+              <option value="easy">🌟 Easy Mode (50% damage, 200% HP)</option>
+              <option value="normal">⚔️ Normal Mode</option>
+              <option value="creative">🌈 Creative Mode (Invincible!)</option>
+            </select>
+          </div>
+          <div class="panel-row" style="gap: 12px; margin-top: 8px;">
+            <label style="display: flex; align-items: center; gap: 8px; color: #e2e8f0; font-weight: 700; cursor: pointer;">
+              <input type="checkbox" bind:checked={calmMode} on:change={saveCurrentRoom} style="width: 20px; height: 20px; accent-color: #10b981; cursor: pointer;" />
+              🌼 Calm Mode (Friendly enemies, no game over)
+            </label>
           </div>
         </div>
       </div>
@@ -1386,7 +1752,7 @@
         <div class="global-rules-card" style="background: #1e293b; border: 3px solid #fbbf24; border-radius: 16px; padding: 20px; color: white; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.35);">
           <h3 style="color: #fbbf24; margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1.25rem;">🏆 Victory & Loss Rules</h3>
           
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
             <!-- Victory Rules Column -->
             <div style="display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.15); padding: 12px; border-radius: 10px;">
               <span style="font-weight: 900; color: #10b981;">🥇 VICTORY RULE</span>
@@ -1444,6 +1810,43 @@
                 </div>
               {/if}
             </div>
+
+            <!-- Rising Hazard Column -->
+            <div style="display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.15); padding: 12px; border-radius: 10px;">
+              <span style="font-weight: 900; color: #f97316;">🌋 RISING DANGER</span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <span style="font-size: 0.85rem; color: #94a3b8;">Hazard Type:</span>
+                <select 
+                  style="background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 8px; font-size: 0.9rem;"
+                  bind:value={worldSettings.rising_hazard_type}
+                  on:change={() => {
+                    if (worldSettings.rising_hazard_type && !worldSettings.rising_hazard_speed) {
+                      worldSettings.rising_hazard_speed = 20;
+                    }
+                    saveCurrentRoom();
+                  }}
+                >
+                  <option value="">🚫 No Danger</option>
+                  <option value="water">🌊 Rising Water (Drowns Slowly)</option>
+                  <option value="lava">🌋 Rising Lava (Burns Quickly)</option>
+                </select>
+              </div>
+              {#if worldSettings.rising_hazard_type}
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <span style="font-size: 0.85rem; color: #94a3b8;">Rising Speed:</span>
+                  <select 
+                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 8px; font-size: 0.9rem;"
+                    bind:value={worldSettings.rising_hazard_speed}
+                    on:change={saveCurrentRoom}
+                  >
+                    <option value={10}>🐌 Slow (10)</option>
+                    <option value={20}>🚶 Normal (20)</option>
+                    <option value={40}>🏃 Fast (40)</option>
+                    <option value={80}>⚡ Extreme (80)</option>
+                  </select>
+                </div>
+              {/if}
+            </div>
           </div>
         </div>
 
@@ -1469,16 +1872,17 @@
                 <select 
                   style="background: #0f172a; color: white; border: 1px solid #475569; padding: 6px; border-radius: 6px; font-size: 0.85rem;"
                   bind:value={rule.trigger_type}
-                  on:change={saveCurrentRoom}
+                  on:change={() => { rule.trigger_id = ''; saveCurrentRoom(); }}
                 >
                   <option value="button_step">🔘 Floor Button Stepped</option>
                   <option value="lever_flip">🕹️ Wall Lever Flipped</option>
+                  <option value="target_hit">🎯 Target Practice Hit</option>
                   <option value="coins_5">💎 Collected 5 Rubies</option>
                   <option value="coins_10">💎 Collected 10 Rubies</option>
                 </select>
 
-                {#if rule.trigger_type === 'button_step' || rule.trigger_type === 'lever_flip'}
-                  {@const targetTriggerAsset = rule.trigger_type === 'button_step' ? 'trigger_button' : 'trigger_lever'}
+                {#if rule.trigger_type === 'button_step' || rule.trigger_type === 'lever_flip' || rule.trigger_type === 'target_hit'}
+                  {@const targetTriggerAsset = rule.trigger_type === 'button_step' ? 'trigger_button' : rule.trigger_type === 'lever_flip' ? 'trigger_lever' : 'target_practice'}
                   <select 
                     style="background: #0f172a; color: white; border: 1px solid #475569; padding: 6px; border-radius: 6px; font-size: 0.85rem;"
                     bind:value={rule.trigger_id}
@@ -1533,7 +1937,50 @@
       </div>
     </div>
   {:else}
+    {#if favoritesItems.length > 0}
+      <section class="favorites-ribbon" aria-label="Favorites ribbon">
+        <span class="ribbon-label">⭐ Favorites:</span>
+        {#each favoritesItems as asset}
+          <button
+            class="ribbon-btn fav-ribbon-btn"
+            class:active={activeAsset.id === asset.id && !eraserMode}
+            on:click={(e) => { animateClick(e); selectAsset(asset); }}
+            title={asset.name}
+          >
+            <span class="ribbon-visual-container">
+              {#if asset.visual && !isEmoji(asset.visual)}
+                {#if asset.is_spritesheet && asset.frames && asset.frames[0]}
+                  <img
+                    src={getAssetUrl(asset)}
+                    alt={asset.name}
+                    style="
+                      width: {asset.frames[0].w}px;
+                      height: {asset.frames[0].h}px;
+                      object-fit: none;
+                      object-position: -{asset.frames[0].x}px -{asset.frames[0].y}px;
+                      transform: scale({Math.min(1.5, 48 / Math.max(asset.frames[0].w, asset.frames[0].h))});
+                      transform-origin: center;
+                      display: block;
+                    "
+                  />
+                {:else}
+                  <img
+                    src={getAssetUrl(asset)}
+                    alt={asset.name}
+                    style="max-width: 48px; max-height: 48px; object-fit: contain; display: block;"
+                  />
+                {/if}
+              {:else}
+                <span>{asset.visual ?? '🎮'}</span>
+              {/if}
+            </span>
+            <small>{asset.name}</small>
+          </button>
+        {/each}
+      </section>
+    {/if}
     <section class="quick-ribbon" aria-label="Quick toybox ribbon">
+
       {#each quickRibbon as asset}
       <button
         class="ribbon-btn"
@@ -1577,11 +2024,11 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div 
-    class="canvas" 
+    class="canvas theme-{(worldSettings as any).theme || 'default'}" 
     on:mousedown={startDrawing}
-    on:mousemove={handleMouseMove}
-    on:mouseup={stopDrawing}
-    on:mouseleave={() => { isHovering = false; isDrawing = false; }}
+    on:mousemove={(e) => { handleMouseMove(e); handleDragMove(e); }}
+    on:mouseup={(e) => { stopDrawing(e); handleStampLongPressEnd(); }}
+    on:mouseleave={() => { isHovering = false; isDrawing = false; handleStampLongPressEnd(); }}
     on:wheel={handleWheel}
     on:contextmenu|preventDefault
     on:mousedown|stopPropagation={handleMouseDown}
@@ -1598,10 +2045,12 @@
         {@const asset = findAsset(item.asset_id)}
         <button
           class="stamp {item.category}"
+          class:stamp-dragging={draggingEntity?.instance_id === item.instance_id}
           style:left={`${item.position.x}px`}
           style:top={`${item.position.y}px`}
           title={`${item.asset_id} ${item.instance_id}${item.modifiers.target_room ? ` (Leads to ${item.modifiers.target_room})` : ''}`}
           on:click|stopPropagation={() => {
+            if (longPressTriggered) { longPressTriggered = false; return; }
             if (eraserMode) {
               placed = eraseEntity(placed, item.instance_id);
               playUiSound('squeak');
@@ -1609,7 +2058,8 @@
               selectEntity(item);
             }
           }}
-          on:mousedown|stopPropagation
+          on:mousedown|stopPropagation={(e) => handleStampLongPressStart(e, item)}
+          on:mouseup|stopPropagation={() => handleStampLongPressEnd()}
           style:border-radius={item.category === 'terrain' ? '14px' : '50%'}
           style:width={item.category === 'terrain' ? '160px' : '56px'}
           style:overflow="hidden"
@@ -1688,16 +2138,21 @@
 
   <footer>
     <code>{status}</code>
-    <span>{placed.length} stamped objects | Zoom: {Math.round(zoom * 100)}%</span>
+    <span style="display: flex; align-items: center; gap: 12px;">
+      <span style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 0.85rem; color: #fbbf24;">{levelLengthLabel}</span>
+      <span>{placed.length} stamped objects | Zoom: {Math.round(zoom * 100)}%</span>
+    </span>
   </footer>
 
   <ToyboxModal
     isVisible={toyboxOpen}
     inventory={inventory}
     isMuted={isMuted}
+    bind:favorites={favorites}
     on:itemSelected={(event) => selectAsset(event.detail)}
     on:close={() => (toyboxOpen = false)}
   />
+
 
   <BookshelfModal
     isVisible={bookshelfOpen}
@@ -1721,36 +2176,107 @@
 
   {#if themeSelectorOpen}
     <div class="backdrop" role="button" tabindex="-1" on:click={() => (themeSelectorOpen = false)}>
-      <div class="modal theme-modal" role="dialog" tabindex="0" on:click|stopPropagation>
-        <h2>🌟 Choose a Theme! 🌟</h2>
-        <div class="theme-cards">
-          <button class="theme-card space" on:click={() => applyTheme('space')}>
-            <span class="card-icon">🚀</span>
-            <h3>Space Bouncy</h3>
-            <p>Bounce on stars under dark glowing skies!</p>
+      <div class="modal theme-modal" role="dialog" tabindex="0" on:click|stopPropagation style="max-width: 650px; padding: 30px; border-radius: 32px; background: #0f172a; border: 4px solid #334155;">
+        <h2 style="color: white; margin-bottom: 20px; font-size: 1.8rem; font-weight: 800; text-align: center;">🌟 Create & Name Your New Adventure! 🌟</h2>
+        
+        <!-- Preview Banner -->
+        <div style="background: #1e293b; padding: 14px 20px; border-radius: 20px; border: 3px solid #fbbf24; margin-bottom: 24px; font-size: 2rem; font-weight: 900; display: flex; align-items: center; justify-content: center; gap: 12px; color: #fbbf24; text-shadow: 0 2px 4px rgba(0,0,0,0.5); box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);">
+          <span>{getThemeEmoji(selectedTheme)}</span>
+          <span>{selectedAdjective}</span>
+          <span>{selectedNoun}</span>
+        </div>
+
+        <!-- 1. Choose Theme -->
+        <div style="margin-bottom: 20px;">
+          <h3 style="color: #94a3b8; font-size: 1.1rem; margin-bottom: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; text-align: center;">1. Choose Theme</h3>
+          <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            {#each ['space', 'candy', 'jungle', 'ice', 'volcano'] as theme}
+              <button 
+                on:click={() => { selectedTheme = theme as any; selectedNoun = nouns[theme][Math.floor(Math.random() * nouns[theme].length)]; }}
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  align-items: center;
+                  justify-content: center;
+                  padding: 12px;
+                  width: 100px;
+                  border-radius: 20px;
+                  border: 3px solid {selectedTheme === theme ? '#fbbf24' : '#334155'};
+                  background: {selectedTheme === theme ? 'rgba(251, 191, 36, 0.15)' : '#1e293b'};
+                  color: white;
+                  cursor: pointer;
+                  transition: transform 0.15s, border-color 0.15s;
+                "
+                class="theme-card-mini"
+              >
+                <span style="font-size: 2.2rem; margin-bottom: 4px;">{getThemeEmoji(theme)}</span>
+                <span style="font-size: 0.9rem; font-weight: 700;">{theme.toUpperCase()}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- 2. Choose Adjective -->
+        <div style="margin-bottom: 20px;">
+          <h3 style="color: #94a3b8; font-size: 1.1rem; margin-bottom: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; text-align: center;">2. Choose a Fun Word</h3>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 580px; margin: 0 auto;">
+            {#each adjectives as adj}
+              <button 
+                on:click={() => selectedAdjective = adj}
+                style="
+                  padding: 8px 16px;
+                  border-radius: 12px;
+                  border: none;
+                  font-weight: 800;
+                  cursor: pointer;
+                  font-size: 1rem;
+                  background: {selectedAdjective === adj ? '#fbbf24' : '#1e293b'};
+                  color: {selectedAdjective === adj ? '#0f172a' : '#94a3b8'};
+                  box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+                  transition: all 0.1s;
+                "
+              >
+                {adj}
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- 3. Choose Noun -->
+        <div style="margin-bottom: 30px;">
+          <h3 style="color: #94a3b8; font-size: 1.1rem; margin-bottom: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; text-align: center;">3. Choose a Place</h3>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 580px; margin: 0 auto;">
+            {#each nouns[selectedTheme] as noun}
+              <button 
+                on:click={() => selectedNoun = noun}
+                style="
+                  padding: 8px 16px;
+                  border-radius: 12px;
+                  border: none;
+                  font-weight: 800;
+                  cursor: pointer;
+                  font-size: 1rem;
+                  background: {selectedNoun === noun ? '#fbbf24' : '#1e293b'};
+                  color: {selectedNoun === noun ? '#0f172a' : '#94a3b8'};
+                  box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+                  transition: all 0.1s;
+                "
+              >
+                {noun}
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div style="display: flex; gap: 16px; justify-content: center;">
+          <button on:click={applyNameAndTheme} style="background: #10b981; color: white; padding: 12px 36px; border-radius: 18px; font-size: 1.3rem; font-weight: 900; border: none; cursor: pointer; box-shadow: 0 6px 12px rgba(16, 185, 129, 0.3);">
+            ✨ CREATE ROOM! 🚀
           </button>
-          <button class="theme-card candy" on:click={() => applyTheme('candy')}>
-            <span class="card-icon">🍭</span>
-            <h3>Candy Hills</h3>
-            <p>Yummy sunset skies and sugary blocks!</p>
-          </button>
-          <button class="theme-card jungle" on:click={() => applyTheme('jungle')}>
-            <span class="card-icon">🌴</span>
-            <h3>Jungle Rain</h3>
-            <p>Rainy green forests and wild vine jumps!</p>
-          </button>
-          <button class="theme-card ice" on:click={() => applyTheme('ice')}>
-            <span class="card-icon">❄️</span>
-            <h3>Winter Wonderland</h3>
-            <p>Slide on snow under bright icy blue skies!</p>
-          </button>
-          <button class="theme-card volcano" on:click={() => applyTheme('volcano')}>
-            <span class="card-icon">🌋</span>
-            <h3>Volcano Run</h3>
-            <p>Watch out for lava blocks and sunset skies!</p>
+          <button on:click={() => (themeSelectorOpen = false)} style="background: #ef4444; color: white; padding: 12px 24px; border-radius: 18px; font-size: 1.1rem; font-weight: 700; border: none; cursor: pointer;">
+            ✕ CANCEL
           </button>
         </div>
-        <button class="close-btn" on:click={() => (themeSelectorOpen = false)}>✕ Close</button>
       </div>
     </div>
   {/if}
@@ -1866,7 +2392,47 @@
           />
         </div>
 
+        {#if selectedPlacedEntity.category === 'heroes' && selectedPlacedEntity.type === 'player'}
+          <div class="option-group">
+            <span class="option-label-text">👕 Costume Wardrobe:</span>
+            <div class="costume-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px;">
+              {#each [
+                { id: 'default', name: 'Default 🛡️', color: '#ffffff', tint: '' },
+                { id: 'fire', name: 'Fire 🔥', color: '#ef4444', tint: '#ff5555' },
+                { id: 'storm', name: 'Storm ⚡', color: '#eab308', tint: '#ffe040' },
+                { id: 'forest', name: 'Forest 🌱', color: '#22c55e', tint: '#55ff55' },
+                { id: 'void', name: 'Void 🔮', color: '#a855f7', tint: '#dd88ff' },
+                { id: 'frost', name: 'Frost ❄️', color: '#3b82f6', tint: '#66bbff' }
+              ] as costume}
+                <button
+                  type="button"
+                  style="
+                    background: {selectedPlacedEntity.modifiers.costume_id === costume.id ? costume.color : '#1e293b'};
+                    color: {selectedPlacedEntity.modifiers.costume_id === costume.id ? '#0f172a' : 'white'};
+                    border: 2px solid {costume.color};
+                    padding: 8px 4px;
+                    border-radius: 12px;
+                    font-size: 0.8rem;
+                    font-weight: bold;
+                    cursor: pointer;
+                    text-align: center;
+                    box-shadow: 0 3px 0 rgba(0,0,0,0.3);
+                  "
+                  on:click={() => {
+                    selectedPlacedEntity.modifiers.costume_id = costume.id;
+                    selectedPlacedEntity.modifiers.costume_tint = costume.tint;
+                    saveCurrentRoom();
+                  }}
+                >
+                  {costume.name}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
         {#if selectedPlacedEntity.category === 'terrain' || selectedPlacedEntity.type === 'terrain'}
+
           <div class="option-group flex-row">
             <span class="option-label-text">Is Moving Platform? 🚋</span>
             <input 
@@ -2143,6 +2709,35 @@
               {/each}
             </select>
           </div>
+        {:else if selectedPlacedEntity.type === 'conveyor'}
+          <div class="option-group">
+            <span class="option-label-text">Belt Direction:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.conveyor_direction} 
+              on:change={saveCurrentRoom}
+            >
+              <option value={1.0}>⏩ Move Right</option>
+              <option value={-1.0}>⏪ Move Left</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <span class="option-label-text">Belt Speed:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.conveyor_speed} 
+              on:change={saveCurrentRoom}
+            >
+              <option value={80.0}>🐌 Slow</option>
+              <option value={140.0}>🏃 Fast</option>
+              <option value={220.0}>⚡ Super Fast</option>
+            </select>
+          </div>
+        {:else if selectedPlacedEntity.type === 'mystery_box'}
+          <div class="option-group">
+            <span class="option-label-text">Weighted Rewards:</span>
+            <span style="font-size: 0.85rem; color: #94a3b8;">Spawns Coins, Health, Speed boost, Shields, or a surprise slime!</span>
+          </div>
         {:else if selectedPlacedEntity.category === 'particles' || selectedPlacedEntity.type === 'particles'}
           <div class="option-group">
             <span class="option-label-text">Effect Theme:</span>
@@ -2355,6 +2950,37 @@
               on:change={saveCurrentRoom} 
             />
           </div>
+        {:else if selectedPlacedEntity.type === 'wind_zone'}
+          <div class="option-group">
+            <span class="option-label-text">Wind Direction:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.wind_direction} 
+              on:change={saveCurrentRoom}
+            >
+              <option value="right">➡️ Blow Right</option>
+              <option value="left">⬅️ Blow Left</option>
+              <option value="up">⬆️ Blow Up</option>
+              <option value="down">⬇️ Blow Down</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <span class="option-label-text">Wind Strength:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.wind_force} 
+              on:change={saveCurrentRoom}
+            >
+              <option value={150.0}>🍃 Gentle Breeze</option>
+              <option value={300.0}>💨 Windy Gust</option>
+              <option value={500.0}>🌪️ Hurricane Push</option>
+            </select>
+          </div>
+        {:else if selectedPlacedEntity.type === 'target_practice'}
+          <div class="option-group">
+            <span class="option-label-text">Target Mode:</span>
+            <span style="font-size: 0.85rem; color: #94a3b8;">🎯 Hit this target with projectiles, stomps, or a hammer to trigger magic rules!</span>
+          </div>
         {/if}
       </div>
 
@@ -2535,12 +3161,36 @@
   .canvas {
     position: relative;
     overflow: hidden;
-    background: linear-gradient(#31466d, #1d2d45 55%, #1b2331 55%);
     cursor: grab;
+    transition: background 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   .canvas:active {
     cursor: grabbing;
+  }
+
+  .canvas.theme-default {
+    background: linear-gradient(#31466d, #1d2d45 55%, #1b2331 55%);
+  }
+
+  .canvas.theme-space {
+    background: linear-gradient(#0d1130, #06081c 55%, #030412 55%);
+  }
+
+  .canvas.theme-candy {
+    background: linear-gradient(#fecdd3, #fda4af 55%, #f43f5e 55%);
+  }
+
+  .canvas.theme-jungle {
+    background: linear-gradient(#4d7c0f, #15803d 55%, #14532d 55%);
+  }
+
+  .canvas.theme-ice {
+    background: linear-gradient(#e0f2fe, #bae6fd 55%, #38bdf8 55%);
+  }
+
+  .canvas.theme-volcano {
+    background: linear-gradient(#7f1d1d, #ef4444 55%, #450a0a 55%);
   }
 
   .canvas-inner {
@@ -2577,6 +3227,19 @@
     place-items: center;
     font-size: 2rem;
     border-radius: 50%;
+    animation: stamp-place-pop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  }
+
+  @keyframes stamp-place-pop {
+    0% {
+      transform: translate(-50%, -50%) scale(0);
+    }
+    70% {
+      transform: translate(-50%, -50%) scale(1.25);
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(1);
+    }
   }
 
   .stamp.terrain {
@@ -3178,4 +3841,77 @@
     transform: translateY(2px);
     box-shadow: 0 2px 0 #b91c1c;
   }
+
+  /* ── Feature: 🎲 Surprise Me! Button ── */
+  .surprise-btn-top {
+    background: linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6);
+    color: white;
+    box-shadow: 0 4px 0 #92400e;
+    animation: surprise-shimmer 3s ease-in-out infinite;
+    background-size: 200% 200%;
+  }
+
+  .remix-btn-top {
+    background: linear-gradient(135deg, #10b981, #3b82f6, #8b5cf6);
+    color: white;
+    box-shadow: 0 4px 0 #065f46;
+    animation: surprise-shimmer 3.5s ease-in-out infinite;
+    background-size: 200% 200%;
+  }
+
+  @keyframes surprise-shimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  /* ── Feature: Stamp Placement Pop-In Celebration ── */
+  .stamp {
+    animation: stamp-pop-in 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  @keyframes stamp-pop-in {
+    0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+    50% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+    70% { transform: translate(-50%, -50%) scale(0.9); }
+    100% { transform: translate(-50%, -50%) scale(1); }
+  }
+
+  /* ── Feature: Drag-to-Reposition ── */
+  .stamp-dragging {
+    outline: 4px dashed #fbbf24 !important;
+    z-index: 999 !important;
+    cursor: grabbing !important;
+    filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.7));
+    animation: none !important;
+  }
+
+  /* Favorites ribbon styling */
+  .favorites-ribbon {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 8px 12px;
+    background: #1e1b4b;
+    border-bottom: 2px solid rgba(251, 191, 36, 0.4);
+    overflow-x: auto;
+  }
+  
+  .favorites-ribbon :global(.ribbon-btn) {
+    min-width: 80px !important;
+    padding: 6px 12px !important;
+  }
+  
+  .favorites-ribbon :global(.ribbon-btn span) {
+    font-size: 1.5rem !important;
+  }
+  
+  .ribbon-label {
+    color: #fbbf24;
+    font-weight: 900;
+    font-size: 1rem;
+    white-space: nowrap;
+    margin-right: 8px;
+    text-transform: uppercase;
+  }
 </style>
+

@@ -6,6 +6,7 @@
   export let isVisible = false;
   export let inventory: AssetInventory = {};
   export let isMuted = false;
+  export let favorites: string[] = [];
 
   const dispatch = createEventDispatcher<{
     itemSelected: ToyboxAsset;
@@ -15,6 +16,7 @@
   let activeCategory = 'terrain';
 
   const CATEGORY_MAP: Record<string, { label: string; emoji: string; color: string }> = {
+    favorites: { label: 'Favorites', emoji: '⭐', color: '#fbbf24' },
     terrain: { label: 'Floor', emoji: '🧱', color: '#fbbf24' },
     heroes: { label: 'Hero', emoji: '🦸', color: '#60a5fa' },
     enemies: { label: 'Monster', emoji: '👾', color: '#f87171' },
@@ -27,10 +29,24 @@
   // Keep first available category active if 'terrain' doesn't exist
   $: if (isVisible && inventory) {
     const keys = Object.keys(CATEGORY_MAP);
-    const available = keys.filter(k => inventory[k] && inventory[k].length > 0);
+    const available = keys.filter(k => k === 'favorites' || (inventory[k] && inventory[k].length > 0));
     if (available.length > 0 && !available.includes(activeCategory)) {
       activeCategory = available[0];
     }
+  }
+
+  $: itemsToDisplay = activeCategory === 'favorites'
+    ? Object.values(inventory).flat().filter(item => favorites.includes(item.id))
+    : (inventory[activeCategory] || []);
+
+  function toggleFavorite(itemId: string, event: Event) {
+    event.stopPropagation();
+    if (favorites.includes(itemId)) {
+      favorites = favorites.filter(id => id !== itemId);
+    } else {
+      favorites = [...favorites, itemId];
+    }
+    playTabSound();
   }
 
   function isEmoji(str: string | undefined): boolean {
@@ -92,7 +108,7 @@
       <!-- Emoji tabs -->
       <div class="tabs-container">
         {#each Object.entries(CATEGORY_MAP) as [catId, info]}
-          {#if inventory[catId] && inventory[catId].length > 0}
+          {#if catId === 'favorites' ? favorites.length > 0 : (inventory[catId] && inventory[catId].length > 0)}
             <button
               class="tab-btn"
               class:active={activeCategory === catId}
@@ -108,10 +124,26 @@
 
       <!-- Active category toys -->
       <div class="active-category-section">
-        {#if inventory[activeCategory] && inventory[activeCategory].length > 0}
+        {#if itemsToDisplay && itemsToDisplay.length > 0}
           <div class="grid">
-            {#each inventory[activeCategory] as item}
-              <button class="toy" on:click={() => dispatch('itemSelected', item)}>
+            {#each itemsToDisplay as item}
+              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <div 
+                class="toy" 
+                role="button" 
+                tabindex="0" 
+                on:click={() => dispatch('itemSelected', item)}
+                on:keydown={(e) => e.key === 'Enter' && dispatch('itemSelected', item)}
+              >
+                <button
+                  type="button"
+                  class="favorite-btn"
+                  on:click={(e) => toggleFavorite(item.id, e)}
+                  title="Favorite this toy"
+                >
+                  {favorites.includes(item.id) ? '❤️' : '🤍'}
+                </button>
                 <span class="toy-visual-container">
                   {#if item.visual && !isEmoji(item.visual)}
                     {#if item.is_spritesheet && item.frames && item.frames[0]}
@@ -140,13 +172,14 @@
                   {/if}
                 </span>
                 <strong>{item.name}</strong>
-              </button>
+              </div>
             {/each}
           </div>
         {:else}
           <p class="empty-state">No toys here yet!</p>
         {/if}
       </div>
+
     </div>
   </div>
 {/if}
@@ -267,6 +300,7 @@
   }
 
   .toy {
+    position: relative;
     min-height: 116px;
     display: flex;
     flex-direction: column;
@@ -295,9 +329,35 @@
     box-shadow: 0 2px 0 #cbd5e1;
   }
 
+  .favorite-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    font-size: 1.3rem;
+    cursor: pointer;
+    padding: 4px;
+    box-shadow: none !important;
+    transform: none;
+    transition: transform 0.1s;
+    z-index: 10;
+  }
+
+  .favorite-btn:hover {
+    transform: scale(1.2);
+    background: transparent !important;
+  }
+
+  .favorite-btn:active {
+    transform: scale(0.9);
+    background: transparent !important;
+  }
+
   .toy span {
     font-size: 2.8rem;
   }
+
 
   .toy-visual-container {
     width: 60px;
