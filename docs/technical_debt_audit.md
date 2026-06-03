@@ -54,30 +54,15 @@ This document provides a comprehensive audit of the technical debt, security ris
 
 ## 2. Memory & Resource Leaks
 
-### ⚠️ Medium: Svelte UI `setInterval` Leaks on Unmount
-- **Location**: [`App.svelte:L125-135`](file:///g:/kidgamemaker/editor/src/App.svelte#L125-L135)
-- **Description**: Two infinite periodic polling intervals are started directly in `onMount()`:
-  - Auto-save timer running every 60 seconds.
-  - Toybox inventory refresher running every 5 seconds to sync incoming ingested assets.
-  These intervals are never cleared. When `App.svelte` is hot-reloaded during development or unmounted/recreated, the old interval triggers remain active in the Javascript heap, leading to accumulated background tasks making Tauri IPC calls.
-- **Remediation**: Store the interval IDs in variables and clear them using Svelte's `onDestroy` hook or by returning a cleanup function in `onMount`:
-  ```typescript
-  onMount(() => {
-    const saveId = setInterval(saveCurrentRoom, 60_000);
-    const refreshId = setInterval(refreshInventory, 5_000);
-    return () => {
-      clearInterval(saveId);
-      clearInterval(refreshId);
-    };
-  });
-  ```
+### ✅ Resolved: Svelte UI `setInterval` Leaks on Unmount
+- **Location**: [`App.svelte:L607-618`](file:///g:/kidgamemaker/editor/src/App.svelte#L607-L618)
+- **Status**: **RESOLVED**
+- **Description**: periodic polling intervals are now stored in local constants (`saveId`, `refreshId`) inside `onMount` and are explicitly cleared on component unmount in Svelte's cleanup return block, preventing javascript thread accumulation during development hot-reloads.
 
-### 📉 Low: Godot Runner HUD Canvas Leak on Room Transition
-- **Location**: [`Main.gd:L903-909`](file:///g:/kidgamemaker/engine/scripts/Main.gd#L903-L909) and [`Main.gd:L657`](file:///g:/kidgamemaker/engine/scripts/Main.gd#L657)
-- **Description**: When loading a level, `_create_hud()` instantiates a `CanvasLayer` for rendering the health and score text, adding it directly as a child of the `Main` node. 
-  During a portal transition (`transition_to_room`), the runner calls `clear_spawned_entities()`. However, `hud_canvas` is not added to the `spawned_entities` array, meaning it is not freed. 
-  While `_create_hud()` will attempt to free a valid `hud_canvas` at the end of `load_level`, if the target room file fails to load early (triggering an early return in `load_level`), the old HUD canvas will leak and remain on screen.
-- **Remediation**: Add `hud_canvas` to the `spawned_entities` array when spawning, or explicitly call `hud_canvas.queue_free()` inside `clear_spawned_entities()`.
+### ✅ Resolved: Godot Runner HUD Canvas Leak on Room Transition
+- **Location**: [`Main.gd:L1533-1537`](file:///g:/kidgamemaker/engine/scripts/Main.gd#L1533-L1537)
+- **Status**: **RESOLVED**
+- **Description**: Transitioning between portals triggers `clear_spawned_entities()`, which now explicitly calls `queue_free()` on `hud_canvas` to release the CanvasLayer viewport tree nodes.
 
 ---
 
@@ -115,7 +100,8 @@ This document provides a comprehensive audit of the technical debt, security ris
   - `kidgamemaker_starter_pack.zip` (28 KB)
 - **Remediation**: Delete these archives or add them to `.gitignore` to prevent tracking binary artifacts in version control.
 
-### 🗑️ Legacy JSON files directly under `/assets`
+### ✅ Resolved: Legacy JSON files directly under `/assets`
 - **Location**: [`engine/data/assets/`](file:///g:/kidgamemaker/engine/data/assets/)
-- **Description**: The files `gold_coin.json`, `hero_knight.json`, `slime_enemy.json`, and `stone_floor.json` sit directly inside the root `assets` directory. In subsequent phases, assets are organized into category subdirectories (e.g., `assets/heroes/hero_knight/hero_knight.json`). Having duplicate flat assets complicates lookup and creates redundant metadata records.
-- **Remediation**: Safely remove the flat legacy JSONs in `engine/data/assets/` and redirect any references to their corresponding subfolders.
+- **Status**: **RESOLVED**
+- **Description**: The legacy flat JSON files `gold_coin.json`, `hero_knight.json`, `slime_enemy.json`, and `stone_floor.json` have been safely removed from the root `assets` directory, and all sidecars are organized cleanly inside category subfolders.
+

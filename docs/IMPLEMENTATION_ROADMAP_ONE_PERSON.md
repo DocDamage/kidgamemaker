@@ -1,76 +1,28 @@
 # One-Person Roadmap
 
 ## Phase 1 — Contract Runner
-
-Status: started in this package.
-
-Definition of done:
-
-- Editor writes a valid room JSON.
-- Godot loads that JSON.
-- Player falls, lands on terrain, and moves.
-- Enemy patrols.
-- Collectible can be picked up.
-- Sidecar metadata is read.
+- **Status**: [COMPLETED] Editor writes valid JSON, Godot loads and spawns player/terrain/enemies/collectibles cleanly.
 
 ## Phase 2 — Real Godot Feel
-
-- Replace placeholder polygons with loaded textures when texture paths exist.
-- Add better camera limits and smoothing.
-- Add tile/terrain collision merging.
-- Add basic checkpoint respawn.
-- Add room reset without relaunching editor.
+- **Status**: [COMPLETED] Programmatic texture mapping, smooth camera tracking limits, static body collision bounds merging, and level resets.
 
 ## Phase 3 — Editor Usability
-
-- Drag-to-place instead of click-only stamping.
-- Pan/zoom canvas.
-- Asset tray loaded from Rust inventory command.
-- Visual snap guides.
-- Save/load multiple room files.
+- **Status**: [COMPLETED] Drag-to-place grids, viewport panning/zooming, undo/redo state stacks, and multiple room managers.
 
 ## Phase 4 — Asset Inbox v1
-
-No AI yet.
-
-- Watch `_Inbox`.
-- Unzip packs.
-- Copy images/audio/docs into staging folders.
-- Generate conservative sidecars from filenames and dimensions.
-- Route obvious assets to `heroes`, `terrain`, `enemies`, etc.
+- **Status**: [COMPLETED] Rust inbox watch daemon, zip archive unboxing, and filename-based category routing.
 
 ## Phase 5 — Sprite Slicing v1
-
-- Alpha threshold scan.
-- Connected component bounding boxes.
-- Uniform-grid detection.
-- Frame export manifest.
-- Manual fallback sidecar when confidence is low.
+- **Status**: [COMPLETED] Alpha threshold connected-component scan, grid bounds slicing, and frame manifest exports.
 
 ## Phase 6 — Auto Behavior Metadata
+- **Status**: [COMPLETED] Baseline metadata overrides, light emitter overrides, music zone tags, and checkpoint registrations.
 
-- Filename/tag heuristics.
-- Light source tagging.
-- Collectible tagging.
-- Enemy archetype defaults.
-- Player archetype defaults.
+## Phase 7 — World Linking & Logic Rules
+- **Status**: [COMPLETED] Door/portal travel, auto room generation, visual If/Then rule triggers, cape gliders, jetpacks, and Ghost Runner time trials.
 
-## Phase 7 — World Linking
+## Phase 8 — Atmosphere & Alchemy (Advanced Upgrades)
+- **Status**: [COMPLETED] Day/Night canvas color modulators, custom synthesizers, particles spawner effects, sound sweeps, multi-colored lock gates, stomp mechanics, and Alchemy Potions (Speed, Jump, Giant, Inverted gravity).
 
-- Door/portal stamps.
-- Auto-create target room.
-- Back/return portal.
-- Room streaming in runner.
-
-## Phase 8 — Atmosphere
-
-- CanvasModulate day/night.
-- PointLight2D texture support.
-- Weather particles.
-- Audio zones and jukebox stamps.
-
-## Phase 9 — Export
-
-- Package project data with runner.
-- Zip playable build.
-- Keep editor separate from exported game.
+## Phase 9 — Export & Advanced Customizations
+- **Status**: [COMPLETED] Project package share exporter (.ktoy), auto-ingestion watching, warning-free builds, paint brush symmetry/rainbow modes, destructible tiles with Hammer tool, dynamic light masks with Lantern, NPC shopkeepers, and HUD minimap drawing.
