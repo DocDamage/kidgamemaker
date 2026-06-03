@@ -29,6 +29,27 @@
   let isMuted = false;
   let selectedPlacedEntity: PlacedEntity | null = null;
 
+  let showMapView = false;
+  let showRulesEditor = false;
+
+  function toggleMapView() {
+    showMapView = !showMapView;
+    if (showMapView) {
+      showRulesEditor = false;
+      selectedPlacedEntity = null;
+    }
+    playUiSound('pop');
+  }
+
+  function toggleRulesEditor() {
+    showRulesEditor = !showRulesEditor;
+    if (showRulesEditor) {
+      showMapView = false;
+      selectedPlacedEntity = null;
+    }
+    playUiSound('pop');
+  }
+
   let beatComposerOpen = false;
   let previewingBgm = false;
   let currentPreviewStep = 0;
@@ -258,6 +279,27 @@
     previewingBgm = false;
     beatComposerOpen = false;
   }
+
+  function addNewRule() {
+    if (!worldSettings.room_rules) {
+      worldSettings.room_rules = [];
+    }
+    worldSettings.room_rules = [
+      ...worldSettings.room_rules,
+      { trigger_type: 'button_step', trigger_id: '', action_type: 'toggle_gate', action_id: '' }
+    ];
+    saveCurrentRoom();
+    playUiSound('pop');
+  }
+
+  function deleteRule(idx: number) {
+    if (worldSettings.room_rules) {
+      worldSettings.room_rules = worldSettings.room_rules.filter((_, i) => i !== idx);
+      saveCurrentRoom();
+      playUiSound('squeak');
+    }
+  }
+
 
 
   function togglePauseGame() {
@@ -1148,6 +1190,12 @@
       <button class="cycle-btn composer-btn" on:click={(e) => { animateClick(e); openBeatComposer(); }} title="🎹 Compose Beat Loop">
         🎹
       </button>
+      <button class="cycle-btn map-btn" class:active={showMapView} on:click={(e) => { animateClick(e); toggleMapView(); }} title="🗺️ World Map Connector">
+        🗺️
+      </button>
+      <button class="cycle-btn rules-btn" class:active={showRulesEditor} on:click={(e) => { animateClick(e); toggleRulesEditor(); }} title="✨ Magic Rules Engine">
+        ✨
+      </button>
     </div>
 
     <!-- Active Stamp -->
@@ -1242,8 +1290,160 @@
     </div>
   {/if}
 
-  <section class="quick-ribbon" aria-label="Quick toybox ribbon">
-    {#each quickRibbon as asset}
+  {#if showMapView}
+    <div class="map-view-container" style="flex: 1; padding: 30px; background: #0f172a; overflow-y: auto; display: flex; flex-direction: column; align-items: center; min-height: calc(100vh - 70px);">
+      <h2 style="color: white; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">🗺️ Connect-the-Rooms Map 🏰</h2>
+      <p style="color: #94a3b8; margin-bottom: 24px; text-align: center; max-width: 600px;">
+        Visual room portal connections. Link portal destinations directly by selecting target rooms from the cards.
+      </p>
+      
+      <div class="rooms-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; width: 100%; max-width: 1200px;">
+        {#each rooms as r}
+          {@const roomPortals = placed.filter(ent => ent.category === 'portals' || ent.type === 'portal')}
+          <div class="room-node-card" style="background: #1e293b; border: 2px solid {r === activeRoomId ? '#6366f1' : '#334155'}; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <h3 style="color: white; margin: 0; font-size: 1.1rem;">🚪 {r}</h3>
+              {#if r === activeRoomId}
+                <span style="background: #6366f1; color: white; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: bold;">EDITING</span>
+              {/if}
+            </div>
+
+            <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 8px; font-size: 0.85rem; color: #cbd5e1; display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-weight: bold; color: #94a3b8;">Portal Links in room:</span>
+              {#if r === activeRoomId}
+                {#if roomPortals.length === 0}
+                  <span style="font-style: italic; color: #64748b;">No portals stamped in this room yet.</span>
+                {:else}
+                  {#each roomPortals as portal}
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(0,0,0,0.2); padding: 6px; border-radius: 6px;">
+                      <span>🌀 {portal.instance_id.slice(0, 8)}...</span>
+                      <select 
+                        style="background: #0f172a; color: white; border: 1px solid #475569; border-radius: 4px; padding: 2px 4px; font-size: 0.8rem;"
+                        bind:value={portal.modifiers.target_room}
+                        on:change={saveCurrentRoom}
+                      >
+                        <option value="">(Select Target Room)</option>
+                        {#each rooms as dest}
+                          {#if dest !== r}
+                            <option value={dest}>➡️ {dest}</option>
+                          {/if}
+                        {/each}
+                      </select>
+                    </div>
+                  {/each}
+                {/if}
+              {:else}
+                <span style="font-style: italic; color: #64748b; font-size: 0.75rem;">Switch room to configure portal connections.</span>
+              {/if}
+            </div>
+
+            <button 
+              style="margin-top: 8px; padding: 6px; border-radius: 6px; border: none; font-weight: bold; background: {r === activeRoomId ? '#475569' : '#334155'}; color: white; cursor: pointer; font-size: 0.85rem;"
+              disabled={r === activeRoomId}
+              on:click={() => { loadSelectedRoom(r); }}
+            >
+              📂 Jump into Room
+            </button>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {:else if showRulesEditor}
+    <div class="rules-view-container" style="flex: 1; padding: 30px; background: #0f172a; overflow-y: auto; display: flex; flex-direction: column; align-items: center; min-height: calc(100vh - 70px);">
+      <h2 style="color: white; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">✨ Magic Rules Engine ⚙️</h2>
+      <p style="color: #94a3b8; margin-bottom: 24px; text-align: center; max-width: 600px;">
+        Create rules without code! Tell the game what should happen when you flip a lever, collect gems, or step on buttons.
+      </p>
+
+      <div style="width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 16px; margin-bottom: 30px;">
+        <button 
+          style="align-self: flex-end; padding: 8px 16px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; background: #10b981; color: white; font-size: 0.9rem;"
+          on:click={addNewRule}
+        >
+          ➕ Add New Rule
+        </button>
+
+        {#if !worldSettings.room_rules || worldSettings.room_rules.length === 0}
+          <div style="background: #1e293b; padding: 40px; border-radius: 12px; border: 2px dashed #475569; text-align: center; color: #94a3b8;">
+            <span style="font-size: 3rem; display: block; margin-bottom: 12px;">🧙‍♂️</span>
+            <h3>No Magic Rules Yet!</h3>
+            <p>Click "Add New Rule" to link buttons, levers, or coin targets to events.</p>
+          </div>
+        {:else}
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            {#each worldSettings.room_rules as rule, idx}
+              <div class="rule-card" style="background: #1e293b; border-radius: 10px; padding: 16px; display: flex; align-items: center; gap: 12px; border: 1px solid #334155; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
+                
+                <span style="font-weight: bold; color: #38bdf8;">IF</span>
+                <select 
+                  style="background: #0f172a; color: white; border: 1px solid #475569; padding: 6px; border-radius: 6px; font-size: 0.85rem;"
+                  bind:value={rule.trigger_type}
+                  on:change={saveCurrentRoom}
+                >
+                  <option value="button_step">🔘 Floor Button Stepped</option>
+                  <option value="lever_flip">🕹️ Wall Lever Flipped</option>
+                  <option value="coins_5">💎 Collected 5 Rubies</option>
+                  <option value="coins_10">💎 Collected 10 Rubies</option>
+                </select>
+
+                {#if rule.trigger_type === 'button_step' || rule.trigger_type === 'lever_flip'}
+                  {@const targetTriggerAsset = rule.trigger_type === 'button_step' ? 'trigger_button' : 'trigger_lever'}
+                  <select 
+                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 6px; border-radius: 6px; font-size: 0.85rem;"
+                    bind:value={rule.trigger_id}
+                    on:change={saveCurrentRoom}
+                  >
+                    <option value="">(Select Trigger Entity)</option>
+                    {#each placed.filter(ent => ent.asset_id === targetTriggerAsset) as ent}
+                      <option value={ent.instance_id}>
+                        {ent.instance_id.slice(0, 8)}... ({findAsset(ent.asset_id)?.name})
+                      </option>
+                    {/each}
+                  </select>
+                {/if}
+
+                <span style="font-weight: bold; color: #a78bfa;">➡️ THEN</span>
+                <select 
+                  style="background: #0f172a; color: white; border: 1px solid #475569; padding: 6px; border-radius: 6px; font-size: 0.85rem;"
+                  bind:value={rule.action_type}
+                  on:change={saveCurrentRoom}
+                >
+                  <option value="toggle_gate">🚪 Open/Close Switch Gate</option>
+                  <option value="spawn_sparkles">✨ Spawn Magic Sparkles</option>
+                  <option value="heal_player">💖 Heal Player 20 HP</option>
+                  <option value="play_sfx_chime">🔔 Play Chime Sound</option>
+                </select>
+
+                {#if rule.action_type === 'toggle_gate'}
+                  <select 
+                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 6px; border-radius: 6px; font-size: 0.85rem;"
+                    bind:value={rule.action_id}
+                    on:change={saveCurrentRoom}
+                  >
+                    <option value="">(Select Gate)</option>
+                    {#each placed.filter(ent => ent.type === 'gate') as ent}
+                      <option value={ent.instance_id}>
+                        {ent.instance_id.slice(0, 8)}... ({findAsset(ent.asset_id)?.name})
+                      </option>
+                    {/each}
+                  </select>
+                {/if}
+
+                <button 
+                  style="margin-left: auto; padding: 6px 12px; border-radius: 6px; border: none; background: #ef4444; color: white; cursor: pointer; font-size: 0.85rem; font-weight: bold;"
+                  on:click={() => deleteRule(idx)}
+                >
+                  🗑️ Delete
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
+  {:else}
+    <section class="quick-ribbon" aria-label="Quick toybox ribbon">
+      {#each quickRibbon as asset}
       <button
         class="ribbon-btn"
         class:active={activeAsset.id === asset.id && !eraserMode}
@@ -1393,6 +1593,7 @@
       {/if}
     </div>
   </div>
+  {/if}
 
   <footer>
     <code>{status}</code>
@@ -1581,6 +1782,16 @@
               type="checkbox" 
               class="option-toggle" 
               bind:checked={selectedPlacedEntity.modifiers.is_moving_platform} 
+              on:change={saveCurrentRoom} 
+            />
+          </div>
+
+          <div class="option-group flex-row">
+            <span class="option-label-text">Secret Passage? 🕵️‍♂️</span>
+            <input 
+              type="checkbox" 
+              class="option-toggle" 
+              bind:checked={selectedPlacedEntity.modifiers.is_illusion} 
               on:change={saveCurrentRoom} 
             />
           </div>
@@ -1783,6 +1994,8 @@
               <option value="speed">🧪 Speed Boost Potion</option>
               <option value="shield">🛡️ Shield Bubble</option>
               <option value="double_jump">👟 Double Jump Shoes</option>
+              <option value="glider">🪂 Glider Cape</option>
+              <option value="jetpack">🚀 Jetpack Thruster</option>
             </select>
           </div>
         {:else if selectedPlacedEntity.category === 'portals' || selectedPlacedEntity.type === 'portal'}

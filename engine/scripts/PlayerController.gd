@@ -24,6 +24,11 @@ var water_type: String = "normal"
 var water_hurt_timer: float = 0.0
 var speed_pad_velocity: Vector2 = Vector2.ZERO
 
+# Gadget states
+var has_glider: bool = false
+var has_jetpack: bool = false
+var jetpack_fuel: float = 0.0
+
 
 
 func _ready() -> void:
@@ -54,6 +59,17 @@ func apply_powerup(type: String) -> void:
 		"double_jump":
 			double_jump_enabled = true
 			print("Player acquired Double Jump Shoes!")
+			if main != null and main.has_method("play_sfx"):
+				main.play_sfx("coin")
+		"glider":
+			has_glider = true
+			print("Player acquired Glider Cape!")
+			if main != null and main.has_method("play_sfx"):
+				main.play_sfx("coin")
+		"jetpack":
+			has_jetpack = true
+			jetpack_fuel = 100.0
+			print("Player acquired Jetpack!")
 			if main != null and main.has_method("play_sfx"):
 				main.play_sfx("coin")
 
@@ -139,10 +155,20 @@ func _physics_process(delta: float) -> void:
 		velocity += speed_pad_velocity
 		speed_pad_velocity = speed_pad_velocity.move_toward(Vector2.ZERO, delta * 900.0)
 
-	# Water buoyancy or standard gravity
+	# Water buoyancy, jetpack thrust, glider cape glide, or standard gravity
 	if inside_water:
 		velocity.y += gravity * (1.0 - water_buoyancy) * delta
 		velocity.y = clamp(velocity.y, -220.0, 180.0)
+	elif has_jetpack and jetpack_fuel > 0.0 and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
+		velocity.y = -260.0
+		jetpack_fuel -= delta * 35.0
+		modulate = Color(1.0, 0.5, 0.2) # Jetpack orange visual tint
+		var main := get_tree().get_root().get_node_or_null("Main")
+		if main != null and main.has_method("spawn_floating_text") and randf() < delta * 4.0:
+			main.spawn_floating_text("🔥", global_position, Color.ORANGE)
+	elif has_glider and not is_on_floor() and velocity.y > 0.0 and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
+		velocity.y = min(velocity.y, 45.0) # Glide cap fall velocity
+		modulate = Color(1.0, 0.8, 0.5) # Glider yellow/peach visual tint
 	elif not is_on_floor():
 		velocity.y += gravity * gravity_scale * delta
 	

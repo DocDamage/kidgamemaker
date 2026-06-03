@@ -44,6 +44,14 @@ var _js_pause_cb: JavaScriptObject
 var _js_restart_cb: JavaScriptObject
 var _js_mute_cb: JavaScriptObject
 
+static var run_record: Array = []
+var current_run: Array = []
+var ghost_player_node: Node2D = null
+var ghost_playback_index: int = 0
+var physics_tick_counter: int = 0
+var room_rules: Array = []
+var collectibles_collected: int = 0
+
 
 func _ready() -> void:
 	if OS.has_feature("web"):
@@ -83,6 +91,8 @@ func _on_js_pause(args: Array) -> void:
 
 func _on_js_restart(_args: Array) -> void:
 	print("Game restarting via JS...")
+	if current_run.size() > 20:
+		run_record = current_run
 	get_tree().reload_current_scene()
 
 
@@ -95,6 +105,8 @@ func _on_js_mute(args: Array) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_R:
 		print("Reset key pressed. Reloading scene...")
+		if current_run.size() > 20:
+			run_record = current_run
 		get_tree().reload_current_scene()
 
 
@@ -103,9 +115,22 @@ func _physics_process(delta: float) -> void:
 	if _playback != null and _bgm_player != null and _bgm_player.playing:
 		_fill_audio_buffer()
 
-	if active_player != null:
+	physics_tick_counter += 1
+
+	if active_player != null and is_instance_valid(active_player):
 		if active_player.global_position.y > death_y_threshold:
 			_respawn_player()
+		elif physics_tick_counter % 3 == 0:
+			current_run.append(active_player.global_position)
+
+	if ghost_player_node != null and is_instance_valid(ghost_player_node) and not run_record.is_empty():
+		if ghost_playback_index < run_record.size():
+			ghost_player_node.global_position = run_record[ghost_playback_index]
+			if physics_tick_counter % 3 == 0:
+				ghost_playback_index += 1
+		else:
+			ghost_player_node.queue_free()
+			ghost_player_node = null
 
 	# Sound-to-light beat pulse (approx. 120 BPM = 2.0 Hz sine wave)
 	_pulse_timer += delta
@@ -176,6 +201,7 @@ func load_level_from_string(json_string: String) -> void:
 	_apply_weather_particles()
 	_configure_camera_limits()
 	_create_hud()
+	_spawn_ghost()
 
 
 func _merge_terrain_entities(entities: Array) -> Array:
@@ -311,6 +337,7 @@ func spawn_entity(data: Dictionary) -> Node2D:
 	node.name = str(data.get("instance_id", asset_id))
 	node.global_position = _read_position(data.get("position", {"x": 0, "y": 0}))
 	node.z_index = _z_index_for_bucket(_placement_bucket(sidecar))
+	node.set_meta("asset_id", asset_id)
 
 	var modifiers: Dictionary = data.get("modifiers", {})
 	var scale_multiplier := float(modifiers.get("scale_multiplier", 1.0))
@@ -408,11 +435,38 @@ func _make_terrain(data: Dictionary, sidecar: Dictionary) -> CollisionObject2D:
 		
 		return body
 	else:
-		var body := StaticBody2D.new()
-		var size := _collision_size(sidecar, Vector2(128, 32), data)
-		_add_box_collision(body, size)
-		_add_visuals(body, sidecar, size, Color(0.45, 0.45, 0.45, 1.0))
-		return body
+		var is_illusion: bool = bool(modifiers.get("is_illusion", false))
+		if is_illusion:
+			var body := Area2D.new()
+			body.collision_layer = 0
+			body.collision_mask = 1
+			var size := _collision_size(sidecar, Vector2(128, 32), data)
+			_add_box_collision(body, size)
+			_add_visuals(body, sidecar, size, Color(0.45, 0.45, 0.45, 1.0))
+			
+			var illusion_script := GDScript.new()
+			illusion_script.source_code = """extends Area2D
+func _ready() -> void:
+	body_entered.connect(_on_body_entered)
+	body_exited.connect(_on_body_exited)
+func _on_body_entered(body: Node) -> void:
+	if body is CharacterBody2D:
+		var tween = create_tween()
+		tween.tween_property(self, "modulate:a", 0.3, 0.25)
+func _on_body_exited(body: Node) -> void:
+	if body is CharacterBody2D:
+		var tween = create_tween()
+		tween.tween_property(self, "modulate:a", 1.0, 0.25)
+"""
+			illusion_script.reload()
+			body.set_script(illusion_script)
+			return body
+		else:
+			var body := StaticBody2D.new()
+			var size := _collision_size(sidecar, Vector2(128, 32), data)
+			_add_box_collision(body, size)
+			_add_visuals(body, sidecar, size, Color(0.45, 0.45, 0.45, 1.0))
+			return body
 
 
 func _make_enemy(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
@@ -977,11 +1031,121 @@ func _on_checkpoint_activated(pos: Vector2) -> void:
 
 func _respawn_player() -> void:
 	print("Player fell! Respawning at: ", spawn_point)
+	
+	# Save run recording to static memory if it is long enough
+	if current_run.size() > 20:
+		run_record = current_run
+	current_run = []
+	physics_tick_counter = 0
+	
+	# Clean up old ghost and spawn a new one
+	if is_instance_valid(ghost_player_node):
+		ghost_player_node.queue_free()
+		ghost_player_node = null
+	
+	_spawn_ghost()
+	
 	active_player.global_position = spawn_point
 	if active_player.has_method("set_velocity"):
 		active_player.set("velocity", Vector2.ZERO)
 	elif "velocity" in active_player:
 		active_player.velocity = Vector2.ZERO
+
+
+func _spawn_ghost() -> void:
+	if run_record.is_empty():
+		return
+	if active_player == null or not is_instance_valid(active_player):
+		return
+	
+	var p_asset_id = active_player.get("asset_id")
+	if p_asset_id == "":
+		p_asset_id = "hero_knight" # default fallback
+		
+	var sidecar = _load_sidecar(p_asset_id, "heroes")
+	var size = _collision_size(sidecar, Vector2(32, 48))
+	
+	var ghost := Node2D.new()
+	ghost.name = "GhostPlayer"
+	_add_visuals(ghost, sidecar, size, Color(0.2, 0.55, 1.0, 0.45))
+	ghost.modulate.a = 0.45
+	
+	ghost.global_position = run_record[0]
+	add_child(ghost)
+	ghost_player_node = ghost
+	ghost_playback_index = 0
+	print("Spawned ghost player at: ", ghost.global_position)
+
+
+func notify_trigger(trigger_id: String) -> void:
+	var trigger_node = get_node_or_null(trigger_id)
+	var trigger_type := "button_step"
+	if trigger_node != null:
+		var asset_id = ""
+		if trigger_node.has_meta("asset_id"):
+			asset_id = str(trigger_node.get_meta("asset_id"))
+		elif "asset_id" in trigger_node:
+			asset_id = str(trigger_node.get("asset_id"))
+		
+		if asset_id == "trigger_lever":
+			trigger_type = "lever_flip"
+			
+	print("notify_trigger called for: ", trigger_id, " type: ", trigger_type)
+	execute_rules(trigger_type, trigger_id)
+
+
+func execute_rules(trigger_type: String, trigger_id: String = "") -> void:
+	for rule in room_rules:
+		if typeof(rule) != TYPE_DICTIONARY:
+			continue
+		
+		var rule_trigger_type = str(rule.get("trigger_type", ""))
+		var rule_trigger_id = str(rule.get("trigger_id", ""))
+		
+		# Match trigger type (button_step, lever_flip, coins_5, coins_10)
+		if rule_trigger_type != trigger_type:
+			continue
+			
+		# Match trigger ID if button or lever
+		if (rule_trigger_type == "button_step" or rule_trigger_type == "lever_flip") and rule_trigger_id != trigger_id:
+			continue
+			
+		var action_type = str(rule.get("action_type", ""))
+		var action_id = str(rule.get("action_id", ""))
+		
+		print("Rule matched! Trigger: ", trigger_type, " Action: ", action_type, " Target: ", action_id)
+		
+		match action_type:
+			"toggle_gate":
+				if action_id != "":
+					# Look for the gate in the scene
+					var gate_node = get_node_or_null(action_id)
+					if gate_node != null and gate_node.has_method("toggle_gate"):
+						gate_node.toggle_gate()
+					else:
+						# Try spawned_entities list
+						for ent in spawned_entities:
+							if is_instance_valid(ent) and ent.name == action_id and ent.has_method("toggle_gate"):
+								ent.toggle_gate()
+								break
+			"spawn_sparkles":
+				if active_player != null and is_instance_valid(active_player):
+					var particles_data = {
+						"asset_id": "effects_sparkles",
+						"category": "particles",
+						"position": {"x": active_player.global_position.x, "y": active_player.global_position.y},
+						"modifiers": {"particle_theme": "rainbow", "particle_intensity": "wild"}
+					}
+					var p_node = spawn_entity(particles_data)
+					if p_node != null:
+						var t = create_tween()
+						t.tween_interval(1.5)
+						t.tween_callback(p_node.queue_free)
+			"heal_player":
+				if active_player != null and is_instance_valid(active_player) and active_player.has_method("heal"):
+					active_player.heal(20)
+			"play_sfx_chime":
+				play_sfx("coin")
 
 
 func _on_portal_entered(_portal_node: Node2D, portal_data: Dictionary) -> void:
@@ -1063,6 +1227,15 @@ func on_collectible_picked_up(payload: Dictionary) -> void:
 	score += int(payload.get("score_value", 0))
 	if int(payload.get("score_value", 0)) > 0:
 		print("Score: ", score, "  (+", payload.get("score_value", 0), ")")
+
+	# Rule checking for ruby collectibles count
+	var asset_id_val_temp := str(payload.get("asset_id", ""))
+	if not asset_id_val_temp.contains("key"):
+		collectibles_collected += 1
+		if collectibles_collected == 5:
+			execute_rules("coins_5")
+		elif collectibles_collected == 10:
+			execute_rules("coins_10")
 
 	# Key pickup — find the node that emitted it to read key_color
 	var asset_id_val := str(payload.get("asset_id", ""))
@@ -1178,6 +1351,7 @@ func _apply_world_settings(settings: Dictionary) -> void:
 			modulate_node.color = Color.WHITE
 
 	bpm_sequence = settings.get("custom_bgm_sequence", [])
+	room_rules = settings.get("room_rules", [])
 	var theme := str(settings.get("theme", "default"))
 	_play_theme_bgm(theme)
 
@@ -1361,6 +1535,10 @@ func _update_hud() -> void:
 		hud_health_label.text = ""
 
 	hud_score_label.text = "⭐ " + str(score)
+	if active_player != null and is_instance_valid(active_player):
+		if active_player.get("has_jetpack") == true:
+			var fuel = active_player.get("jetpack_fuel")
+			hud_score_label.text = "🚀 " + str(int(fuel)) + "% | " + hud_score_label.text
 
 
 var _bgm_player: AudioStreamPlayer = null
@@ -1598,6 +1776,8 @@ func _make_trigger(data: Dictionary, sidecar: Dictionary) -> Area2D:
 		"\tvar main = get_tree().get_root().get_node_or_null('Main')\n" + \
 		"\tif main != null and main.has_method('play_sfx'):\n" + \
 		"\t\tmain.play_sfx('coin')\n" + \
+		"\tif main != null and main.has_method('notify_trigger'):\n" + \
+		"\t\tmain.notify_trigger(name)\n" + \
 		"\tvar target = get_parent().get_node_or_null(target_id)\n" + \
 		"\tif target != null and target.has_method('toggle_gate'):\n" + \
 		"\t\ttarget.toggle_gate()\n"

@@ -119,7 +119,11 @@ export const fallbackInventory: AssetInventory = {
     { id: 'cactus_hazard', name: 'Prickly Cactus', category: 'enemies', visual: '🌵', type: 'hazard', snapping_type: 'gravity_snap' },
     { id: 'spike_hazard', name: 'Ice Spike', category: 'enemies', visual: '🧊', type: 'hazard', snapping_type: 'free_float' }
   ],
-  collectibles: [{ id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', visual: '💎', type: 'collectible', snapping_type: 'free_float' }],
+  collectibles: [
+    { id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', visual: '💎', type: 'collectible', snapping_type: 'free_float' },
+    { id: 'gadget_glider', name: 'Glider Cape', category: 'collectibles', visual: '🪂', type: 'collectible', snapping_type: 'free_float' },
+    { id: 'gadget_jetpack', name: 'Jetpack', category: 'collectibles', visual: '🚀', type: 'collectible', snapping_type: 'free_float' }
+  ],
   decorations: [
     { id: 'neon_sign', name: 'Neon Sign', category: 'decorations', visual: '💡', type: 'decoration', snapping_type: 'free_float' },
     { id: 'trigger_button', name: 'Floor Button', category: 'decorations', visual: '🔘', type: 'trigger', snapping_type: 'free_float' },
