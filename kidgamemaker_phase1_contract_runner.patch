@@ -1,0 +1,2376 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+index 0000000..499bb87
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1,31 @@
++name: KidGameMaker CI
++
++on:
++  push:
++    branches: [main]
++  pull_request:
++    branches: [main]
++
++jobs:
++  validate-json:
++    name: Validate JSON contracts and examples
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-python@v5
++        with:
++          python-version: '3.12'
++      - name: Validate JSON files
++        run: python tools/validate_json.py
++
++  rust-check:
++    name: Rust backend check
++    runs-on: ubuntu-latest
++    defaults:
++      run:
++        working-directory: editor/src-tauri
++    steps:
++      - uses: actions/checkout@v4
++      - uses: dtolnay/rust-toolchain@stable
++      - name: Cargo check
++        run: cargo check
+diff --git a/README.md b/README.md
+index a31eab6..e4082c7 100644
+--- a/README.md
++++ b/README.md
+@@ -1,2 +1,71 @@
+-# kidgamemaker
+-kidgamemaker
++# KidGameMaker
++
++KidGameMaker is a contract-first, zero-code side-scrolling game maker aimed at a child-facing editor with a real 2D runtime underneath it.
++
++The Phase 1 build proves the core loop:
++
++1. The editor lets the user stamp heroes, terrain, enemies, collectibles, and decorations on a canvas.
++2. The editor writes a clean `game_state.json` room contract.
++3. The Godot runner reads that JSON and spawns physical gameplay objects.
++4. The Rust/Tauri backend bridges the editor and runner without exposing implementation details to the child.
++
++This repo is intentionally starting small. Do not build the AI asset ingestor first. The runner contract must exist first so the ingestor has a strict target to generate.
++
++## Phase 1 Layout
++
++```text
++.github/workflows/ci.yml              Basic schema/script validation
++docs/                                 Architecture and one-person roadmap
++editor/                               Svelte + Tauri desktop editor scaffold
++engine/                               Godot JSON-driven runner scaffold
++tools/                                Local helper scripts
++```
++
++## Local Start
++
++### Editor
++
++```powershell
++cd editor
++npm install
++npm run tauri:dev
++```
++
++The editor can run before a Godot export exists. Pressing Play will write `engine/data/game_state.json`. If a Godot runner executable is found later, the backend will launch it.
++
++### Godot Runner
++
++Open `engine/project.godot` in Godot 4.x and run the main scene. The runner loads `engine/data/dummy_level.json` by default.
++
++To test a JSON file explicitly after exporting a runner:
++
++```powershell
++.\engine\Runner.exe --level-json .\engine\data\game_state.json
++```
++
++## Current Scope
++
++Implemented in this starter:
++
++- JSON room contract
++- Asset sidecar examples
++- Child-facing stamp canvas scaffold
++- Rust command to write `game_state.json`
++- Godot runtime loader
++- Placeholder player, terrain, enemy, collectible, decoration spawning
++- Basic gravity/player movement
++- Basic enemy patrol
++- Checkpoint and light metadata reserved in the contract
++
++Not implemented yet:
++
++- Real sprite slicing
++- AI classification
++- ZIP ingestion daemon
++- real parallax nodes
++- weather particles
++- day/night lighting transitions
++- room linking/world map
++- exported game packaging
++
++Those come after the contract-first runner loop is proven.
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+new file mode 100644
+index 0000000..ae127f9
+--- /dev/null
++++ b/docs/ARCHITECTURE.md
+@@ -0,0 +1,82 @@
++# Architecture
++
++## Core Decision
++
++KidGameMaker uses a data-driven runtime.
++
++The editor does not generate code. The editor produces JSON. The Godot runner consumes JSON.
++
++```text
++Svelte/Tauri Editor
++        |
++        | writes game_state.json
++        v
++Godot Runner
++        |
++        | reads asset sidecars
++        v
++Playable side-scrolling room
++```
++
++## Components
++
++### Editor
++
++The editor is a native desktop shell using Tauri with a Svelte frontend.
++
++Responsibilities:
++
++- Show a large child-friendly canvas.
++- Show toybox/stamp assets.
++- Apply simple snap-to-position assistance.
++- Save a clean room JSON payload.
++- Ask the Rust backend to launch the runner.
++
++The editor should never expose scripts, file trees, raw metadata, or engine internals to the child.
++
++### Rust Backend
++
++The Rust backend is the bridge between the UI and the file system.
++
++Responsibilities:
++
++- Write `engine/data/game_state.json`.
++- Scan `engine/data/assets/**/**.json` sidecars for the toybox.
++- Launch the Godot runner when an exported executable exists.
++- Later: watch `_Inbox`, unzip packs, slice spritesheets, generate sidecars, route assets.
++
++### Godot Runner
++
++Godot is the reusable 2D runtime.
++
++Responsibilities:
++
++- Read `game_state.json` or a command-line `--level-json` path.
++- Resolve each entity's sidecar metadata.
++- Spawn physical objects.
++- Apply gravity, collision, camera, baseline behaviors, and later parallax/lighting/weather/audio.
++
++## Asset Sidecars
++
++Each asset lives in its own folder with its own metadata file.
++
++```text
++engine/data/assets/enemies/slime_patrol/
++  slime_patrol.json
++  slime_patrol.png      # future real art
++```
++
++Sidecars are the long-term contract between the ingestor, editor, and runner.
++
++## Why This Beats an Adult Mode
++
++The project should not rely on a hidden adult node editor. Complex behavior must emerge from metadata and placement rules.
++
++Example:
++
++- A red key sidecar declares itself as `logic_signal: key_red`.
++- A red door sidecar declares `requires_signal: key_red`.
++- The child places both visually.
++- The runner links them without menus.
++
++That comes later. Phase 1 only establishes the contract shape.
+diff --git a/docs/CODEX_NEXT_PROMPT.md b/docs/CODEX_NEXT_PROMPT.md
+new file mode 100644
+index 0000000..1aea8a6
+--- /dev/null
++++ b/docs/CODEX_NEXT_PROMPT.md
+@@ -0,0 +1,26 @@
++# Codex Next Prompt
++
++Use this after the Phase 1 files are in the repo.
++
++```text
++You are working in DocDamage/kidgamemaker.
++
++Goal: complete Phase 1 contract-first runner validation.
++
++Do not add AI ingestion yet. Do not add complex world map systems yet.
++
++Tasks:
++1. Verify the Svelte/Tauri editor builds.
++2. Fix any TypeScript, Svelte, Rust, or Tauri config errors.
++3. Verify the editor can write engine/data/game_state.json.
++4. Open engine/project.godot in Godot 4.x and verify Main.tscn loads dummy_level.json.
++5. Verify the player CharacterBody2D falls, lands on StaticBody2D terrain, and moves left/right/jumps.
++6. Verify enemies and collectibles spawn from sidecar metadata.
++7. Update docs/PHASE1_STATUS.md with exact verification results.
++
++Constraints:
++- Keep the project one-person maintainable.
++- Do not hide broken features behind TODO-only UI.
++- Every runtime behavior must map back to a JSON contract field.
++- If something is not implemented, mark it honestly as not implemented.
++```
+diff --git a/docs/GITHUB_NOTES.md b/docs/GITHUB_NOTES.md
+new file mode 100644
+index 0000000..156b670
+--- /dev/null
++++ b/docs/GITHUB_NOTES.md
+@@ -0,0 +1,25 @@
++# GitHub Notes
++
++Target repo:
++
++```text
++https://github.com/DocDamage/kidgamemaker
++```
++
++At the time this Phase 1 package was prepared, the public repo only contained the starter README. The GitHub write connector available in the working session was not directly scoped to this repo, so this package includes a patch and apply script instead of a pushed commit.
++
++## Apply Locally
++
++From a local clone of `DocDamage/kidgamemaker`:
++
++```powershell
++powershell -ExecutionPolicy Bypass -File .\tools\apply_phase1.ps1 -SourcePath C:\path\to\kidgamemaker_phase1_contract_runner
++```
++
++Or copy the package contents into the repo root and commit:
++
++```powershell
++git add .
++git commit -m "Start contract-first KidGameMaker runner"
++git push
++```
+diff --git a/docs/JSON_CONTRACTS.md b/docs/JSON_CONTRACTS.md
+new file mode 100644
+index 0000000..056f656
+--- /dev/null
++++ b/docs/JSON_CONTRACTS.md
+@@ -0,0 +1,82 @@
++# JSON Contracts
++
++## Room Contract
++
++`engine/data/game_state.json` and `engine/data/dummy_level.json` use this shape:
++
++```json
++{
++  "schema_version": 1,
++  "project_id": "demo_project",
++  "room_id": "test_chamber_01",
++  "world_settings": {
++    "time_of_day": "day",
++    "weather": "clear"
++  },
++  "entities": [
++    {
++      "instance_id": "hero_001",
++      "asset_id": "hero_knight",
++      "category": "heroes",
++      "type": "player",
++      "position": { "x": 120, "y": 220 },
++      "is_camera_target": true,
++      "modifiers": {
++        "variant": "default",
++        "scale_multiplier": 1.0
++      }
++    }
++  ]
++}
++```
++
++## Sidecar Contract
++
++Every sidecar should include at least:
++
++```json
++{
++  "schema_version": 1,
++  "asset_id": "stone_floor",
++  "asset_name": "Stone Floor",
++  "category": "terrain",
++  "runtime_template": "terrain",
++  "visual": "🪨",
++  "placement_logic": {
++    "snapping_type": "edge_to_edge",
++    "parallax_bucket": "play_layer"
++  },
++  "collision": {
++    "shape": "rectangle",
++    "size": [128, 32]
++  }
++}
++```
++
++## Runtime Templates
++
++The Godot runner currently recognizes:
++
++- `player`
++- `terrain`
++- `enemy`
++- `collectible`
++- `decoration`
++- `checkpoint`
++
++Unknown templates spawn as decorations instead of crashing.
++
++## Reserved Metadata Blocks
++
++These are intentionally part of the contract now, even when the runtime behavior is still incomplete:
++
++- `baseline_attributes`
++- `implicit_abilities`
++- `placement_logic`
++- `lighting_logic`
++- `audio_logic`
++- `gameplay_logic`
++- `animation_data`
++- `logic_signals`
++
++This lets the asset ingestor grow without constantly breaking the runner.
+diff --git a/docs/ONE_PERSON_ROADMAP.md b/docs/ONE_PERSON_ROADMAP.md
+new file mode 100644
+index 0000000..5c4dab9
+--- /dev/null
++++ b/docs/ONE_PERSON_ROADMAP.md
+@@ -0,0 +1,76 @@
++# One-Person Roadmap
++
++## Phase 1 — Contract Runner
++
++Status: started in this package.
++
++Definition of done:
++
++- Editor writes a valid room JSON.
++- Godot loads that JSON.
++- Player falls, lands on terrain, and moves.
++- Enemy patrols.
++- Collectible can be picked up.
++- Sidecar metadata is read.
++
++## Phase 2 — Real Godot Feel
++
++- Replace placeholder polygons with loaded textures when texture paths exist.
++- Add better camera limits and smoothing.
++- Add tile/terrain collision merging.
++- Add basic checkpoint respawn.
++- Add room reset without relaunching editor.
++
++## Phase 3 — Editor Usability
++
++- Drag-to-place instead of click-only stamping.
++- Pan/zoom canvas.
++- Asset tray loaded from Rust inventory command.
++- Visual snap guides.
++- Save/load multiple room files.
++
++## Phase 4 — Asset Inbox v1
++
++No AI yet.
++
++- Watch `_Inbox`.
++- Unzip packs.
++- Copy images/audio/docs into staging folders.
++- Generate conservative sidecars from filenames and dimensions.
++- Route obvious assets to `heroes`, `terrain`, `enemies`, etc.
++
++## Phase 5 — Sprite Slicing v1
++
++- Alpha threshold scan.
++- Connected component bounding boxes.
++- Uniform-grid detection.
++- Frame export manifest.
++- Manual fallback sidecar when confidence is low.
++
++## Phase 6 — Auto Behavior Metadata
++
++- Filename/tag heuristics.
++- Light source tagging.
++- Collectible tagging.
++- Enemy archetype defaults.
++- Player archetype defaults.
++
++## Phase 7 — World Linking
++
++- Door/portal stamps.
++- Auto-create target room.
++- Back/return portal.
++- Room streaming in runner.
++
++## Phase 8 — Atmosphere
++
++- CanvasModulate day/night.
++- PointLight2D texture support.
++- Weather particles.
++- Audio zones and jukebox stamps.
++
++## Phase 9 — Export
++
++- Package project data with runner.
++- Zip playable build.
++- Keep editor separate from exported game.
+diff --git a/docs/PHASE1_STATUS.md b/docs/PHASE1_STATUS.md
+new file mode 100644
+index 0000000..b1cf61a
+--- /dev/null
++++ b/docs/PHASE1_STATUS.md
+@@ -0,0 +1,28 @@
++# Phase 1 Status
++
++## Goal
++
++Turn the Gemini planning conversation into a real first build slice: a child-facing editor that writes JSON and a Godot runner that reads JSON.
++
++## Why this is the first slice
++
++The original plan correctly identified the strongest architecture: do not compile a new game every time the child presses Play. Instead, keep a reusable runner and feed it data. The one-person version must prove the data contract before adding AI or a background asset ingestor.
++
++## Implemented Files
++
++- `editor/src/App.svelte` — stamp canvas, Play button, toybox trigger, eraser.
++- `editor/src/lib/canvasState.ts` — room payload creation and snapping helpers.
++- `editor/src-tauri/src/commands.rs` — writes `engine/data/game_state.json`, scans sidecar assets, optionally launches a Godot runner.
++- `engine/scripts/Main.gd` — loads JSON, loads sidecar files, spawns runtime objects.
++- `engine/scripts/PlayerController.gd` — baseline platformer movement.
++- `engine/scripts/SmartEnemy.gd` — baseline patrol enemy.
++- `engine/scripts/Collectible.gd` — pickup behavior placeholder.
++- `engine/data/assets/**` — starter sidecar examples.
++
++## One-Person Rule
++
++Anything that cannot be validated alone in less than a day is not Phase 1. No AI slicing, no neural classifier, no asset daemon, and no large runtime systems until this loop works:
++
++```text
++stamp object -> write JSON -> Godot spawns object -> playable movement
++```
+diff --git a/docs/schemas/asset_sidecar.schema.json b/docs/schemas/asset_sidecar.schema.json
+new file mode 100644
+index 0000000..24526af
+--- /dev/null
++++ b/docs/schemas/asset_sidecar.schema.json
+@@ -0,0 +1,44 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://docdamage.github.io/kidgamemaker/schemas/asset_sidecar.schema.json",
++  "title": "KidGameMaker Asset Sidecar",
++  "type": "object",
++  "required": ["schema_version", "asset_id", "asset_name", "category", "runtime_template"],
++  "properties": {
++    "schema_version": { "const": 1 },
++    "asset_id": { "type": "string", "minLength": 1 },
++    "asset_name": { "type": "string", "minLength": 1 },
++    "category": { "type": "string", "minLength": 1 },
++    "runtime_template": {
++      "type": "string",
++      "enum": ["player", "terrain", "enemy", "collectible", "decoration", "checkpoint", "audio"]
++    },
++    "visual": { "type": "string" },
++    "visual_tags": {
++      "type": "array",
++      "items": { "type": "string" }
++    },
++    "placement_logic": {
++      "type": "object",
++      "properties": {
++        "snapping_type": { "type": "string" },
++        "parallax_bucket": { "type": "string" }
++      },
++      "additionalProperties": true
++    },
++    "collision": {
++      "type": "object",
++      "properties": {
++        "shape": { "type": "string" },
++        "size": {
++          "type": "array",
++          "prefixItems": [{ "type": "number" }, { "type": "number" }],
++          "minItems": 2,
++          "maxItems": 2
++        }
++      },
++      "additionalProperties": true
++    }
++  },
++  "additionalProperties": true
++}
+diff --git a/docs/schemas/room_state.schema.json b/docs/schemas/room_state.schema.json
+new file mode 100644
+index 0000000..fc251ae
+--- /dev/null
++++ b/docs/schemas/room_state.schema.json
+@@ -0,0 +1,56 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://docdamage.github.io/kidgamemaker/schemas/room_state.schema.json",
++  "title": "KidGameMaker Room State",
++  "type": "object",
++  "required": ["schema_version", "project_id", "room_id", "entities"],
++  "properties": {
++    "schema_version": { "const": 1 },
++    "project_id": { "type": "string", "minLength": 1 },
++    "room_id": { "type": "string", "minLength": 1 },
++    "world_settings": {
++      "type": "object",
++      "properties": {
++        "time_of_day": { "type": "string" },
++        "weather": { "type": "string" }
++      },
++      "additionalProperties": true
++    },
++    "entities": {
++      "type": "array",
++      "items": { "$ref": "#/$defs/entity" }
++    }
++  },
++  "$defs": {
++    "entity": {
++      "type": "object",
++      "required": ["instance_id", "asset_id", "category", "type", "position"],
++      "properties": {
++        "instance_id": { "type": "string", "minLength": 1 },
++        "asset_id": { "type": "string", "minLength": 1 },
++        "category": { "type": "string", "minLength": 1 },
++        "type": { "type": "string", "minLength": 1 },
++        "position": { "$ref": "#/$defs/vec2" },
++        "is_camera_target": { "type": "boolean" },
++        "modifiers": {
++          "type": "object",
++          "properties": {
++            "variant": { "type": "string" },
++            "scale_multiplier": { "type": "number", "exclusiveMinimum": 0 }
++          },
++          "additionalProperties": true
++        }
++      },
++      "additionalProperties": true
++    },
++    "vec2": {
++      "type": "object",
++      "required": ["x", "y"],
++      "properties": {
++        "x": { "type": "number" },
++        "y": { "type": "number" }
++      }
++    }
++  },
++  "additionalProperties": true
++}
+diff --git a/editor/README.md b/editor/README.md
+new file mode 100644
+index 0000000..9c7c0cc
+--- /dev/null
++++ b/editor/README.md
+@@ -0,0 +1,13 @@
++# KidGameMaker Editor
++
++Svelte + Tauri desktop editor scaffold.
++
++## Commands
++
++```powershell
++npm install
++npm run dev
++npm run tauri:dev
++```
++
++The editor writes `../engine/data/game_state.json` through the Tauri backend.
+diff --git a/editor/index.html b/editor/index.html
+new file mode 100644
+index 0000000..56a9b10
+--- /dev/null
++++ b/editor/index.html
+@@ -0,0 +1,12 @@
++<!doctype html>
++<html lang="en">
++  <head>
++    <meta charset="UTF-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++    <title>KidGameMaker</title>
++  </head>
++  <body>
++    <div id="app"></div>
++    <script type="module" src="/src/main.ts"></script>
++  </body>
++</html>
+diff --git a/editor/package.json b/editor/package.json
+new file mode 100644
+index 0000000..9375b06
+--- /dev/null
++++ b/editor/package.json
+@@ -0,0 +1,26 @@
++{
++  "name": "kidgamemaker-editor",
++  "private": true,
++  "version": "0.1.0",
++  "type": "module",
++  "scripts": {
++    "dev": "vite --host 127.0.0.1",
++    "build": "vite build",
++    "preview": "vite preview",
++    "check": "tsc --noEmit",
++    "tauri": "tauri",
++    "tauri:dev": "tauri dev",
++    "tauri:build": "tauri build"
++  },
++  "dependencies": {
++    "@tauri-apps/api": "^2.0.0",
++    "svelte": "^5.0.0"
++  },
++  "devDependencies": {
++    "@sveltejs/vite-plugin-svelte": "^5.0.0",
++    "@tauri-apps/cli": "^2.0.0",
++    "typescript": "^5.6.0",
++    "vite": "^6.0.0",
++    "@types/node": "^22.0.0"
++  }
++}
+diff --git a/editor/src-tauri/Cargo.toml b/editor/src-tauri/Cargo.toml
+new file mode 100644
+index 0000000..b7be157
+--- /dev/null
++++ b/editor/src-tauri/Cargo.toml
+@@ -0,0 +1,18 @@
++[package]
++name = "kidgamemaker-editor"
++version = "0.1.0"
++description = "KidGameMaker desktop editor"
++authors = ["DocDamage"]
++edition = "2021"
++
++[lib]
++name = "kidgamemaker_editor_lib"
++crate-type = ["staticlib", "cdylib", "rlib"]
++
++[build-dependencies]
++tauri-build = { version = "2", features = [] }
++
++[dependencies]
++serde = { version = "1", features = ["derive"] }
++serde_json = "1"
++tauri = { version = "2", features = [] }
+diff --git a/editor/src-tauri/build.rs b/editor/src-tauri/build.rs
+new file mode 100644
+index 0000000..261851f
+--- /dev/null
++++ b/editor/src-tauri/build.rs
+@@ -0,0 +1,3 @@
++fn main() {
++    tauri_build::build();
++}
+diff --git a/editor/src-tauri/src/commands.rs b/editor/src-tauri/src/commands.rs
+new file mode 100644
+index 0000000..cdccfb3
+--- /dev/null
++++ b/editor/src-tauri/src/commands.rs
+@@ -0,0 +1,242 @@
++use serde::{Deserialize, Serialize};
++use serde_json::Value;
++use std::{
++    collections::BTreeMap,
++    fs,
++    path::{Path, PathBuf},
++    process::Command,
++};
++
++#[derive(Debug, Clone, Serialize, Deserialize)]
++pub struct AssetSummary {
++    pub id: String,
++    pub name: String,
++    pub category: String,
++    pub visual: Option<String>,
++    #[serde(rename = "type")]
++    pub asset_type: Option<String>,
++    pub sidecar_path: String,
++}
++
++#[tauri::command(rename_all = "camelCase")]
++pub fn compile_and_play(room_payload: Value) -> Result<String, String> {
++    let repo_root = locate_repo_root()?;
++    let engine_dir = repo_root.join("engine");
++    let data_dir = engine_dir.join("data");
++
++    fs::create_dir_all(&data_dir)
++        .map_err(|err| format!("Failed to create engine data dir: {err}"))?;
++
++    let game_state_path = data_dir.join("game_state.json");
++    let pretty_json = serde_json::to_string_pretty(&room_payload)
++        .map_err(|err| format!("Failed to serialize room payload: {err}"))?;
++
++    fs::write(&game_state_path, pretty_json)
++        .map_err(|err| format!("Failed to write game_state.json: {err}"))?;
++
++    match locate_godot_runner(&engine_dir) {
++        Some(runner_path) => {
++            Command::new(&runner_path)
++                .arg("--level-json")
++                .arg(&game_state_path)
++                .spawn()
++                .map_err(|err| format!("Failed to launch Godot runner: {err}"))?;
++
++            Ok(format!(
++                "Game state written and runner launched: {}",
++                game_state_path.display()
++            ))
++        }
++        None => Ok(format!(
++            "Game state written: {}. Godot runner executable not found yet.",
++            game_state_path.display()
++        )),
++    }
++}
++
++#[tauri::command]
++pub fn get_asset_inventory() -> Result<BTreeMap<String, Vec<AssetSummary>>, String> {
++    let repo_root = locate_repo_root()?;
++    let asset_root = repo_root.join("engine").join("data").join("assets");
++
++    if !asset_root.exists() {
++        return Ok(fallback_inventory());
++    }
++
++    let mut inventory: BTreeMap<String, Vec<AssetSummary>> = BTreeMap::new();
++
++    for category_entry in fs::read_dir(&asset_root)
++        .map_err(|err| format!("Failed to read asset root {}: {err}", asset_root.display()))?
++    {
++        let category_entry = category_entry.map_err(|err| err.to_string())?;
++        let category_path = category_entry.path();
++        if !category_path.is_dir() {
++            continue;
++        }
++
++        let category = category_path
++            .file_name()
++            .and_then(|name| name.to_str())
++            .unwrap_or("unknown")
++            .to_string();
++
++        for asset_entry in fs::read_dir(&category_path).map_err(|err| err.to_string())? {
++            let asset_entry = asset_entry.map_err(|err| err.to_string())?;
++            let asset_dir = asset_entry.path();
++            if !asset_dir.is_dir() {
++                continue;
++            }
++
++            let asset_id = asset_dir
++                .file_name()
++                .and_then(|name| name.to_str())
++                .unwrap_or("unknown")
++                .to_string();
++
++            let sidecar_path = asset_dir.join(format!("{asset_id}.json"));
++            if !sidecar_path.exists() {
++                continue;
++            }
++
++            if let Ok(summary) = read_asset_summary(&sidecar_path, &category, &asset_id) {
++                inventory.entry(category.clone()).or_default().push(summary);
++            }
++        }
++    }
++
++    if inventory.is_empty() {
++        Ok(fallback_inventory())
++    } else {
++        Ok(inventory)
++    }
++}
++
++fn read_asset_summary(
++    sidecar_path: &Path,
++    fallback_category: &str,
++    fallback_id: &str,
++) -> Result<AssetSummary, String> {
++    let raw = fs::read_to_string(sidecar_path)
++        .map_err(|err| format!("Failed to read sidecar {}: {err}", sidecar_path.display()))?;
++    let json: Value = serde_json::from_str(&raw)
++        .map_err(|err| format!("Invalid sidecar JSON {}: {err}", sidecar_path.display()))?;
++
++    let id = json
++        .get("asset_id")
++        .and_then(Value::as_str)
++        .unwrap_or(fallback_id)
++        .to_string();
++
++    let name = json
++        .get("asset_name")
++        .and_then(Value::as_str)
++        .unwrap_or(&id)
++        .to_string();
++
++    let category = json
++        .get("category")
++        .and_then(Value::as_str)
++        .unwrap_or(fallback_category)
++        .to_string();
++
++    let visual = json
++        .get("visual")
++        .and_then(Value::as_str)
++        .map(ToString::to_string);
++
++    let asset_type = json
++        .get("runtime_template")
++        .or_else(|| json.get("type"))
++        .and_then(Value::as_str)
++        .map(ToString::to_string);
++
++    Ok(AssetSummary {
++        id,
++        name,
++        category,
++        visual,
++        asset_type,
++        sidecar_path: sidecar_path.display().to_string(),
++    })
++}
++
++fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
++    let mut inventory = BTreeMap::new();
++
++    inventory.insert(
++        "heroes".to_string(),
++        vec![AssetSummary {
++            id: "hero_knight".to_string(),
++            name: "Hero Knight".to_string(),
++            category: "heroes".to_string(),
++            visual: Some("🛡️".to_string()),
++            asset_type: Some("player".to_string()),
++            sidecar_path: "engine/data/assets/heroes/hero_knight/hero_knight.json".to_string(),
++        }],
++    );
++
++    inventory.insert(
++        "terrain".to_string(),
++        vec![AssetSummary {
++            id: "stone_floor".to_string(),
++            name: "Stone Floor".to_string(),
++            category: "terrain".to_string(),
++            visual: Some("🪨".to_string()),
++            asset_type: Some("terrain".to_string()),
++            sidecar_path: "engine/data/assets/terrain/stone_floor/stone_floor.json".to_string(),
++        }],
++    );
++
++    inventory.insert(
++        "enemies".to_string(),
++        vec![AssetSummary {
++            id: "slime_patrol".to_string(),
++            name: "Slime Patrol".to_string(),
++            category: "enemies".to_string(),
++            visual: Some("👾".to_string()),
++            asset_type: Some("enemy".to_string()),
++            sidecar_path: "engine/data/assets/enemies/slime_patrol/slime_patrol.json".to_string(),
++        }],
++    );
++
++    inventory
++}
++
++fn locate_repo_root() -> Result<PathBuf, String> {
++    let current = std::env::current_dir()
++        .map_err(|err| format!("Could not read current directory: {err}"))?;
++
++    for candidate in current.ancestors() {
++        if candidate.join("engine").exists() && candidate.join("editor").exists() {
++            return Ok(candidate.to_path_buf());
++        }
++    }
++
++    current
++        .parent()
++        .map(Path::to_path_buf)
++        .ok_or_else(|| "Could not locate repository root.".to_string())
++}
++
++fn locate_godot_runner(engine_dir: &Path) -> Option<PathBuf> {
++    let candidates = if cfg!(target_os = "windows") {
++        vec![
++            engine_dir.join("Runner.exe"),
++            engine_dir.join("godot_runner.exe"),
++            engine_dir.join("exports").join("windows").join("Runner.exe"),
++        ]
++    } else if cfg!(target_os = "macos") {
++        vec![
++            engine_dir.join("Runner.app").join("Contents").join("MacOS").join("Runner"),
++            engine_dir.join("godot_runner"),
++        ]
++    } else {
++        vec![
++            engine_dir.join("Runner.x86_64"),
++            engine_dir.join("godot_runner.x86_64"),
++            engine_dir.join("godot_runner"),
++        ]
++    };
++
++    candidates.into_iter().find(|path| path.exists())
++}
+diff --git a/editor/src-tauri/src/lib.rs b/editor/src-tauri/src/lib.rs
+new file mode 100644
+index 0000000..82290bb
+--- /dev/null
++++ b/editor/src-tauri/src/lib.rs
+@@ -0,0 +1,12 @@
++mod commands;
++
++#[cfg_attr(mobile, tauri::mobile_entry_point)]
++pub fn run() {
++    tauri::Builder::default()
++        .invoke_handler(tauri::generate_handler![
++            commands::compile_and_play,
++            commands::get_asset_inventory
++        ])
++        .run(tauri::generate_context!())
++        .expect("error while running KidGameMaker Tauri application");
++}
+diff --git a/editor/src-tauri/src/main.rs b/editor/src-tauri/src/main.rs
+new file mode 100644
+index 0000000..9b3c728
+--- /dev/null
++++ b/editor/src-tauri/src/main.rs
+@@ -0,0 +1,3 @@
++fn main() {
++    kidgamemaker_editor_lib::run();
++}
+diff --git a/editor/src-tauri/tauri.conf.json b/editor/src-tauri/tauri.conf.json
+new file mode 100644
+index 0000000..56d3f50
+--- /dev/null
++++ b/editor/src-tauri/tauri.conf.json
+@@ -0,0 +1,30 @@
++{
++  "$schema": "https://schema.tauri.app/config/2",
++  "productName": "KidGameMaker",
++  "version": "0.1.0",
++  "identifier": "com.docdamage.kidgamemaker",
++  "build": {
++    "beforeDevCommand": "npm run dev",
++    "devUrl": "http://127.0.0.1:5173",
++    "beforeBuildCommand": "npm run build",
++    "frontendDist": "../dist"
++  },
++  "app": {
++    "windows": [
++      {
++        "title": "KidGameMaker",
++        "width": 1280,
++        "height": 800,
++        "resizable": true,
++        "fullscreen": false
++      }
++    ],
++    "security": {
++      "csp": null
++    }
++  },
++  "bundle": {
++    "active": true,
++    "targets": "all"
++  }
++}
+diff --git a/editor/src/App.svelte b/editor/src/App.svelte
+new file mode 100644
+index 0000000..975d3a9
+--- /dev/null
++++ b/editor/src/App.svelte
+@@ -0,0 +1,266 @@
++<script lang="ts">
++  import { onMount } from 'svelte';
++  import { invoke } from '@tauri-apps/api/core';
++  import ToyboxModal from './ToyboxModal.svelte';
++  import {
++    eraseEntity,
++    fallbackInventory,
++    snapPosition,
++    stampEntity,
++    toRoomPayload,
++    type AssetInventory,
++    type PlacedEntity,
++    type ToyboxAsset
++  } from './lib/canvasState';
++
++  let placed: PlacedEntity[] = [
++    {
++      instance_id: 'hero_001',
++      asset_id: 'hero_knight',
++      category: 'heroes',
++      type: 'player',
++      position: { x: 128, y: 216 },
++      is_camera_target: true,
++      modifiers: { variant: 'default', scale_multiplier: 1.0 }
++    },
++    {
++      instance_id: 'floor_001',
++      asset_id: 'stone_floor',
++      category: 'terrain',
++      type: 'terrain',
++      position: { x: 320, y: 392 },
++      modifiers: { variant: 'default', scale_multiplier: 1.0 }
++    },
++    {
++      instance_id: 'enemy_001',
++      asset_id: 'slime_patrol',
++      category: 'enemies',
++      type: 'enemy',
++      position: { x: 520, y: 344 },
++      modifiers: { variant: 'default', scale_multiplier: 1.0 }
++    }
++  ];
++
++  let inventory: AssetInventory = fallbackInventory;
++  let activeAsset: ToyboxAsset = fallbackInventory.terrain[0];
++  let eraserMode = false;
++  let toyboxOpen = false;
++  let snapEnabled = true;
++  let status = 'Ready';
++
++  $: quickRibbon = Object.values(inventory).flat().slice(0, 8);
++
++  onMount(async () => {
++    try {
++      inventory = await invoke<AssetInventory>('get_asset_inventory');
++      activeAsset = inventory.terrain?.[0] ?? Object.values(inventory).flat()[0] ?? activeAsset;
++      status = 'Loaded toybox assets from sidecars.';
++    } catch (error) {
++      status = `Using fallback toybox: ${error}`;
++    }
++  });
++
++  function handleCanvasClick(event: MouseEvent) {
++    const target = event.currentTarget as HTMLDivElement;
++    const rect = target.getBoundingClientRect();
++    const position = snapPosition(
++      {
++        x: event.clientX - rect.left,
++        y: event.clientY - rect.top
++      },
++      8,
++      snapEnabled
++    );
++
++    if (eraserMode) {
++      const hit = [...placed].reverse().find((item) => {
++        const dx = item.position.x - position.x;
++        const dy = item.position.y - position.y;
++        return Math.sqrt(dx * dx + dy * dy) < 36;
++      });
++
++      if (hit) placed = eraseEntity(placed, hit.instance_id);
++      return;
++    }
++
++    placed = stampEntity(placed, activeAsset, position);
++  }
++
++  async function play() {
++    status = 'Writing game_state.json...';
++    try {
++      const payload = toRoomPayload(placed);
++      status = await invoke<string>('compile_and_play', { roomPayload: payload });
++    } catch (error) {
++      status = `Play failed: ${String(error)}`;
++    }
++  }
++
++  function selectAsset(asset: ToyboxAsset) {
++    activeAsset = asset;
++    eraserMode = false;
++    toyboxOpen = false;
++  }
++
++  function iconFor(item: PlacedEntity): string {
++    return quickRibbon.find((asset) => asset.id === item.asset_id)?.visual ?? '🎮';
++  }
++</script>
++
++<main class="app-shell">
++  <header class="topbar">
++    <button class="play" on:click={play}>▶ PLAY</button>
++    <button class:active={!eraserMode} on:click={() => (eraserMode = false)}>
++      Stamp: {activeAsset.visual ?? '🎮'} {activeAsset.name}
++    </button>
++    <button class:active={eraserMode} on:click={() => (eraserMode = !eraserMode)}>🧽 Eraser</button>
++    <button class:active={snapEnabled} on:click={() => (snapEnabled = !snapEnabled)}>🧲 Snap</button>
++    <button on:click={() => (toyboxOpen = true)}>🧰 Toybox</button>
++  </header>
++
++  <section class="quick-ribbon" aria-label="Quick toybox ribbon">
++    {#each quickRibbon as asset}
++      <button
++        class:active={activeAsset.id === asset.id && !eraserMode}
++        on:click={() => selectAsset(asset)}
++        title={asset.name}
++      >
++        <span>{asset.visual ?? '🎮'}</span>
++        <small>{asset.name}</small>
++      </button>
++    {/each}
++  </section>
++
++  <section class="canvas" on:click={handleCanvasClick} aria-label="Game canvas">
++    <div class="horizon"></div>
++    {#each placed as item (item.instance_id)}
++      <button
++        class="stamp {item.category}"
++        style:left={`${item.position.x}px`}
++        style:top={`${item.position.y}px`}
++        title={`${item.asset_id} ${item.instance_id}`}
++        on:click|stopPropagation={() => {
++          if (eraserMode) placed = eraseEntity(placed, item.instance_id);
++        }}
++      >
++        {iconFor(item)}
++      </button>
++    {/each}
++  </section>
++
++  <footer>
++    <code>{status}</code>
++    <span>{placed.length} stamped objects</span>
++  </footer>
++
++  <ToyboxModal
++    isVisible={toyboxOpen}
++    inventory={inventory}
++    on:itemSelected={(event) => selectAsset(event.detail)}
++    on:close={() => (toyboxOpen = false)}
++  />
++</main>
++
++<style>
++  .app-shell {
++    height: 100vh;
++    display: grid;
++    grid-template-rows: auto auto 1fr auto;
++  }
++
++  .topbar,
++  .quick-ribbon,
++  footer {
++    display: flex;
++    gap: 12px;
++    align-items: center;
++    padding: 12px;
++    background: #101827;
++    border-bottom: 3px solid rgba(255, 255, 255, 0.08);
++  }
++
++  .topbar {
++    flex-wrap: wrap;
++  }
++
++  button {
++    border: 0;
++    border-radius: 18px;
++    padding: 12px 18px;
++    font-weight: 900;
++    cursor: pointer;
++    background: #f3f5ff;
++    color: #101827;
++    box-shadow: 0 5px 0 rgba(0, 0, 0, 0.35);
++  }
++
++  button:active {
++    transform: translateY(3px);
++    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
++  }
++
++  button.active {
++    outline: 4px solid #ffd84d;
++  }
++
++  .play {
++    background: #55e36f;
++    font-size: 1.2rem;
++  }
++
++  .quick-ribbon {
++    overflow-x: auto;
++  }
++
++  .quick-ribbon button {
++    display: grid;
++    place-items: center;
++    min-width: 104px;
++  }
++
++  .quick-ribbon span {
++    font-size: 2rem;
++  }
++
++  .canvas {
++    position: relative;
++    overflow: hidden;
++    background:
++      linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
++      linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
++      linear-gradient(#31466d, #1d2d45 55%, #1b2331 55%);
++    background-size: 32px 32px, 32px 32px, 100% 100%;
++  }
++
++  .horizon {
++    position: absolute;
++    left: 0;
++    right: 0;
++    top: 55%;
++    height: 4px;
++    background: rgba(255, 255, 255, 0.08);
++  }
++
++  .stamp {
++    position: absolute;
++    transform: translate(-50%, -50%);
++    width: 56px;
++    height: 56px;
++    padding: 0;
++    display: grid;
++    place-items: center;
++    font-size: 2rem;
++    border-radius: 50%;
++  }
++
++  .stamp.terrain {
++    width: 160px;
++    border-radius: 14px;
++  }
++
++  footer {
++    justify-content: space-between;
++    border-top: 3px solid rgba(255, 255, 255, 0.08);
++    border-bottom: 0;
++  }
++</style>
+diff --git a/editor/src/ToyboxModal.svelte b/editor/src/ToyboxModal.svelte
+new file mode 100644
+index 0000000..62fb4d8
+--- /dev/null
++++ b/editor/src/ToyboxModal.svelte
+@@ -0,0 +1,100 @@
++<script lang="ts">
++  import { createEventDispatcher } from 'svelte';
++  import type { AssetInventory, ToyboxAsset } from './lib/canvasState';
++
++  export let isVisible = false;
++  export let inventory: AssetInventory = {};
++
++  const dispatch = createEventDispatcher<{
++    itemSelected: ToyboxAsset;
++    close: void;
++  }>();
++
++  $: categories = Object.entries(inventory);
++</script>
++
++{#if isVisible}
++  <section class="backdrop" role="presentation" on:click={() => dispatch('close')}>
++    <div class="modal" role="dialog" aria-modal="true" aria-label="Toybox" on:click|stopPropagation>
++      <header>
++        <h2>Toybox</h2>
++        <button on:click={() => dispatch('close')}>Close</button>
++      </header>
++
++      {#each categories as [category, items]}
++        <article class="category">
++          <h3>{category}</h3>
++          <div class="grid">
++            {#each items as item}
++              <button class="toy" on:click={() => dispatch('itemSelected', item)}>
++                <span>{item.visual ?? '🎮'}</span>
++                <strong>{item.name}</strong>
++              </button>
++            {/each}
++          </div>
++        </article>
++      {/each}
++    </div>
++  </section>
++{/if}
++
++<style>
++  .backdrop {
++    position: fixed;
++    inset: 0;
++    background: rgba(0, 0, 0, 0.58);
++    display: grid;
++    place-items: center;
++    z-index: 50;
++  }
++
++  .modal {
++    width: min(920px, 92vw);
++    max-height: 86vh;
++    overflow: auto;
++    border-radius: 28px;
++    background: #111827;
++    color: white;
++    padding: 24px;
++    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5);
++  }
++
++  header {
++    display: flex;
++    justify-content: space-between;
++    align-items: center;
++    gap: 16px;
++  }
++
++  h2, h3 {
++    margin: 0;
++  }
++
++  .category {
++    margin-top: 24px;
++  }
++
++  .grid {
++    display: grid;
++    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
++    gap: 14px;
++    margin-top: 12px;
++  }
++
++  .toy {
++    min-height: 112px;
++    display: grid;
++    place-items: center;
++    gap: 8px;
++    border: 0;
++    border-radius: 22px;
++    background: #f8fafc;
++    color: #111827;
++    cursor: pointer;
++    font-weight: 800;
++  }
++
++  .toy span {
++    font-size: 2.5rem;
++  }
++</style>
+diff --git a/editor/src/app.css b/editor/src/app.css
+new file mode 100644
+index 0000000..d7770b9
+--- /dev/null
++++ b/editor/src/app.css
+@@ -0,0 +1,22 @@
++:root {
++  color: #ffffff;
++  background: #18202f;
++  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
++  font-synthesis: none;
++  text-rendering: optimizeLegibility;
++}
++
++* {
++  box-sizing: border-box;
++}
++
++body {
++  margin: 0;
++  min-width: 960px;
++  min-height: 680px;
++  overflow: hidden;
++}
++
++button {
++  font: inherit;
++}
+diff --git a/editor/src/lib/canvasState.ts b/editor/src/lib/canvasState.ts
+new file mode 100644
+index 0000000..8d1be70
+--- /dev/null
++++ b/editor/src/lib/canvasState.ts
+@@ -0,0 +1,101 @@
++export type Vec2 = {
++  x: number;
++  y: number;
++};
++
++export type PlacedEntity = {
++  instance_id: string;
++  asset_id: string;
++  category: string;
++  type: string;
++  position: Vec2;
++  is_camera_target?: boolean;
++  modifiers: {
++    variant: string;
++    scale_multiplier: number;
++  };
++};
++
++export type ToyboxAsset = {
++  id: string;
++  name: string;
++  category: string;
++  visual?: string;
++  type?: string;
++};
++
++export type AssetInventory = Record<string, ToyboxAsset[]>;
++
++export type RoomPayload = {
++  schema_version: 1;
++  project_id: string;
++  room_id: string;
++  world_settings: {
++    time_of_day: string;
++    weather: string;
++  };
++  entities: PlacedEntity[];
++};
++
++export function makeInstanceId(prefix = 'entity'): string {
++  const safePrefix = prefix.replace(/[^a-zA-Z0-9_]/g, '_');
++  const randomPart = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(16).slice(2);
++  return `${safePrefix}_${randomPart}`;
++}
++
++export function snapPosition(point: Vec2, snapSize = 8, enabled = true): Vec2 {
++  if (!enabled) return point;
++
++  return {
++    x: Math.round(point.x / snapSize) * snapSize,
++    y: Math.round(point.y / snapSize) * snapSize
++  };
++}
++
++export function stampEntity(
++  current: PlacedEntity[],
++  asset: ToyboxAsset,
++  position: Vec2,
++  options: Partial<PlacedEntity> = {}
++): PlacedEntity[] {
++  const entity: PlacedEntity = {
++    instance_id: makeInstanceId(asset.id),
++    asset_id: asset.id,
++    category: asset.category,
++    type: options.type ?? asset.type ?? asset.category,
++    position,
++    is_camera_target: options.is_camera_target ?? asset.category === 'heroes',
++    modifiers: {
++      variant: 'default',
++      scale_multiplier: 1.0,
++      ...(options.modifiers ?? {})
++    }
++  };
++
++  return [...current, entity];
++}
++
++export function eraseEntity(current: PlacedEntity[], instanceId: string): PlacedEntity[] {
++  return current.filter((item) => item.instance_id !== instanceId);
++}
++
++export function toRoomPayload(entities: PlacedEntity[]): RoomPayload {
++  return {
++    schema_version: 1,
++    project_id: 'demo_project',
++    room_id: 'test_chamber_01',
++    world_settings: {
++      time_of_day: 'day',
++      weather: 'clear'
++    },
++    entities
++  };
++}
++
++export const fallbackInventory: AssetInventory = {
++  heroes: [{ id: 'hero_knight', name: 'Hero Knight', category: 'heroes', visual: '🛡️', type: 'player' }],
++  terrain: [{ id: 'stone_floor', name: 'Stone Floor', category: 'terrain', visual: '🪨', type: 'terrain' }],
++  enemies: [{ id: 'slime_patrol', name: 'Slime Patrol', category: 'enemies', visual: '👾', type: 'enemy' }],
++  collectibles: [{ id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', visual: '💎', type: 'collectible' }],
++  decorations: [{ id: 'neon_sign', name: 'Neon Sign', category: 'decorations', visual: '💡', type: 'decoration' }]
++};
+diff --git a/editor/src/main.ts b/editor/src/main.ts
+new file mode 100644
+index 0000000..73d7971
+--- /dev/null
++++ b/editor/src/main.ts
+@@ -0,0 +1,8 @@
++import './app.css';
++import App from './App.svelte';
++
++const app = new App({
++  target: document.getElementById('app')!
++});
++
++export default app;
+diff --git a/editor/tsconfig.json b/editor/tsconfig.json
+new file mode 100644
+index 0000000..75c95b4
+--- /dev/null
++++ b/editor/tsconfig.json
+@@ -0,0 +1,26 @@
++{
++  "compilerOptions": {
++    "target": "ES2022",
++    "useDefineForClassFields": true,
++    "module": "ESNext",
++    "resolveJsonModule": true,
++    "allowJs": true,
++    "checkJs": false,
++    "isolatedModules": true,
++    "moduleDetection": "force",
++    "strict": true,
++    "noEmit": true,
++    "moduleResolution": "Bundler",
++    "skipLibCheck": true,
++    "types": [
++      "svelte",
++      "node"
++    ]
++  },
++  "include": [
++    "src/**/*.ts",
++    "src/**/*.svelte",
++    "vite.config.ts"
++  ],
++  "references": []
++}
+diff --git a/editor/vite.config.ts b/editor/vite.config.ts
+new file mode 100644
+index 0000000..4e0004a
+--- /dev/null
++++ b/editor/vite.config.ts
+@@ -0,0 +1,17 @@
++import { defineConfig } from 'vite';
++import { svelte } from '@sveltejs/vite-plugin-svelte';
++
++export default defineConfig({
++  plugins: [svelte()],
++  clearScreen: false,
++  server: {
++    port: 5173,
++    strictPort: true
++  },
++  envPrefix: ['VITE_', 'TAURI_'],
++  build: {
++    target: process.env.TAURI_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
++    minify: !process.env.TAURI_DEBUG,
++    sourcemap: Boolean(process.env.TAURI_DEBUG)
++  }
++});
+diff --git a/engine/README.md b/engine/README.md
+new file mode 100644
+index 0000000..10ddf39
+--- /dev/null
++++ b/engine/README.md
+@@ -0,0 +1,19 @@
++# KidGameMaker Godot Runner
++
++Open this folder as a Godot 4.x project.
++
++`project.godot` runs `scenes/Main.tscn`, which attaches `scripts/Main.gd`.
++
++Default level path:
++
++```text
++res://data/dummy_level.json
++```
++
++Runtime override:
++
++```powershell
++Runner.exe --level-json C:\path\to\game_state.json
++```
++
++The runner currently uses generated placeholder shapes instead of real art. Texture loading comes next.
+diff --git a/engine/data/assets/collectibles/gold_ruby/gold_ruby.json b/engine/data/assets/collectibles/gold_ruby/gold_ruby.json
+new file mode 100644
+index 0000000..be5195b
+--- /dev/null
++++ b/engine/data/assets/collectibles/gold_ruby/gold_ruby.json
+@@ -0,0 +1,32 @@
++{
++  "schema_version": 1,
++  "asset_id": "gold_ruby",
++  "asset_name": "Gold Ruby",
++  "category": "collectibles",
++  "runtime_template": "collectible",
++  "visual": "💎",
++  "visual_tags": [
++    "treasure",
++    "pickup",
++    "shiny"
++  ],
++  "placement_logic": {
++    "snapping_type": "free_float",
++    "parallax_bucket": "play_layer"
++  },
++  "collision": {
++    "shape": "rectangle",
++    "size": [
++      24,
++      24
++    ]
++  },
++  "gameplay_logic": {
++    "on_pickup": "collect",
++    "score_value": 100,
++    "persistent": false
++  },
++  "implicit_audio": {
++    "on_overlap_player": "ruby_collect.wav"
++  }
++}
+diff --git a/engine/data/assets/decorations/neon_sign/neon_sign.json b/engine/data/assets/decorations/neon_sign/neon_sign.json
+new file mode 100644
+index 0000000..478a7d4
+--- /dev/null
++++ b/engine/data/assets/decorations/neon_sign/neon_sign.json
+@@ -0,0 +1,31 @@
++{
++  "schema_version": 1,
++  "asset_id": "neon_sign",
++  "asset_name": "Neon Sign",
++  "category": "decorations",
++  "runtime_template": "decoration",
++  "visual": "💡",
++  "visual_tags": [
++    "light",
++    "neon",
++    "decoration"
++  ],
++  "placement_logic": {
++    "snapping_type": "surface_attach",
++    "parallax_bucket": "play_layer"
++  },
++  "collision": {
++    "shape": "rectangle",
++    "size": [
++      80,
++      32
++    ]
++  },
++  "lighting_logic": {
++    "emits_light": true,
++    "light_color": "#ff4dff",
++    "light_radius": 220,
++    "light_energy": 1.2,
++    "flicker_effect": "neon_buzz"
++  }
++}
+diff --git a/engine/data/assets/enemies/slime_patrol/slime_patrol.json b/engine/data/assets/enemies/slime_patrol/slime_patrol.json
+new file mode 100644
+index 0000000..cbc50aa
+--- /dev/null
++++ b/engine/data/assets/enemies/slime_patrol/slime_patrol.json
+@@ -0,0 +1,35 @@
++{
++  "schema_version": 1,
++  "asset_id": "slime_patrol",
++  "asset_name": "Slime Patrol",
++  "category": "enemies",
++  "runtime_template": "enemy",
++  "visual": "👾",
++  "visual_tags": [
++    "enemy",
++    "small",
++    "ground"
++  ],
++  "baseline_attributes": {
++    "max_health": 20,
++    "movement_speed": 70,
++    "gravity_scale": 1.0,
++    "contact_damage": 10
++  },
++  "placement_logic": {
++    "snapping_type": "gravity_snap",
++    "parallax_bucket": "play_layer"
++  },
++  "collision": {
++    "shape": "rectangle",
++    "size": [
++      32,
++      28
++    ]
++  },
++  "implicit_behavior": {
++    "patrol": true,
++    "turn_at_walls": true,
++    "turn_at_ledges": true
++  }
++}
+diff --git a/engine/data/assets/heroes/hero_knight/hero_knight.json b/engine/data/assets/heroes/hero_knight/hero_knight.json
+new file mode 100644
+index 0000000..e99adb8
+--- /dev/null
++++ b/engine/data/assets/heroes/hero_knight/hero_knight.json
+@@ -0,0 +1,37 @@
++{
++  "schema_version": 1,
++  "asset_id": "hero_knight",
++  "asset_name": "Hero Knight",
++  "category": "heroes",
++  "runtime_template": "player",
++  "visual": "🛡️",
++  "visual_tags": [
++    "hero",
++    "armor",
++    "balanced"
++  ],
++  "archetype": "balanced_platformer",
++  "baseline_attributes": {
++    "max_health": 100,
++    "movement_speed": 230,
++    "jump_force": -500,
++    "gravity_scale": 1.0,
++    "attack_power": 10
++  },
++  "implicit_abilities": {
++    "can_double_jump": false,
++    "can_wall_slide": false,
++    "has_shield_block": false
++  },
++  "placement_logic": {
++    "snapping_type": "gravity_snap",
++    "parallax_bucket": "play_layer"
++  },
++  "collision": {
++    "shape": "rectangle",
++    "size": [
++      32,
++      48
++    ]
++  }
++}
+diff --git a/engine/data/assets/terrain/stone_floor/stone_floor.json b/engine/data/assets/terrain/stone_floor/stone_floor.json
+new file mode 100644
+index 0000000..f3bfa8c
+--- /dev/null
++++ b/engine/data/assets/terrain/stone_floor/stone_floor.json
+@@ -0,0 +1,28 @@
++{
++  "schema_version": 1,
++  "asset_id": "stone_floor",
++  "asset_name": "Stone Floor",
++  "category": "terrain",
++  "runtime_template": "terrain",
++  "visual": "🪨",
++  "visual_tags": [
++    "stone",
++    "floor",
++    "solid"
++  ],
++  "placement_logic": {
++    "snapping_type": "edge_to_edge",
++    "parallax_bucket": "play_layer"
++  },
++  "collision": {
++    "shape": "rectangle",
++    "size": [
++      128,
++      32
++    ]
++  },
++  "gameplay_logic": {
++    "is_solid": true,
++    "supports_gravity_snap": true
++  }
++}
+diff --git a/engine/data/dummy_level.json b/engine/data/dummy_level.json
+new file mode 100644
+index 0000000..5617d0c
+--- /dev/null
++++ b/engine/data/dummy_level.json
+@@ -0,0 +1,60 @@
++{
++  "schema_version": 1,
++  "project_id": "demo_project",
++  "room_id": "test_chamber_01",
++  "world_settings": {
++    "time_of_day": "day",
++    "weather": "clear"
++  },
++  "entities": [
++    {
++      "instance_id": "hero_001",
++      "asset_id": "hero_knight",
++      "category": "heroes",
++      "type": "player",
++      "position": { "x": 120, "y": 220 },
++      "is_camera_target": true,
++      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
++    },
++    {
++      "instance_id": "floor_001",
++      "asset_id": "stone_floor",
++      "category": "terrain",
++      "type": "terrain",
++      "position": { "x": 320, "y": 390 },
++      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
++    },
++    {
++      "instance_id": "floor_002",
++      "asset_id": "stone_floor",
++      "category": "terrain",
++      "type": "terrain",
++      "position": { "x": 470, "y": 390 },
++      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
++    },
++    {
++      "instance_id": "enemy_001",
++      "asset_id": "slime_patrol",
++      "category": "enemies",
++      "type": "enemy",
++      "position": { "x": 470, "y": 335 },
++      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
++    },
++    {
++      "instance_id": "ruby_001",
++      "asset_id": "gold_ruby",
++      "category": "collectibles",
++      "type": "collectible",
++      "position": { "x": 625, "y": 305 },
++      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
++    },
++    {
++      "instance_id": "sign_001",
++      "asset_id": "neon_sign",
++      "category": "decorations",
++      "type": "decoration",
++      "position": { "x": 760, "y": 250 },
++      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
++    }
++  ]
++}
+diff --git a/engine/project.godot b/engine/project.godot
+new file mode 100644
+index 0000000..b0174ef
+--- /dev/null
++++ b/engine/project.godot
+@@ -0,0 +1,20 @@
++; Engine configuration file.
++; It is best edited using the Godot editor UI.
++
++config_version=5
++
++[application]
++
++config/name="KidGameMaker Runner"
++run/main_scene="res://scenes/Main.tscn"
++config/features=PackedStringArray("4.3", "Forward Plus")
++
++[display]
++
++window/size/viewport_width=1280
++window/size/viewport_height=720
++window/stretch/mode="canvas_items"
++
++[physics]
++
++2d/default_gravity=980.0
+diff --git a/engine/scenes/Main.tscn b/engine/scenes/Main.tscn
+new file mode 100644
+index 0000000..9f0a37c
+--- /dev/null
++++ b/engine/scenes/Main.tscn
+@@ -0,0 +1,6 @@
++[gd_scene load_steps=2 format=3 uid="uid://kidgamemaker_main_scene"]
++
++[ext_resource type="Script" path="res://scripts/Main.gd" id="1_main"]
++
++[node name="Main" type="Node2D"]
++script = ExtResource("1_main")
+diff --git a/engine/scripts/Collectible.gd b/engine/scripts/Collectible.gd
+new file mode 100644
+index 0000000..48e4768
+--- /dev/null
++++ b/engine/scripts/Collectible.gd
+@@ -0,0 +1,19 @@
++extends Area2D
++
++@export var score_value: int = 0
++
++var collected := false
++
++
++func _ready() -> void:
++	body_entered.connect(_on_body_entered)
++
++
++func _on_body_entered(body: Node) -> void:
++	if collected:
++		return
++
++	if body is CharacterBody2D:
++		collected = true
++		print("Collected item for score: ", score_value)
++		queue_free()
+diff --git a/engine/scripts/Main.gd b/engine/scripts/Main.gd
+new file mode 100644
+index 0000000..67eaf82
+--- /dev/null
++++ b/engine/scripts/Main.gd
+@@ -0,0 +1,304 @@
++extends Node2D
++
++const DEFAULT_LEVEL_PATH := "res://data/dummy_level.json"
++const ASSET_ROOT := "res://data/assets"
++const PLAYER_SCRIPT := "res://scripts/PlayerController.gd"
++const ENEMY_SCRIPT := "res://scripts/SmartEnemy.gd"
++const COLLECTIBLE_SCRIPT := "res://scripts/Collectible.gd"
++
++const CATEGORY_SEARCH_ORDER := [
++	"heroes",
++	"terrain",
++	"enemies",
++	"collectibles",
++	"backgrounds",
++	"portals",
++	"decorations",
++	"audio"
++]
++
++var sidecar_cache: Dictionary = {}
++var active_player: Node2D = null
++
++
++func _ready() -> void:
++	var level_path := _resolve_level_path()
++	print("KidGameMaker runner loading level: ", level_path)
++	load_level(level_path)
++
++
++func _resolve_level_path() -> String:
++	var args := OS.get_cmdline_args()
++	for i in range(args.size()):
++		if args[i] == "--level-json" and i + 1 < args.size():
++			return args[i + 1]
++	return DEFAULT_LEVEL_PATH
++
++
++func load_level(file_path: String) -> void:
++	if not FileAccess.file_exists(file_path):
++		push_error("Level JSON does not exist: " + file_path)
++		return
++
++	var file := FileAccess.open(file_path, FileAccess.READ)
++	if file == null:
++		push_error("Could not open level JSON: " + file_path)
++		return
++
++	var json_string := file.get_as_text()
++	var json := JSON.new()
++	var error := json.parse(json_string)
++
++	if error != OK:
++		push_error("JSON parse error: " + json.get_error_message())
++		return
++
++	var level_data: Variant = json.get_data()
++	if typeof(level_data) != TYPE_DICTIONARY:
++		push_error("Level JSON root must be a Dictionary/Object.")
++		return
++
++	var room_id := str(level_data.get("room_id", "unknown_room"))
++	print("Loaded room: ", room_id)
++
++	_apply_world_settings(level_data.get("world_settings", {}))
++
++	var entities: Array = level_data.get("entities", [])
++	for entity_data in entities:
++		if typeof(entity_data) == TYPE_DICTIONARY:
++			spawn_entity(entity_data)
++
++
++func spawn_entity(data: Dictionary) -> Node2D:
++	var asset_id := str(data.get("asset_id", ""))
++	if asset_id == "":
++		push_warning("Entity missing asset_id.")
++		return null
++
++	var sidecar := _load_sidecar(asset_id, str(data.get("category", "")))
++	var runtime_template := str(sidecar.get("runtime_template", data.get("type", "decoration")))
++
++	var node: Node2D
++	match runtime_template:
++		"player":
++			node = _make_player(data, sidecar)
++		"terrain":
++			node = _make_terrain(data, sidecar)
++		"enemy":
++			node = _make_enemy(data, sidecar)
++		"collectible":
++			node = _make_collectible(data, sidecar)
++		"checkpoint":
++			node = _make_checkpoint(data, sidecar)
++		_:
++			node = _make_decoration(data, sidecar)
++
++	node.name = str(data.get("instance_id", asset_id))
++	node.global_position = _read_position(data.get("position", {"x": 0, "y": 0}))
++	node.z_index = _z_index_for_bucket(_placement_bucket(sidecar))
++
++	var modifiers: Dictionary = data.get("modifiers", {})
++	var scale_multiplier := float(modifiers.get("scale_multiplier", 1.0))
++	node.scale = Vector2(scale_multiplier, scale_multiplier)
++
++	add_child(node)
++
++	if bool(data.get("is_camera_target", false)):
++		active_player = node
++		_attach_camera(node)
++
++	_apply_lighting_if_needed(node, sidecar)
++
++	print("Spawned ", asset_id, " as ", runtime_template, " at ", node.global_position)
++	return node
++
++
++func _make_player(_data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
++	var body := CharacterBody2D.new()
++	var size := _collision_size(sidecar, Vector2(32, 48))
++	_add_box_collision(body, size)
++	_add_placeholder_polygon(body, size, Color(0.2, 0.55, 1.0, 0.9))
++
++	var script := load(PLAYER_SCRIPT)
++	if script != null:
++		body.set_script(script)
++		var attrs: Dictionary = sidecar.get("baseline_attributes", {})
++		body.set("max_health", int(attrs.get("max_health", 100)))
++		body.set("movement_speed", float(attrs.get("movement_speed", 220)))
++		body.set("jump_force", float(attrs.get("jump_force", -460)))
++		body.set("gravity_scale", float(attrs.get("gravity_scale", 1.0)))
++
++	return body
++
++
++func _make_terrain(_data: Dictionary, sidecar: Dictionary) -> StaticBody2D:
++	var body := StaticBody2D.new()
++	var size := _collision_size(sidecar, Vector2(128, 32))
++	_add_box_collision(body, size)
++	_add_placeholder_polygon(body, size, Color(0.45, 0.45, 0.45, 1.0))
++	return body
++
++
++func _make_enemy(_data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
++	var body := CharacterBody2D.new()
++	var size := _collision_size(sidecar, Vector2(32, 32))
++	_add_box_collision(body, size)
++	_add_placeholder_polygon(body, size, Color(1.0, 0.25, 0.25, 0.9))
++
++	var script := load(ENEMY_SCRIPT)
++	if script != null:
++		body.set_script(script)
++		var attrs: Dictionary = sidecar.get("baseline_attributes", {})
++		body.set("patrol_speed", float(attrs.get("movement_speed", 70)))
++		body.set("gravity_scale", float(attrs.get("gravity_scale", 1.0)))
++
++	return body
++
++
++func _make_collectible(_data: Dictionary, sidecar: Dictionary) -> Area2D:
++	var area := Area2D.new()
++	var size := _collision_size(sidecar, Vector2(24, 24))
++	_add_box_collision(area, size)
++	_add_placeholder_polygon(area, size, Color(1.0, 0.85, 0.15, 0.95))
++
++	var script := load(COLLECTIBLE_SCRIPT)
++	if script != null:
++		area.set_script(script)
++		var gameplay: Dictionary = sidecar.get("gameplay_logic", {})
++		area.set("score_value", int(gameplay.get("score_value", 0)))
++
++	return area
++
++
++func _make_checkpoint(_data: Dictionary, sidecar: Dictionary) -> Area2D:
++	var area := Area2D.new()
++	var size := _collision_size(sidecar, Vector2(40, 56))
++	_add_box_collision(area, size)
++	_add_placeholder_polygon(area, size, Color(0.3, 1.0, 0.7, 0.8))
++	return area
++
++
++func _make_decoration(_data: Dictionary, sidecar: Dictionary) -> Node2D:
++	var node := Node2D.new()
++	var size := _collision_size(sidecar, Vector2(48, 48))
++	_add_placeholder_polygon(node, size, Color(0.65, 0.35, 1.0, 0.75))
++	return node
++
++
++func _read_position(value: Variant) -> Vector2:
++	if typeof(value) == TYPE_ARRAY and value.size() >= 2:
++		return Vector2(float(value[0]), float(value[1]))
++
++	if typeof(value) == TYPE_DICTIONARY:
++		return Vector2(float(value.get("x", 0)), float(value.get("y", 0)))
++
++	return Vector2.ZERO
++
++
++func _load_sidecar(asset_id: String, category_hint: String = "") -> Dictionary:
++	if sidecar_cache.has(asset_id):
++		return sidecar_cache[asset_id]
++
++	var candidates: Array[String] = []
++
++	if category_hint != "":
++		candidates.append("%s/%s/%s/%s.json" % [ASSET_ROOT, category_hint, asset_id, asset_id])
++
++	for category in CATEGORY_SEARCH_ORDER:
++		candidates.append("%s/%s/%s/%s.json" % [ASSET_ROOT, category, asset_id, asset_id])
++
++	for path in candidates:
++		if FileAccess.file_exists(path):
++			var file := FileAccess.open(path, FileAccess.READ)
++			var json := JSON.new()
++			if json.parse(file.get_as_text()) == OK:
++				var parsed: Variant = json.get_data()
++				if typeof(parsed) == TYPE_DICTIONARY:
++					sidecar_cache[asset_id] = parsed
++					return parsed
++
++	push_warning("No sidecar found for asset_id: " + asset_id + ". Using defaults.")
++	var fallback := {
++		"asset_id": asset_id,
++		"asset_name": asset_id,
++		"runtime_template": "decoration",
++		"placement_logic": {"parallax_bucket": "play_layer"},
++		"collision": {"size": [48, 48]}
++	}
++	sidecar_cache[asset_id] = fallback
++	return fallback
++
++
++func _collision_size(sidecar: Dictionary, fallback: Vector2) -> Vector2:
++	var collision: Dictionary = sidecar.get("collision", {})
++	var size_value: Variant = collision.get("size", [fallback.x, fallback.y])
++	if typeof(size_value) == TYPE_ARRAY and size_value.size() >= 2:
++		return Vector2(float(size_value[0]), float(size_value[1]))
++	return fallback
++
++
++func _add_box_collision(parent: Node, size: Vector2) -> void:
++	var shape := RectangleShape2D.new()
++	shape.size = size
++	var collision := CollisionShape2D.new()
++	collision.shape = shape
++	parent.add_child(collision)
++
++
++func _add_placeholder_polygon(parent: Node2D, size: Vector2, color: Color) -> void:
++	var half := size * 0.5
++	var poly := Polygon2D.new()
++	poly.polygon = PackedVector2Array([
++		Vector2(-half.x, -half.y),
++		Vector2(half.x, -half.y),
++		Vector2(half.x, half.y),
++		Vector2(-half.x, half.y)
++	])
++	poly.color = color
++	parent.add_child(poly)
++
++
++func _attach_camera(target: Node2D) -> void:
++	var camera := Camera2D.new()
++	camera.position_smoothing_enabled = true
++	camera.position_smoothing_speed = 8.0
++	target.add_child(camera)
++	camera.make_current()
++	print("Camera attached to: ", target.name)
++
++
++func _placement_bucket(sidecar: Dictionary) -> String:
++	var placement: Dictionary = sidecar.get("placement_logic", {})
++	return str(placement.get("parallax_bucket", "play_layer"))
++
++
++func _z_index_for_bucket(bucket: String) -> int:
++	match bucket:
++		"deep_background":
++			return -300
++		"midground":
++			return -100
++		"play_layer":
++			return 0
++		"foreground":
++			return 100
++		_:
++			return 0
++
++
++func _apply_world_settings(settings: Dictionary) -> void:
++	var time_of_day := str(settings.get("time_of_day", "day"))
++	var weather := str(settings.get("weather", "clear"))
++	print("World settings: time=", time_of_day, " weather=", weather)
++
++
++func _apply_lighting_if_needed(node: Node2D, sidecar: Dictionary) -> void:
++	var lighting: Dictionary = sidecar.get("lighting_logic", {})
++	if not bool(lighting.get("emits_light", false)):
++		return
++
++	var light := PointLight2D.new()
++	light.color = Color(str(lighting.get("light_color", "#ffffff")))
++	light.energy = float(lighting.get("light_energy", 1.0))
++	light.texture_scale = float(lighting.get("light_radius", 128.0)) / 128.0
++	node.add_child(light)
+diff --git a/engine/scripts/PlayerController.gd b/engine/scripts/PlayerController.gd
+new file mode 100644
+index 0000000..9a2fd25
+--- /dev/null
++++ b/engine/scripts/PlayerController.gd
+@@ -0,0 +1,25 @@
++extends CharacterBody2D
++
++@export var max_health: int = 100
++@export var movement_speed: float = 220.0
++@export var jump_force: float = -460.0
++@export var gravity_scale: float = 1.0
++
++var current_health: int = max_health
++var gravity: float = ProjectSettings.get_setting("physics/2d/default_gravity")
++
++
++func _ready() -> void:
++	current_health = max_health
++
++
++func _physics_process(delta: float) -> void:
++	var input_dir := Input.get_axis("ui_left", "ui_right")
++	velocity.x = input_dir * movement_speed
++
++	if not is_on_floor():
++		velocity.y += gravity * gravity_scale * delta
++	elif Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
++		velocity.y = jump_force
++
++	move_and_slide()
+diff --git a/engine/scripts/SmartEnemy.gd b/engine/scripts/SmartEnemy.gd
+new file mode 100644
+index 0000000..31364e5
+--- /dev/null
++++ b/engine/scripts/SmartEnemy.gd
+@@ -0,0 +1,42 @@
++extends CharacterBody2D
++
++@export var patrol_speed: float = 70.0
++@export var gravity_scale: float = 1.0
++@export var ledge_probe_distance: float = 28.0
++@export var ledge_probe_depth: float = 48.0
++
++var direction: int = -1
++var gravity: float = ProjectSettings.get_setting("physics/2d/default_gravity")
++var floor_probe: RayCast2D
++
++
++func _ready() -> void:
++	floor_probe = RayCast2D.new()
++	floor_probe.enabled = true
++	add_child(floor_probe)
++	_update_probe()
++
++
++func _physics_process(delta: float) -> void:
++	if not is_on_floor():
++		velocity.y += gravity * gravity_scale * delta
++
++	velocity.x = float(direction) * patrol_speed
++	move_and_slide()
++
++	if is_on_wall() or not _has_floor_ahead():
++		direction *= -1
++		_update_probe()
++
++
++func _has_floor_ahead() -> bool:
++	_update_probe()
++	floor_probe.force_raycast_update()
++	return floor_probe.is_colliding()
++
++
++func _update_probe() -> void:
++	if floor_probe == null:
++		return
++	floor_probe.position = Vector2(float(direction) * ledge_probe_distance, 0)
++	floor_probe.target_position = Vector2(0, ledge_probe_depth)
+diff --git a/tools/apply_phase1.ps1 b/tools/apply_phase1.ps1
+new file mode 100644
+index 0000000..da583e9
+--- /dev/null
++++ b/tools/apply_phase1.ps1
+@@ -0,0 +1,29 @@
++param(
++    [Parameter(Mandatory=$true)]
++    [string]$SourcePath,
++
++    [string]$TargetPath = (Get-Location).Path
++)
++
++$ErrorActionPreference = "Stop"
++
++if (!(Test-Path $SourcePath)) {
++    throw "SourcePath does not exist: $SourcePath"
++}
++
++if (!(Test-Path (Join-Path $TargetPath ".git"))) {
++    throw "TargetPath is not a git repo root: $TargetPath"
++}
++
++$exclude = @(".git", "kidgamemaker_phase1_contract_runner.patch")
++
++Get-ChildItem -Path $SourcePath -Force | Where-Object { $exclude -notcontains $_.Name } | ForEach-Object {
++    $destination = Join-Path $TargetPath $_.Name
++    if (Test-Path $destination) {
++        Remove-Item $destination -Recurse -Force
++    }
++    Copy-Item $_.FullName $destination -Recurse -Force
++}
++
++Write-Host "Phase 1 files copied into $TargetPath"
++Write-Host "Next: git status; git add .; git commit -m 'Start contract-first KidGameMaker runner'; git push"
+diff --git a/tools/validate_json.py b/tools/validate_json.py
+new file mode 100644
+index 0000000..5393222
+--- /dev/null
++++ b/tools/validate_json.py
+@@ -0,0 +1,22 @@
++from pathlib import Path
++import json
++import sys
++
++ROOT = Path(__file__).resolve().parents[1]
++errors: list[str] = []
++
++for path in sorted(ROOT.rglob('*.json')):
++    if any(part in {'node_modules', 'target', '.svelte-kit', 'dist'} for part in path.parts):
++        continue
++    try:
++        json.loads(path.read_text(encoding='utf-8'))
++    except Exception as exc:  # noqa: BLE001
++        errors.append(f'{path.relative_to(ROOT)}: {exc}')
++
++if errors:
++    print('JSON validation failed:')
++    for error in errors:
++        print(f' - {error}')
++    sys.exit(1)
++
++print('All JSON files parsed successfully.')
