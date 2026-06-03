@@ -403,6 +403,17 @@
     }
   }
 
+  async function exportGame() {
+    status = 'Saving and exporting...';
+    try {
+      await saveCurrentRoom();
+      const payload = toRoomPayload(placed);
+      status = await invoke<string>('export_game', { projectId: payload.project_id });
+    } catch (error) {
+      status = `Export failed: ${String(error)}`;
+    }
+  }
+
   function selectAsset(asset: ToyboxAsset) {
     activeAsset = asset;
     eraserMode = false;
@@ -444,6 +455,7 @@
 
     <button class="play" on:click={play}>▶ PLAY</button>
     <button class="save" on:click={saveCurrentRoom}>💾 SAVE</button>
+    <button class="export" on:click={exportGame} style="background: #10b981; color: white;">📦 EXPORT</button>
     <button class:active={!eraserMode} on:click={() => (eraserMode = false)} style="display: flex; align-items: center; gap: 8px;">
       <span>Stamp:</span>
       <span class="active-visual-container">

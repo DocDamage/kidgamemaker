@@ -18,7 +18,8 @@ pub fn run() {
             commands::launch_runner,
             commands::save_room,
             commands::load_room,
-            commands::list_rooms
+            commands::list_rooms,
+            commands::export_game
         ])
         .run(tauri::generate_context!())
         .expect("error while running KidGameMaker Tauri application");

@@ -473,3 +473,148 @@ pub fn list_rooms() -> Result<Vec<String>, String> {
     rooms.sort();
     Ok(rooms)
 }
+
+fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    fs::create_dir_all(&dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn export_game(project_id: String) -> Result<String, String> {
+    let repo_root = locate_repo_root()?;
+    let engine_dir = repo_root.join("engine");
+    let exports_dir = repo_root.join("exports");
+
+    fs::create_dir_all(&exports_dir)
+        .map_err(|err| format!("Failed to create exports directory: {err}"))?;
+
+    let safe_project_id = project_id.replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "_");
+    if safe_project_id.is_empty() {
+        return Err("Project ID cannot be empty".to_string());
+    }
+
+    let package_dir = exports_dir.join(format!("{safe_project_id}_export"));
+
+    if package_dir.exists() {
+        fs::remove_dir_all(&package_dir)
+            .map_err(|err| format!("Failed to clean existing export directory: {err}"))?;
+    }
+    fs::create_dir_all(&package_dir)
+        .map_err(|err| format!("Failed to create package directory: {err}"))?;
+
+    let data_src = engine_dir.join("data");
+    let data_dst = package_dir.join("data");
+    if data_src.exists() {
+        copy_dir_all(&data_src, &data_dst)
+            .map_err(|err| format!("Failed to copy data folder: {err}"))?;
+    }
+
+    let mut notice = String::new();
+    match locate_godot_runner(&engine_dir) {
+        Some(runner_path) => {
+            let exe_name = if cfg!(target_os = "windows") {
+                "PlayGame.exe"
+            } else {
+                "PlayGame"
+            };
+            let exe_dst = package_dir.join(exe_name);
+            fs::copy(&runner_path, &exe_dst)
+                .map_err(|err| format!("Failed to copy Godot runner executable: {err}"))?;
+        }
+        None => {
+            let files_to_copy = vec!["project.godot", "icon.svg"];
+            for file in files_to_copy {
+                let src_file = engine_dir.join(file);
+                if src_file.exists() {
+                    fs::copy(&src_file, package_dir.join(file))
+                        .map_err(|err| format!("Failed to copy {file} fallback: {err}"))?;
+                }
+            }
+            let scripts_src = engine_dir.join("scripts");
+            let scripts_dst = package_dir.join("scripts");
+            if scripts_src.exists() {
+                copy_dir_all(&scripts_src, &scripts_dst)
+                    .map_err(|err| format!("Failed to copy scripts folder fallback: {err}"))?;
+            }
+            notice = " (Notice: Godot runner binary not found, exported as standalone Godot project instead)".to_string();
+        }
+    }
+
+    let zip_path = exports_dir.join(format!("{safe_project_id}_export.zip"));
+
+    if zip_path.exists() {
+        let _ = fs::remove_file(&zip_path);
+    }
+
+    if cfg!(target_os = "windows") {
+        let package_dir_str = package_dir.display().to_string();
+        let zip_path_str = zip_path.display().to_string();
+
+        let output = std::process::Command::new("powershell")
+            .arg("-NoProfile")
+            .arg("-Command")
+            .arg(format!(
+                "Compress-Archive -Path '{}/*' -DestinationPath '{}' -Force",
+                package_dir_str, zip_path_str
+            ))
+            .output()
+            .map_err(|err| format!("Failed to execute PowerShell zip command: {err}"))?;
+
+        if !output.status.success() {
+            let err_msg = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("PowerShell zip execution failed: {err_msg}"));
+        }
+    } else {
+        let zip_path_str = zip_path.display().to_string();
+
+        let output = std::process::Command::new("zip")
+            .arg("-r")
+            .arg(&zip_path_str)
+            .arg(".")
+            .current_dir(&package_dir)
+            .output()
+            .map_err(|err| format!("Failed to execute zip command: {err}"))?;
+
+        if !output.status.success() {
+            let err_msg = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Zip command execution failed: {err_msg}"));
+        }
+    }
+
+    let _ = fs::remove_dir_all(&package_dir);
+
+    Ok(format!(
+        "Game successfully exported to: {}{}",
+        zip_path.display(),
+        notice
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_export_game() {
+        let result = export_game("test_project_id_123".to_string());
+        assert!(result.is_ok());
+
+        let path_str = result.unwrap();
+        assert!(path_str.contains("test_project_id_123_export.zip"));
+
+        let repo_root = locate_repo_root().unwrap();
+        let zip_path = repo_root.join("exports").join("test_project_id_123_export.zip");
+        assert!(zip_path.exists());
+
+        let _ = std::fs::remove_file(&zip_path);
+    }
+}
