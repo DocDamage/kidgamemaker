@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "asset_id": "red_slime_enemy",
+  "asset_name": "Red Slime Enemy",
+  "category": "enemies",
+  "runtime_template": "enemy",
+  "visual": "red_slime_enemy.png",
+  "visual_tags": ["red","slime","enemy"],
+  "placement_logic": {
+    "snapping_type": "gravity_snap",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      64,
+      64
+    ]
+  }
+}

@@ -312,7 +312,7 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
     inventory
 }
 
-fn locate_repo_root() -> Result<PathBuf, String> {
+pub fn locate_repo_root() -> Result<PathBuf, String> {
     let current = std::env::current_dir()
         .map_err(|err| format!("Could not read current directory: {err}"))?;
 

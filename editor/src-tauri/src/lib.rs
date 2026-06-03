@@ -1,7 +1,12 @@
 mod commands;
+mod inbox;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if let Ok(repo_root) = commands::locate_repo_root() {
+        inbox::start_inbox_watcher(repo_root);
+    }
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             commands::compile_and_play,
