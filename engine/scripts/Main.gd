@@ -28,6 +28,10 @@ var current_weather: String = "clear"
 var score: int = 0
 var keys_collected: Dictionary = {}  # key_color -> count
 
+var hud_canvas: CanvasLayer = null
+var hud_health_label: Label = null
+var hud_score_label: Label = null
+
 
 func _ready() -> void:
 	var level_path := _resolve_level_path()
@@ -100,6 +104,7 @@ func load_level(file_path: String) -> void:
 
 	_apply_weather_particles()
 	_configure_camera_limits()
+	_create_hud()
 
 
 func _merge_terrain_entities(entities: Array) -> Array:
@@ -889,3 +894,73 @@ func _apply_audio_if_needed(node: Node2D, sidecar: Dictionary) -> void:
 				player.max_distance = float(audio.get("max_distance", 500.0))
 				node.add_child(player)
 				print("Spatial SFX spawned for ", node.name, " playing ", resolved_audio_path)
+
+
+func _process(_delta: float) -> void:
+	_update_hud()
+
+
+func _create_hud() -> void:
+	if hud_canvas != null and is_instance_valid(hud_canvas):
+		hud_canvas.queue_free()
+
+	hud_canvas = CanvasLayer.new()
+	hud_canvas.layer = 100
+	add_child(hud_canvas)
+
+	var control := Control.new()
+	control.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	hud_canvas.add_child(control)
+
+	hud_health_label = Label.new()
+	hud_health_label.position = Vector2(24, 24)
+	var health_settings := LabelSettings.new()
+	health_settings.font_size = 28
+	health_settings.outline_size = 6
+	health_settings.outline_color = Color.BLACK
+	hud_health_label.label_settings = health_settings
+	control.add_child(hud_health_label)
+
+	hud_score_label = Label.new()
+	hud_score_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	hud_score_label.anchor_left = 1.0
+	hud_score_label.anchor_right = 1.0
+	hud_score_label.offset_left = -250
+	hud_score_label.offset_top = 24
+	var score_settings := LabelSettings.new()
+	score_settings.font_size = 28
+	score_settings.outline_size = 6
+	score_settings.outline_color = Color.BLACK
+	hud_score_label.label_settings = score_settings
+	control.add_child(hud_score_label)
+
+
+func _update_hud() -> void:
+	if hud_health_label == null or not is_instance_valid(hud_health_label):
+		return
+	if hud_score_label == null or not is_instance_valid(hud_score_label):
+		return
+
+	if active_player != null and is_instance_valid(active_player):
+		var hp: int = active_player.get("current_health") if "current_health" in active_player else 100
+		var max_hp: int = active_player.get("max_health") if "max_health" in active_player else 100
+		
+		var total_hearts := 5
+		var hp_per_heart := float(max_hp) / float(total_hearts)
+		var hearts_str := ""
+		
+		for i in range(total_hearts):
+			var threshold := (i + 1) * hp_per_heart
+			if float(hp) >= threshold:
+				hearts_str += "❤️"
+			elif float(hp) >= threshold - (hp_per_heart * 0.5):
+				hearts_str += "💔"
+			else:
+				hearts_str += "🖤"
+				
+		hud_health_label.text = "HP: " + hearts_str
+	else:
+		hud_health_label.text = ""
+
+	hud_score_label.text = "⭐ " + str(score)
+
