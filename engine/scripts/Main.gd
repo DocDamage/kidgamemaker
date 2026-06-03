@@ -34,6 +34,14 @@ var hud_score_label: Label = null
 
 
 func _ready() -> void:
+	if OS.has_feature("web"):
+		var json_str = JavaScriptBridge.eval("window.parent.currentGameLevel")
+		if not json_str:
+			json_str = JavaScriptBridge.eval("window.currentGameLevel")
+		if json_str:
+			print("Loading level from JS bridge...")
+			load_level_from_string(json_str)
+			return
 	var level_path := _resolve_level_path()
 	print("KidGameMaker runner loading level: ", level_path)
 	load_level(level_path)
@@ -70,6 +78,10 @@ func load_level(file_path: String) -> void:
 		return
 
 	var json_string := file.get_as_text()
+	load_level_from_string(json_string)
+
+
+func load_level_from_string(json_string: String) -> void:
 	var json := JSON.new()
 	var error := json.parse(json_string)
 
@@ -792,6 +804,9 @@ func _apply_world_settings(settings: Dictionary) -> void:
 		_:
 			modulate_node.color = Color.WHITE
 
+	var theme := str(settings.get("theme", "default"))
+	_play_theme_bgm(theme)
+
 
 func _apply_lighting_if_needed(node: Node2D, sidecar: Dictionary) -> void:
 	var lighting: Dictionary = sidecar.get("lighting_logic", {})
@@ -970,4 +985,97 @@ func _update_hud() -> void:
 		hud_health_label.text = ""
 
 	hud_score_label.text = "⭐ " + str(score)
+
+
+var _bgm_player: AudioStreamPlayer = null
+var _sfx_cache: Dictionary = {}
+
+func _play_theme_bgm(theme: String) -> void:
+	if _bgm_player != null and is_instance_valid(_bgm_player):
+		_bgm_player.stop()
+		_bgm_player.queue_free()
+		_bgm_player = null
+
+	var bgm_path := ""
+	match theme:
+		"space":
+			bgm_path = "res://data/assets/audio/space_bgm.wav"
+		"candy":
+			bgm_path = "res://data/assets/audio/candy_bgm.wav"
+		"jungle":
+			bgm_path = "res://data/assets/audio/jungle_bgm.wav"
+
+	if bgm_path != "":
+		var stream = _load_wav_file(bgm_path)
+		if stream != null:
+			stream.loop = true
+			_bgm_player = AudioStreamPlayer.new()
+			_bgm_player.stream = stream
+			_bgm_player.volume_db = -10.0 # BGM should be quiet
+			add_child(_bgm_player)
+			_bgm_player.play()
+			print("Playing BGM theme: ", theme)
+
+
+func play_sfx(type: String) -> void:
+	var sound_path := ""
+	match type:
+		"coin":
+			sound_path = "res://data/assets/audio/coin.wav"
+		"jump":
+			sound_path = "res://data/assets/audio/jump.wav"
+		"hit":
+			sound_path = "res://data/assets/audio/hit.wav"
+
+	if sound_path == "":
+		return
+
+	var stream: AudioStreamWav = null
+	if _sfx_cache.has(type):
+		stream = _sfx_cache[type]
+	else:
+		stream = _load_wav_file(sound_path)
+		if stream != null:
+			_sfx_cache[type] = stream
+
+	if stream != null:
+		var player := AudioStreamPlayer.new()
+		player.stream = stream
+		player.volume_db = -5.0 # slightly quieter for kid ears
+		add_child(player)
+		player.play()
+		player.finished.connect(player.queue_free)
+
+
+func _load_wav_file(path: String) -> AudioStreamWav:
+	var resolved_path := path
+	if resolved_path.begins_with("file://"):
+		resolved_path = resolved_path.replace("file://", "")
+		if OS.get_name() == "Windows" and resolved_path.begins_with("/"):
+			resolved_path = resolved_path.substr(1)
+
+	var final_fs_path := ProjectSettings.globalize_path(resolved_path)
+	if not FileAccess.file_exists(final_fs_path):
+		# Fallback: check relative to engine directory
+		var exe_dir = OS.get_executable_path().get_base_dir()
+		var alt_path = exe_dir.path_join(path.replace("res://", ""))
+		if FileAccess.file_exists(alt_path):
+			final_fs_path = alt_path
+		else:
+			print("SFX file not found: ", final_fs_path)
+			return null
+
+	var file = FileAccess.open(final_fs_path, FileAccess.READ)
+	if file == null:
+		return null
+	var bytes = file.get_buffer(file.get_length())
+	if bytes.size() < 44:
+		return null
+
+	var stream = AudioStreamWav.new()
+	stream.format = AudioStreamWav.FORMAT_16_BITS
+	stream.mix_rate = 22050
+	stream.stereo = false
+	stream.data = bytes.slice(44)
+	return stream
 

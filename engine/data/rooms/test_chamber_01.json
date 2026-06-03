@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "project_id": "demo_project",
+  "room_id": "test_chamber_01",
+  "world_settings": {
+    "time_of_day": "day",
+    "weather": "clear",
+    "theme": "default"
+  },
+  "entities": [
+    {
+      "instance_id": "hero_001",
+      "asset_id": "hero_knight",
+      "category": "heroes",
+      "type": "player",
+      "position": { "x": 128, "y": 300 },
+      "is_camera_target": true,
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "floor_001",
+      "asset_id": "stone_floor",
+      "category": "terrain",
+      "type": "terrain",
+      "position": { "x": 128, "y": 392 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "floor_002",
+      "asset_id": "stone_floor",
+      "category": "terrain",
+      "type": "terrain",
+      "position": { "x": 256, "y": 392 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "floor_003",
+      "asset_id": "stone_floor",
+      "category": "terrain",
+      "type": "terrain",
+      "position": { "x": 384, "y": 392 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "floor_004",
+      "asset_id": "stone_floor",
+      "category": "terrain",
+      "type": "terrain",
+      "position": { "x": 512, "y": 392 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "floor_005",
+      "asset_id": "stone_floor",
+      "category": "terrain",
+      "type": "terrain",
+      "position": { "x": 640, "y": 392 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "floor_006",
+      "asset_id": "stone_floor",
+      "category": "terrain",
+      "type": "terrain",
+      "position": { "x": 768, "y": 392 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "floor_007",
+      "asset_id": "stone_floor",
+      "category": "terrain",
+      "type": "terrain",
+      "position": { "x": 896, "y": 392 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "portal_001",
+      "asset_id": "gold_ruby",
+      "category": "collectibles",
+      "type": "collectible",
+      "position": { "x": 800, "y": 330 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    }
+  ]
+}

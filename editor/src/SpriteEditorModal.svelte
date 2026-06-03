@@ -32,6 +32,8 @@
   let currentColor = '#ff4b4b';
   let isDrawing = false;
   let isEraser = false;
+  let brushSize = 1;
+  let isBucket = false;
 
   let pixels: string[][] = Array(GRID_SIZE)
     .fill(null)
@@ -41,6 +43,153 @@
   $: if (isVisible && canvasElement) {
     initCanvas();
     loadExistingSprite();
+  }
+
+  let audioCtx: AudioContext | null = null;
+  function getAudioContext() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  function playDrawSound(type: 'draw' | 'clear' | 'chime') {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+      if (type === 'draw') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1000 + Math.random() * 200, now);
+        gain.gain.setValueAtTime(0.04, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.08);
+      } else if (type === 'clear') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      } else if (type === 'chime') {
+        const notes = [600, 800, 1000, 1200];
+        notes.forEach((freq, i) => {
+          const time = now + i * 0.04;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, time);
+          gain.gain.setValueAtTime(0.05, time);
+          gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(time);
+          osc.stop(time + 0.1);
+        });
+      }
+    } catch (_) {}
+  }
+
+  const TEMPLATES = {
+    sword: [
+      '.......##.......',
+      '......#..#......',
+      '......#..#......',
+      '......#..#......',
+      '......#..#......',
+      '......#..#......',
+      '......#..#......',
+      '......#..#......',
+      '......#..#......',
+      '....###..###....',
+      '....#......#....',
+      '....########....',
+      '......#..#......',
+      '......#..#......',
+      '.....##..##.....',
+      '......####......'
+    ],
+    monster: [
+      '......####......',
+      '....##....##....',
+      '..##........##..',
+      '.#............#.',
+      '#....#....#....#',
+      '#...##....##...#',
+      '#..............#',
+      '#...#......#...#',
+      '#....######....#',
+      '.#............#.',
+      '..##........##..',
+      '....########....',
+      '................',
+      '................',
+      '................',
+      '................'
+    ],
+    coin: [
+      '......####......',
+      '....##....##....',
+      '..##........##..',
+      '.#...######...#.',
+      '#...##....##...#',
+      '#...#..##..#...#',
+      '#...#..##..#...#',
+      '#...#..##..#...#',
+      '#...#..##..#...#',
+      '#...#..##..#...#',
+      '#...##....##...#',
+      '.#...######...#.',
+      '..##........##..',
+      '....##....##....',
+      '......####......',
+      '................'
+    ],
+    heart: [
+      '......####......',
+      '....##....##....',
+      '..##........##..',
+      '.#............#.',
+      '#..............#',
+      '#..............#',
+      '#..............#',
+      '.#............#.',
+      '..##........##..',
+      '....##....##....',
+      '......####......',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................'
+    ]
+  };
+
+  function applyTemplate(templateName: keyof typeof TEMPLATES) {
+    const lines = TEMPLATES[templateName];
+    for (let y = 0; y < GRID_SIZE; y++) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        if (lines[y][x] === '#') {
+          pixels[y][x] = '#212121'; // black outline
+        } else {
+          pixels[y][x] = 'transparent';
+        }
+      }
+    }
+    redrawGrid();
+    playDrawSound('chime');
   }
 
   function initCanvas() {
@@ -58,7 +207,6 @@
         });
       } catch (err) {
         console.error('Failed to load existing sprite:', err);
-        // Fallback to blank canvas on failure
         pixels = Array(GRID_SIZE)
           .fill(null)
           .map(() => Array(GRID_SIZE).fill('transparent'));
@@ -77,7 +225,6 @@
 
     const cellSize = canvasElement.width / GRID_SIZE;
 
-    // Draw grid pixels
     for (let y = 0; y < GRID_SIZE; y++) {
       for (let x = 0; x < GRID_SIZE; x++) {
         if (pixels[y][x] !== 'transparent') {
@@ -95,22 +242,64 @@
     const y = Math.floor((clientY - rect.top) / (canvasElement.height / GRID_SIZE));
 
     if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
-      pixels[y][x] = isEraser ? 'transparent' : currentColor;
-      redrawGrid();
+      const colorToUse = isEraser ? 'transparent' : currentColor;
+      
+      if (isBucket) {
+        const targetColor = pixels[y][x];
+        if (targetColor !== colorToUse) {
+          floodFill(x, y, targetColor, colorToUse);
+          redrawGrid();
+          playDrawSound('chime');
+        }
+      } else {
+        const startX = x - Math.floor(brushSize / 2);
+        const startY = y - Math.floor(brushSize / 2);
+        let drawnAny = false;
+        
+        for (let dy = 0; dy < brushSize; dy++) {
+          for (let dx = 0; dx < brushSize; dx++) {
+            const px = startX + dx;
+            const py = startY + dy;
+            if (px >= 0 && px < GRID_SIZE && py >= 0 && py < GRID_SIZE) {
+              if (pixels[py][px] !== colorToUse) {
+                pixels[py][px] = colorToUse;
+                drawnAny = true;
+              }
+            }
+          }
+        }
+        
+        if (drawnAny) {
+          redrawGrid();
+          playDrawSound('draw');
+        }
+      }
     }
   }
 
-  // Auto-Save: Downscale to a tiny 16x16 PNG and save silently via Rust
+  function floodFill(startX: number, startY: number, targetColor: string, replacementColor: string) {
+    if (targetColor === replacementColor) return;
+    const queue: [number, number][] = [[startX, startY]];
+    while (queue.length > 0) {
+      const [cx, cy] = queue.shift()!;
+      if (pixels[cy][cx] === targetColor) {
+        pixels[cy][cx] = replacementColor;
+        if (cx > 0) queue.push([cx - 1, cy]);
+        if (cx < GRID_SIZE - 1) queue.push([cx + 1, cy]);
+        if (cy > 0) queue.push([cx, cy - 1]);
+        if (cy < GRID_SIZE - 1) queue.push([cx, cy + 1]);
+      }
+    }
+  }
+
   async function triggerAutoSave() {
     if (!canvasElement) return;
 
     if (!targetAssetId) {
-      // Generate a child-friendly ID name based on category
       const randomId = Math.random().toString(36).substring(2, 7);
       targetAssetId = `custom_${category.slice(0, 4)}_${randomId}`;
     }
 
-    // Downscale target drawing straight to 16x16 PNG for Godot
     const exportCanvas = document.createElement('canvas');
     exportCanvas.width = GRID_SIZE;
     exportCanvas.height = GRID_SIZE;
@@ -146,6 +335,7 @@
       .map(() => Array(GRID_SIZE).fill('transparent'));
     redrawGrid();
     triggerAutoSave();
+    playDrawSound('clear');
   }
 </script>
 
@@ -172,6 +362,16 @@
         </div>
       {/if}
 
+      <div class="templates-panel">
+        <span class="panel-label">Templates:</span>
+        <div class="templates-buttons">
+          <button class="tpl-btn" on:click={() => applyTemplate('sword')}>⚔️ Sword</button>
+          <button class="tpl-btn" on:click={() => applyTemplate('monster')}>👾 Slime</button>
+          <button class="tpl-btn" on:click={() => applyTemplate('coin')}>🪙 Coin</button>
+          <button class="tpl-btn" on:click={() => applyTemplate('heart')}>❤️ Heart</button>
+        </div>
+      </div>
+
       <div class="editor-workspace">
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <canvas
@@ -186,21 +386,30 @@
         ></canvas>
 
         <div class="side-panel">
+          <div class="brush-selector">
+            <button class="brush-btn" class:active={brushSize === 1 && !isBucket && !isEraser} on:click={() => { brushSize = 1; isBucket = false; isEraser = false; }} title="Small Brush">🟢 1x</button>
+            <button class="brush-btn" class:active={brushSize === 2 && !isBucket && !isEraser} on:click={() => { brushSize = 2; isBucket = false; isEraser = false; }} title="Medium Brush">🟢 2x</button>
+            <button class="brush-btn" class:active={brushSize === 3 && !isBucket && !isEraser} on:click={() => { brushSize = 3; isBucket = false; isEraser = false; }} title="Big Brush">🟢 3x</button>
+          </div>
+
           <div class="colors-grid">
             {#each COLORS as color}
               <button
                 class="color-dot"
                 style:background={color}
-                class:selected={currentColor === color && !isEraser}
-                on:click={() => { currentColor = color; isEraser = false; }}
+                class:selected={currentColor === color && !isEraser && !isBucket}
+                on:click={() => { currentColor = color; isEraser = false; isBucket = false; }}
                 aria-label="Color {color}"
               ></button>
             {/each}
           </div>
 
           <div class="tool-actions">
-            <button class="tool-btn eraser-btn" class:active={isEraser} on:click={() => isEraser = true}>
+            <button class="tool-btn eraser-btn" class:active={isEraser} on:click={() => { isEraser = true; isBucket = false; }}>
               🧽 Eraser
+            </button>
+            <button class="tool-btn bucket-btn" class:active={isBucket} on:click={() => { isBucket = true; isEraser = false; }}>
+              🪣 Fill
             </button>
             <button class="tool-btn clear-btn" on:click={handleClear}>
               🗑️ Clear
@@ -391,5 +600,84 @@
   .clear-btn {
     background: #475569;
     color: white;
+  }
+
+  .bucket-btn {
+    background: #e0f2fe;
+    color: #0369a1;
+  }
+
+  .bucket-btn.active {
+    background: #0284c7;
+    color: white;
+    outline: 4px solid white;
+  }
+
+  .templates-panel {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: #0f172a;
+    padding: 12px 20px;
+    border-radius: 20px;
+  }
+
+  .panel-label {
+    font-weight: 900;
+    color: #94a3b8;
+    font-size: 1rem;
+  }
+
+  .templates-buttons {
+    display: flex;
+    gap: 10px;
+  }
+
+  .tpl-btn {
+    border: 0;
+    background: #1e293b;
+    color: white;
+    font-weight: 800;
+    padding: 8px 16px;
+    border-radius: 14px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25);
+    transition: background 0.2s, transform 0.1s;
+  }
+
+  .tpl-btn:hover {
+    background: #334155;
+  }
+
+  .tpl-btn:active {
+    transform: translateY(2px);
+  }
+
+  .brush-selector {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    background: #0f172a;
+    padding: 6px;
+    border-radius: 14px;
+    justify-content: space-around;
+  }
+
+  .brush-btn {
+    border: 0;
+    background: #1e293b;
+    color: #94a3b8;
+    font-weight: 800;
+    padding: 6px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.2s, transform 0.1s;
+  }
+
+  .brush-btn.active {
+    background: #fbbf24;
+    color: #0f172a;
   }
 </style>

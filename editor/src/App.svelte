@@ -10,6 +10,7 @@
     snapPosition,
     stampEntity,
     toRoomPayload,
+    makeInstanceId,
     type AssetInventory,
     type PlacedEntity,
     type ToyboxAsset,
@@ -19,6 +20,92 @@
   let spriteEditorOpen = false;
   let editingAssetId = '';
   let editingCategory = 'decorations';
+
+  // Kid friendly UI toggles
+  let parentsPanelOpen = false;
+  let themeSelectorOpen = false;
+  let playModalOpen = false;
+
+  let audioCtx: AudioContext | null = null;
+  function getAudioContext() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  function playUiSound(type: 'pop' | 'squeak' | 'chime') {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+      if (type === 'pop') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.1);
+      } else if (type === 'squeak') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(120, now + 0.15);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      } else if (type === 'chime') {
+        const notes = [600, 900, 1200, 1500];
+        notes.forEach((freq, idx) => {
+          const time = now + idx * 0.04;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, time);
+          gain.gain.setValueAtTime(0.06, time);
+          gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(time);
+          osc.stop(time + 0.1);
+        });
+      }
+    } catch (_) {}
+  }
+
+  function animateClick(event: MouseEvent) {
+    const target = event.currentTarget as HTMLElement;
+    target.classList.remove('bounce-click');
+    void target.offsetWidth; // trigger reflow
+    target.classList.add('bounce-click');
+  }
+
+  function cycleTime() {
+    const times: ('day' | 'morning' | 'sunset' | 'night')[] = ['day', 'morning', 'sunset', 'night'];
+    const idx = times.indexOf(worldSettings.time_of_day);
+    worldSettings.time_of_day = times[(idx + 1) % times.length];
+    saveCurrentRoom();
+    playUiSound('pop');
+  }
+
+  function cycleWeather() {
+    const weathers: ('clear' | 'rain' | 'snow')[] = ['clear', 'rain', 'snow'];
+    const idx = weathers.indexOf(worldSettings.weather);
+    worldSettings.weather = weathers[(idx + 1) % weathers.length];
+    saveCurrentRoom();
+    playUiSound('pop');
+  }
 
   function openCustomAssetCanvas() {
     editingAssetId = '';
@@ -236,7 +323,10 @@
         return Math.sqrt(dx * dx + dy * dy) < 36 / zoom;
       });
 
-      if (hit) placed = eraseEntity(placed, hit.instance_id);
+      if (hit) {
+        placed = eraseEntity(placed, hit.instance_id);
+        playUiSound('squeak');
+      }
       return;
     }
 
@@ -251,6 +341,7 @@
       } else {
         placed = stampEntity(placed, activeAsset, position);
       }
+      playUiSound('pop');
     }
   }
 
@@ -273,6 +364,7 @@
       } else {
         placed = stampEntity(placed, activeAsset, position);
       }
+      playUiSound('pop');
     }
   }
 
@@ -532,20 +624,100 @@
   }
 
   function createNewRoom() {
-    const newId = `room_${Math.floor(Math.random() * 900 + 100)}`;
+    openThemeSelector();
+  }
+
+  function openThemeSelector() {
+    themeSelectorOpen = true;
+  }
+
+  async function applyTheme(themeName: 'space' | 'candy' | 'jungle') {
+    themeSelectorOpen = false;
+    const newId = `${themeName}_room_${Math.floor(Math.random() * 900 + 100)}`;
     activeRoomId = newId;
-    placed = [];
-    status = `Created new empty room: ${newId}`;
+
+    if (themeName === 'space') {
+      worldSettings = { time_of_day: 'night', weather: 'clear' };
+    } else if (themeName === 'candy') {
+      worldSettings = { time_of_day: 'sunset', weather: 'clear' };
+    } else {
+      worldSettings = { time_of_day: 'day', weather: 'rain' };
+    }
+    (worldSettings as any).theme = themeName;
+
+    const terrainAsset = findAsset('stone_floor') ?? { id: 'stone_floor', name: 'Stone Floor', category: 'terrain', type: 'terrain' };
+    const heroAsset = findAsset('hero_knight') ?? { id: 'hero_knight', name: 'Hero Knight', category: 'heroes', type: 'player' };
+    const rubyAsset = findAsset('gold_ruby') ?? { id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', type: 'collectible' };
+
+    const newPlaced: PlacedEntity[] = [
+      {
+        instance_id: makeInstanceId(heroAsset.id),
+        asset_id: heroAsset.id,
+        category: heroAsset.category,
+        type: heroAsset.type ?? heroAsset.category,
+        position: { x: 128, y: 300 },
+        is_camera_target: true,
+        modifiers: { variant: 'default', scale_multiplier: 1.0 }
+      },
+      {
+        instance_id: makeInstanceId(rubyAsset.id),
+        asset_id: rubyAsset.id,
+        category: rubyAsset.category,
+        type: rubyAsset.type ?? rubyAsset.category,
+        position: { x: 800, y: 330 },
+        modifiers: { variant: 'default', scale_multiplier: 1.0 }
+      }
+    ];
+
+    for (let i = 0; i < 7; i++) {
+      newPlaced.push({
+        instance_id: makeInstanceId(terrainAsset.id),
+        asset_id: terrainAsset.id,
+        category: terrainAsset.category,
+        type: terrainAsset.type ?? terrainAsset.category,
+        position: { x: 128 + i * 128, y: 392 },
+        modifiers: { variant: 'default', scale_multiplier: 1.0 }
+      });
+    }
+
+    placed = newPlaced;
+    status = `Created new ${themeName} room: ${newId}`;
+    playUiSound('chime');
+
+    await saveCurrentRoom();
   }
 
   async function play() {
-    status = 'Saving and launching...';
+    status = 'Saving room level...';
     try {
       await saveCurrentRoom();
+
       const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
-      status = await invoke<string>('compile_and_play', { roomPayload: payload });
+      (window as any).currentGameLevel = JSON.stringify(payload);
+
+      status = 'Preparing WebGL game...';
+      try {
+        await invoke('build_web_runner');
+        playModalOpen = true;
+        status = 'Loaded embedded play mode!';
+        playUiSound('chime');
+      } catch (err) {
+        console.log('WebGL player not built/available, falling back to native window:', err);
+        status = 'Launching Godot runner window...';
+        await launchNativeWindow();
+      }
     } catch (error) {
       status = `Play failed: ${String(error)}`;
+    }
+  }
+
+  async function launchNativeWindow() {
+    try {
+      const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
+      status = await invoke<string>('compile_and_play', { roomPayload: payload });
+      playUiSound('chime');
+    } catch (error) {
+      status = `Native play failed: ${String(error)}`;
     }
   }
 
@@ -589,41 +761,18 @@
   <header class="topbar">
     <span class="logo">🧸 KidGameMaker</span>
 
-    <button class="bookshelf-btn" id="btn-bookshelf" on:click={() => (bookshelfOpen = true)}>📚 Rooms</button>
-
-    <div class="room-controls">
-      <select id="room-selector" value={activeRoomId} on:change={(e) => loadSelectedRoom(e.currentTarget.value)}>
-        {#each rooms as room}
-          <option value={room}>{room}</option>
-        {/each}
-      </select>
-      <input id="room-name-input" type="text" bind:value={activeRoomId} placeholder="Room ID" title="Change Room Name" />
-      <button id="btn-new-room" on:click={createNewRoom} title="New Room" class="icon-btn">➕ New</button>
+    <!-- World cycle settings -->
+    <div class="world-cycle-controls">
+      <button class="cycle-btn time-btn" on:click={(e) => { animateClick(e); cycleTime(); }} title="Change Time of Day">
+        {#if worldSettings.time_of_day === 'day'}☀️{:else if worldSettings.time_of_day === 'morning'}🌅{:else if worldSettings.time_of_day === 'sunset'}🌇{:else}🌙{/if}
+      </button>
+      <button class="cycle-btn weather-btn" on:click={(e) => { animateClick(e); cycleWeather(); }} title="Change Weather">
+        {#if worldSettings.weather === 'clear'}🌤{:else if worldSettings.weather === 'rain'}🌧{:else}❄️{/if}
+      </button>
     </div>
 
-    <!-- World settings: time of day + weather -->
-    <div class="world-controls">
-      <label class="world-label" for="world-time">🕐</label>
-      <select id="world-time" bind:value={worldSettings.time_of_day} class="world-select" title="Time of day">
-        <option value="day">☀️ Day</option>
-        <option value="morning">🌅 Morning</option>
-        <option value="sunset">🌇 Sunset</option>
-        <option value="night">🌙 Night</option>
-      </select>
-      <label class="world-label" for="world-weather">🌤</label>
-      <select id="world-weather" bind:value={worldSettings.weather} class="world-select" title="Weather">
-        <option value="clear">Clear</option>
-        <option value="rain">🌧 Rain</option>
-        <option value="snow">❄️ Snow</option>
-      </select>
-    </div>
-
-    <button id="btn-play" class="play" on:click={play}>▶ PLAY</button>
-    <button id="btn-save" class="save" on:click={saveCurrentRoom}>💾 SAVE</button>
-    <button id="btn-export" class="export" on:click={exportGame} style="background: #10b981; color: white;">📦 EXPORT</button>
-    <button id="btn-refresh-toybox" class="icon-btn refresh-btn" on:click={refreshInventory} title="Refresh Toybox from disk">🔄</button>
-    <button class:active={!eraserMode} on:click={() => (eraserMode = false)} style="display: flex; align-items: center; gap: 8px;">
-      <span>Stamp:</span>
+    <!-- Active Stamp -->
+    <button class="stamp-select-btn" class:active={!eraserMode} on:click={(e) => { animateClick(e); eraserMode = false; }} style="display: flex; align-items: center; gap: 8px;">
       <span class="active-visual-container">
         {#if activeAsset.visual && !isEmoji(activeAsset.visual)}
           {#if activeAsset.is_spritesheet && activeAsset.frames && activeAsset.frames[0]}
@@ -651,22 +800,72 @@
           <span>{activeAsset.visual ?? '🎮'}</span>
         {/if}
       </span>
-      <span>{activeAsset.name}</span>
+      <span class="btn-text">{activeAsset.name}</span>
     </button>
+    
     {#if activeAsset}
-      <button on:click={editActiveAsset} title="Paint/Edit this toy" style="background: #eab308; color: #0f172a; padding: 6px 12px; font-weight: 800; border-radius: 12px; border: 0; cursor: pointer; display: flex; align-items: center; gap: 4px;">🎨 Edit</button>
+      <button class="edit-toy-btn" on:click={(e) => { animateClick(e); editActiveAsset(); }} title="Paint/Edit this toy">🎨 Edit</button>
     {/if}
-    <button class:active={eraserMode} on:click={() => (eraserMode = !eraserMode)}>🧽 Eraser</button>
-    <button class:active={snapEnabled} on:click={() => (snapEnabled = !snapEnabled)}>🧲 Snap</button>
-    <button on:click={() => (toyboxOpen = true)}>🧰 Toybox</button>
-    <button on:click={openCustomAssetCanvas} style="background: linear-gradient(135deg, #a855f7, #7c3aed); color: white; font-weight: 800; border: 0; border-radius: 12px; padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 4px;">🎨 Draw Toy</button>
+
+    <button class="eraser-btn-top" class:active={eraserMode} on:click={(e) => { animateClick(e); eraserMode = !eraserMode; }} title="Eraser">🧽 Eraser</button>
+    <button class="snap-btn-top" class:active={snapEnabled} on:click={(e) => { animateClick(e); snapEnabled = !snapEnabled; }} title="Snap to Grid">🧲 Snap</button>
+    <button class="toybox-btn-top" on:click={(e) => { animateClick(e); toyboxOpen = true; }} title="Toybox">🧰 Toybox</button>
+    <button class="draw-toy-btn-top" on:click={(e) => { animateClick(e); openCustomAssetCanvas(); }} title="Draw Toy">🎨 Draw</button>
+
+    <!-- Play Button (Big, green) -->
+    <button id="btn-play" class="play-btn-top" on:click={(e) => { animateClick(e); play(); }} title="Play!">▶ PLAY</button>
+
+    <!-- Parents panel toggle -->
+    <button class="parents-toggle-btn" class:active={parentsPanelOpen} on:click={(e) => { animateClick(e); parentsPanelOpen = !parentsPanelOpen; }} title="Parents / Developers Settings">⚙️ Parents</button>
   </header>
+
+  {#if parentsPanelOpen}
+    <div class="parents-panel-container">
+      <div class="parents-panel-header">
+        <h3>⚙️ Parents & Developers Settings</h3>
+      </div>
+      <div class="parents-panel-body">
+        <div class="panel-section">
+          <h4>Room Manager</h4>
+          <div class="panel-row">
+            <button class="bookshelf-btn" on:click={(e) => { animateClick(e); bookshelfOpen = true; }}>📚 Browse Rooms</button>
+            <select id="room-selector" value={activeRoomId} on:change={(e) => loadSelectedRoom(e.currentTarget.value)}>
+              {#each rooms as room}
+                <option value={room}>{room}</option>
+              {/each}
+            </select>
+            <input id="room-name-input" type="text" bind:value={activeRoomId} placeholder="Room ID" title="Change Room Name" />
+            <button id="btn-new-room" class="icon-btn" on:click={(e) => { animateClick(e); createNewRoom(); }} title="New Room">➕ New</button>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <h4>Actions</h4>
+          <div class="panel-row">
+            <button id="btn-save" class="save" on:click={(e) => { animateClick(e); saveCurrentRoom(); }}>💾 SAVE</button>
+            <button id="btn-export" class="export" on:click={(e) => { animateClick(e); exportGame(); }} style="background: #10b981; color: white;">📦 EXPORT</button>
+            <button id="btn-refresh-toybox" class="icon-btn refresh-btn" on:click={(e) => { animateClick(e); refreshInventory(); }} title="Refresh Toybox from disk">🔄 RELOAD</button>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <h4>Active Toy Specs</h4>
+          <div class="panel-row spec-labels">
+            <span><strong>ID:</strong> {activeAsset.id}</span>
+            <span><strong>Category:</strong> {activeAsset.category}</span>
+            <span><strong>Snap Type:</strong> {activeAsset.snapping_type || 'default'}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   <section class="quick-ribbon" aria-label="Quick toybox ribbon">
     {#each quickRibbon as asset}
       <button
+        class="ribbon-btn"
         class:active={activeAsset.id === asset.id && !eraserMode}
-        on:click={() => selectAsset(asset)}
+        on:click={(e) => { animateClick(e); selectAsset(asset); }}
         title={asset.name}
       >
         <span class="ribbon-visual-container">
@@ -730,7 +929,10 @@
           style:top={`${item.position.y}px`}
           title={`${item.asset_id} ${item.instance_id}${item.modifiers.target_room ? ` (Leads to ${item.modifiers.target_room})` : ''}`}
           on:click|stopPropagation={() => {
-            if (eraserMode) placed = eraseEntity(placed, item.instance_id);
+            if (eraserMode) {
+              placed = eraseEntity(placed, item.instance_id);
+              playUiSound('squeak');
+            }
           }}
           on:mousedown|stopPropagation
           style:border-radius={item.category === 'terrain' ? '14px' : '50%'}
@@ -838,6 +1040,49 @@
     on:close={() => (spriteEditorOpen = false)}
     on:saved={handleDrawingSaved}
   />
+
+  {#if themeSelectorOpen}
+    <div class="backdrop" role="button" tabindex="-1" on:click={() => (themeSelectorOpen = false)}>
+      <div class="modal theme-modal" role="dialog" tabindex="0" on:click|stopPropagation>
+        <h2>🌟 Choose a Theme! 🌟</h2>
+        <div class="theme-cards">
+          <button class="theme-card space" on:click={() => applyTheme('space')}>
+            <span class="card-icon">🚀</span>
+            <h3>Space Bouncy</h3>
+            <p>Bounce on stars under dark glowing skies!</p>
+          </button>
+          <button class="theme-card candy" on:click={() => applyTheme('candy')}>
+            <span class="card-icon">🍭</span>
+            <h3>Candy Hills</h3>
+            <p>Yummy sunset skies and sugary blocks!</p>
+          </button>
+          <button class="theme-card jungle" on:click={() => applyTheme('jungle')}>
+            <span class="card-icon">🌴</span>
+            <h3>Jungle Rain</h3>
+            <p>Rainy green forests and wild vine jumps!</p>
+          </button>
+        </div>
+        <button class="close-btn" on:click={() => (themeSelectorOpen = false)}>✕ Close</button>
+      </div>
+    </div>
+  {/if}
+
+  {#if playModalOpen}
+    <div class="backdrop" role="button" tabindex="-1" on:click={() => (playModalOpen = false)}>
+      <div class="modal play-modal" role="dialog" tabindex="0" on:click|stopPropagation>
+        <header>
+          <h2>🎮 Playing Game! 🎮</h2>
+          <button class="close-btn" on:click={() => (playModalOpen = false)}>✕ Stop</button>
+        </header>
+        <div class="game-container">
+          <iframe src="/game/index.html" title="KidGameMaker Embedded Play View" class="game-iframe"></iframe>
+        </div>
+        <div class="play-options">
+          <button class="window-btn" on:click={() => { playModalOpen = false; launchNativeWindow(); }}>📺 Run in Large Window</button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </main>
 
 <style>
@@ -1077,5 +1322,342 @@
     justify-content: space-between;
     border-top: 3px solid rgba(255, 255, 255, 0.08);
     border-bottom: 0;
+  }
+
+  /* Kid UI custom styles */
+  .world-cycle-controls {
+    display: flex;
+    gap: 8px;
+  }
+
+  .cycle-btn {
+    font-size: 1.8rem;
+    padding: 8px 14px;
+    border-radius: 50%;
+    background: #1e2937;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: transform 0.1s, background-color 0.2s;
+  }
+
+  .cycle-btn:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+  }
+
+  .stamp-select-btn {
+    background: #1f2937;
+    color: white;
+    border: 3px solid #f59e0b;
+    border-radius: 18px;
+    padding: 6px 12px;
+    font-weight: 800;
+  }
+
+  .edit-toy-btn {
+    background: #eab308;
+    color: #0f172a;
+    box-shadow: 0 4px 0 #a16207;
+  }
+
+  .eraser-btn-top {
+    background: #ef4444;
+    color: white;
+    box-shadow: 0 4px 0 #991b1b;
+  }
+
+  .snap-btn-top {
+    background: #3b82f6;
+    color: white;
+    box-shadow: 0 4px 0 #1e40af;
+  }
+
+  .toybox-btn-top {
+    background: #8b5cf6;
+    color: white;
+    box-shadow: 0 4px 0 #5b21b6;
+  }
+
+  .draw-toy-btn-top {
+    background: #ec4899;
+    color: white;
+    box-shadow: 0 4px 0 #9d174d;
+  }
+
+  .play-btn-top {
+    background: #22c55e;
+    color: white;
+    font-size: 1.3rem;
+    padding: 10px 24px;
+    box-shadow: 0 6px 0 #15803d;
+  }
+
+  .parents-toggle-btn {
+    background: #4b5563;
+    color: white;
+    box-shadow: 0 4px 0 #1f2937;
+  }
+
+  /* Parents Settings Panel */
+  .parents-panel-container {
+    background: #0f172a;
+    border-bottom: 4px solid #374151;
+    padding: 16px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    color: white;
+  }
+
+  .parents-panel-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #fbbf24;
+  }
+
+  .parents-panel-body {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+
+  .panel-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .panel-section h4 {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .panel-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-row select,
+  .panel-row input {
+    background: #1f2937;
+    color: white;
+    border: 1px solid #4b5563;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .panel-row input {
+    width: 140px;
+  }
+
+  .spec-labels {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: #cbd5e1;
+    gap: 16px;
+  }
+
+  /* Modals overrides/customs */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
+    display: grid;
+    place-items: center;
+    z-index: 100;
+  }
+
+  .modal {
+    background: #1e293b;
+    border: 6px solid #fbbf24;
+    border-radius: 40px;
+    padding: 32px;
+    color: white;
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .close-btn {
+    background: #ef4444;
+    color: white;
+    border: 0;
+    border-radius: 20px;
+    padding: 10px 24px;
+    font-size: 1.1rem;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #b91c1c;
+    transition: transform 0.1s, box-shadow 0.1s;
+    align-self: center;
+  }
+
+  .close-btn:active {
+    transform: translateY(4px);
+    box-shadow: 0 0 0 #b91c1c;
+  }
+
+  /* Theme selector card designs */
+  .theme-modal h2 {
+    text-align: center;
+    color: #fbbf24;
+    font-size: 2.2rem;
+    margin: 0;
+  }
+
+  .theme-cards {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    padding: 10px 0;
+  }
+
+  .theme-card {
+    border: 4px solid #374151;
+    border-radius: 24px;
+    padding: 24px;
+    width: 220px;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+    transition: transform 0.2s, border-color 0.2s;
+  }
+
+  .theme-card:hover {
+    transform: translateY(-8px) scale(1.03);
+    border-color: #fbbf24;
+  }
+
+  .theme-card .card-icon {
+    font-size: 4rem;
+    margin-bottom: 12px;
+  }
+
+  .theme-card h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.3rem;
+  }
+
+  .theme-card p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #cbd5e1;
+    line-height: 1.4;
+  }
+
+  .theme-card.space {
+    background: linear-gradient(135deg, #1e1b4b, #311042);
+  }
+
+  .theme-card.candy {
+    background: linear-gradient(135deg, #be185d, #db2777);
+  }
+
+  .theme-card.jungle {
+    background: linear-gradient(135deg, #065f46, #047857);
+  }
+
+  /* Embedded Play Modal */
+  .play-modal {
+    width: min(850px, 90vw);
+    max-height: 90vh;
+  }
+
+  .play-modal header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .play-modal h2 {
+    margin: 0;
+    font-size: 1.8rem;
+    color: #22c55e;
+  }
+
+  .game-container {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: black;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 4px solid #4b5563;
+  }
+
+  .game-iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+
+  .play-options {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+  }
+
+  .window-btn {
+    border: 0;
+    border-radius: 18px;
+    padding: 12px 24px;
+    font-weight: 900;
+    cursor: pointer;
+    background: #3b82f6;
+    color: white;
+    box-shadow: 0 4px 0 #1d4ed8;
+  }
+
+  .window-btn:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 #1d4ed8;
+  }
+
+  /* Click Animation Class */
+  :global(.bounce-click) {
+    animation: bounce-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  @keyframes bounce-pop {
+    0% { transform: scale(1); }
+    30% { transform: scale(1.15) rotate(-3deg); }
+    50% { transform: scale(0.92) rotate(2deg); }
+    80% { transform: scale(1.05) rotate(-1deg); }
+    100% { transform: scale(1) rotate(0deg); }
+  }
+
+  /* Hover Animation for Ribbon buttons */
+  .ribbon-btn {
+    display: grid;
+    place-items: center;
+    min-width: 104px;
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .ribbon-btn:hover {
+    transform: translateY(-5px) scale(1.05);
+  }
+
+  .ribbon-btn:hover :global(span) {
+    animation: wobble 0.5s ease-in-out infinite alternate;
+  }
+
+  @keyframes wobble {
+    0% { transform: rotate(-5deg); }
+    100% { transform: rotate(5deg); }
   }
 </style>

@@ -44,6 +44,8 @@ func _on_body_entered(body: Node) -> void:
 	var main := get_tree().get_root().get_node_or_null("Main")
 	if main != null and main.has_method("on_collectible_picked_up"):
 		main.on_collectible_picked_up(payload)
+	if main != null and main.has_method("play_sfx"):
+		main.play_sfx("coin")
 
 	print("Collected '%s'  score+%d  heal+%d" % [asset_id, score_value, heal_value])
 

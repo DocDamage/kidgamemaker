@@ -27,11 +27,14 @@ func take_damage(amount: int) -> void:
 	current_health -= amount
 	print("Player took %d damage! HP now: %d/%d" % [amount, current_health, max_health])
 
+	var main := get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.has_method("play_sfx"):
+		main.play_sfx("hit")
+
 	if current_health <= 0:
 		current_health = 0
 		print("Player has died!")
 		# Notify Main to respawn
-		var main := get_tree().get_root().get_node_or_null("Main")
 		if main != null and main.has_method("_respawn_player"):
 			main.call_deferred("_respawn_player")
 		return
@@ -56,5 +59,8 @@ func _physics_process(delta: float) -> void:
 		velocity.y += gravity * gravity_scale * delta
 	elif Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
 		velocity.y = jump_force
+		var main := get_tree().get_root().get_node_or_null("Main")
+		if main != null and main.has_method("play_sfx"):
+			main.play_sfx("jump")
 
 	move_and_slide()

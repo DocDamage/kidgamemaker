@@ -147,8 +147,15 @@ pub fn launch_runner() -> Result<String, String> {
 
     match locate_godot_runner(&engine_dir) {
         Some(runner_path) => {
-            Command::new(&runner_path)
-                .arg("--level-json")
+            let mut cmd = if runner_path.to_string_lossy() == "godot" {
+                let mut c = Command::new("godot");
+                c.arg("--path").arg(&engine_dir);
+                c
+            } else {
+                Command::new(&runner_path)
+            };
+
+            cmd.arg("--level-json")
                 .arg(&game_state_path)
                 .spawn()
                 .map_err(|err| format!("Failed to launch Godot runner: {err}"))?;
@@ -158,6 +165,7 @@ pub fn launch_runner() -> Result<String, String> {
         None => Err("Godot runner executable path is not configured or built yet. Please open the engine folder in Godot 4 and run the scene manually, or export the project.".to_string()),
     }
 }
+
 
 #[tauri::command]
 pub fn get_asset_inventory() -> Result<BTreeMap<String, Vec<AssetSummary>>, String> {
@@ -388,7 +396,13 @@ fn locate_godot_runner(engine_dir: &Path) -> Option<PathBuf> {
         ]
     };
 
-    candidates.into_iter().find(|path| path.exists())
+    candidates.into_iter().find(|path| path.exists()).or_else(|| {
+        if Command::new("godot").arg("--version").output().is_ok() {
+            Some(PathBuf::from("godot"))
+        } else {
+            None
+        }
+    })
 }
 
 #[tauri::command]
@@ -543,7 +557,7 @@ pub fn export_game(project_id: String) -> Result<String, String> {
 
     let mut notice = String::new();
     match locate_godot_runner(&engine_dir) {
-        Some(runner_path) => {
+        Some(runner_path) if runner_path.to_string_lossy() != "godot" => {
             let exe_name = if cfg!(target_os = "windows") {
                 "PlayGame.exe"
             } else {
@@ -553,7 +567,7 @@ pub fn export_game(project_id: String) -> Result<String, String> {
             fs::copy(&runner_path, &exe_dst)
                 .map_err(|err| format!("Failed to copy Godot runner executable: {err}"))?;
         }
-        None => {
+        _ => {
             let files_to_copy = vec!["project.godot", "icon.svg"];
             for file in files_to_copy {
                 let src_file = engine_dir.join(file);
@@ -864,6 +878,35 @@ pub fn save_child_sprite(
     .map_err(|e| e.to_string())?;
 
     Ok(format!("Asset {} successfully saved.", asset_id))
+}
+
+#[tauri::command]
+pub fn build_web_runner() -> Result<String, String> {
+    let repo_root = locate_repo_root()?;
+    let engine_dir = repo_root.join("engine");
+    let web_export_dir = repo_root.join("editor").join("public").join("game");
+    
+    fs::create_dir_all(&web_export_dir)
+        .map_err(|err| format!("Failed to create web export directory: {err}"))?;
+        
+    let output_html = web_export_dir.join("index.html");
+    
+    let output = Command::new("godot")
+        .arg("--headless")
+        .arg("--path")
+        .arg(&engine_dir)
+        .arg("--export-release")
+        .arg("Web")
+        .arg(&output_html)
+        .output()
+        .map_err(|err| format!("Failed to run godot compiler: {err}"))?;
+        
+    if output.status.success() {
+        Ok("Web runner built successfully!".to_string())
+    } else {
+        let err_msg = String::from_utf8_lossy(&output.stderr);
+        Err(format!("Godot Web export failed: {err_msg}"))
+    }
 }
 
 #[cfg(test)]
