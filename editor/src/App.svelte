@@ -48,6 +48,22 @@
   let snapEnabled = true;
   let status = 'Ready';
 
+  // Multi-room state
+  let rooms: string[] = ['test_chamber_01'];
+  let activeRoomId = 'test_chamber_01';
+
+  // Viewport Pan/Zoom state
+  let zoom = 1.0;
+  let offsetX = 100;
+  let offsetY = 100;
+  let isPanning = false;
+  let panStart = { x: 0, y: 0 };
+  
+  // Drag-to-paint and hover guide state
+  let isDrawing = false;
+  let hoverPos = { x: 0, y: 0 };
+  let isHovering = false;
+
   $: quickRibbon = Object.values(inventory).flat().slice(0, 8);
 
   onMount(async () => {
@@ -59,58 +75,184 @@
       status = `Using fallback toybox: ${error}`;
     }
 
-    try {
-      const savedState = await invoke<any>('load_game_state');
-      if (savedState && Array.isArray(savedState.entities)) {
-        placed = savedState.entities;
-        status += ' Restored saved game state.';
+    await loadRoomList();
+    
+    if (rooms.includes(activeRoomId)) {
+      await loadSelectedRoom(activeRoomId);
+    } else {
+      try {
+        const savedState = await invoke<any>('load_game_state');
+        if (savedState && Array.isArray(savedState.entities)) {
+          placed = savedState.entities;
+          status += ' Restored saved game state.';
+        }
+      } catch (error) {
+        status += ' No saved game state found, starting fresh.';
       }
-    } catch (error) {
-      status += ' No saved game state found, starting fresh.';
     }
   });
+
+  async function loadRoomList() {
+    try {
+      rooms = await invoke<string[]>('list_rooms');
+      if (rooms.length === 0) {
+        rooms = [activeRoomId];
+      }
+    } catch (err) {
+      console.error('Failed to list rooms:', err);
+    }
+  }
+
+  function getCanvasCoords(clientX: number, clientY: number, rect: DOMRect) {
+    const screenX = clientX - rect.left;
+    const screenY = clientY - rect.top;
+    return {
+      x: (screenX - offsetX) / zoom,
+      y: (screenY - offsetY) / zoom
+    };
+  }
 
   function handleCanvasClick(event: MouseEvent) {
     const target = event.currentTarget as HTMLDivElement;
     const rect = target.getBoundingClientRect();
-    const position = snapPosition(
-      {
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top
-      },
-      8,
-      snapEnabled
-    );
+    const rawCoords = getCanvasCoords(event.clientX, event.clientY, rect);
+    const position = snapPosition(rawCoords, 8, snapEnabled);
 
     if (eraserMode) {
       const hit = [...placed].reverse().find((item) => {
         const dx = item.position.x - position.x;
         const dy = item.position.y - position.y;
-        return Math.sqrt(dx * dx + dy * dy) < 36;
+        return Math.sqrt(dx * dx + dy * dy) < 36 / zoom;
       });
 
       if (hit) placed = eraseEntity(placed, hit.instance_id);
       return;
     }
 
-    placed = stampEntity(placed, activeAsset, position);
+    const exists = placed.some(
+      (ent) => ent.asset_id === activeAsset.id && 
+               Math.abs(ent.position.x - position.x) < 4 && 
+               Math.abs(ent.position.y - position.y) < 4
+    );
+    if (!exists) {
+      placed = stampEntity(placed, activeAsset, position);
+    }
   }
 
-  async function save() {
-    status = 'Saving game state...';
+  function paintStamp(event: MouseEvent) {
+    const target = event.currentTarget as HTMLDivElement;
+    const rect = target.getBoundingClientRect();
+    const rawCoords = getCanvasCoords(event.clientX, event.clientY, rect);
+    const position = snapPosition(rawCoords, 8, snapEnabled);
+
+    const spacingThreshold = activeAsset.category === 'terrain' ? 48 : 24;
+
+    const exists = placed.some(
+      (ent) => ent.asset_id === activeAsset.id && 
+               Math.abs(ent.position.x - position.x) < spacingThreshold && 
+               Math.abs(ent.position.y - position.y) < 8
+    );
+    if (!exists) {
+      placed = stampEntity(placed, activeAsset, position);
+    }
+  }
+
+  function startDrawing(event: MouseEvent) {
+    if (event.button === 0) {
+      isDrawing = true;
+      handleCanvasClick(event);
+    }
+  }
+
+  function stopDrawing(event: MouseEvent) {
+    if (event.button === 0) {
+      isDrawing = false;
+    }
+  }
+
+  function handleWheel(event: WheelEvent) {
+    event.preventDefault();
+    const zoomFactor = 0.08;
+    let newZoom = zoom;
+    if (event.deltaY < 0) {
+      newZoom += zoomFactor;
+    } else {
+      newZoom -= zoomFactor;
+    }
+    zoom = Math.max(0.5, Math.min(2.0, newZoom));
+  }
+
+  function handleMouseDown(event: MouseEvent) {
+    if (event.button === 1 || event.button === 2) {
+      isPanning = true;
+      panStart = { x: event.clientX - offsetX, y: event.clientY - offsetY };
+      event.preventDefault();
+    }
+  }
+
+  function handleMouseMove(event: MouseEvent) {
+    if (isPanning) {
+      offsetX = event.clientX - panStart.x;
+      offsetY = event.clientY - panStart.y;
+    } else {
+      const target = event.currentTarget as HTMLDivElement;
+      const rect = target.getBoundingClientRect();
+      const rawCoords = getCanvasCoords(event.clientX, event.clientY, rect);
+      hoverPos = snapPosition(rawCoords, 8, snapEnabled);
+      isHovering = true;
+
+      if (isDrawing && !eraserMode) {
+        paintStamp(event);
+      }
+    }
+  }
+
+  function handleMouseUp(event: MouseEvent) {
+    if (event.button === 1 || event.button === 2) {
+      isPanning = false;
+    }
+  }
+
+  async function saveCurrentRoom() {
+    status = `Saving room ${activeRoomId}...`;
     try {
       const payload = toRoomPayload(placed);
+      payload.room_id = activeRoomId;
       const jsonString = JSON.stringify(payload);
-      status = await invoke<string>('save_game_state', { jsonString });
+      status = await invoke<string>('save_room', { roomId: activeRoomId, jsonString });
+      await loadRoomList();
     } catch (error) {
       status = `Save failed: ${String(error)}`;
     }
   }
 
-  async function play() {
-    status = 'Writing game_state.json and launching...';
+  async function loadSelectedRoom(roomId: string) {
+    status = `Loading room ${roomId}...`;
     try {
+      const savedState = await invoke<any>('load_room', { roomId });
+      if (savedState && Array.isArray(savedState.entities)) {
+        placed = savedState.entities;
+        activeRoomId = roomId;
+        status = `Loaded room: ${roomId}`;
+      }
+    } catch (error) {
+      status = `Failed to load room ${roomId}: ${error}`;
+    }
+  }
+
+  function createNewRoom() {
+    const newId = `room_${Math.floor(Math.random() * 900 + 100)}`;
+    activeRoomId = newId;
+    placed = [];
+    status = `Created new empty room: ${newId}`;
+  }
+
+  async function play() {
+    status = 'Saving and launching...';
+    try {
+      await saveCurrentRoom();
       const payload = toRoomPayload(placed);
+      payload.room_id = activeRoomId;
       status = await invoke<string>('compile_and_play', { roomPayload: payload });
     } catch (error) {
       status = `Play failed: ${String(error)}`;
@@ -124,15 +266,26 @@
   }
 
   function iconFor(item: PlacedEntity): string {
-    return quickRibbon.find((asset) => asset.id === item.asset_id)?.visual ?? '🎮';
+    return Object.values(inventory).flat().find((asset) => asset.id === item.asset_id)?.visual ?? '🎮';
   }
 </script>
 
 <main class="app-shell">
   <header class="topbar">
     <span class="logo">🧸 KidGameMaker</span>
+    
+    <div class="room-controls">
+      <select value={activeRoomId} on:change={(e) => loadSelectedRoom(e.currentTarget.value)}>
+        {#each rooms as room}
+          <option value={room}>{room}</option>
+        {/each}
+      </select>
+      <input type="text" bind:value={activeRoomId} placeholder="Room ID" title="Change Room Name" />
+      <button on:click={createNewRoom} title="New Room" class="icon-btn">➕ New</button>
+    </div>
+
     <button class="play" on:click={play}>▶ PLAY</button>
-    <button class="save" on:click={save}>💾 SAVE</button>
+    <button class="save" on:click={saveCurrentRoom}>💾 SAVE</button>
     <button class:active={!eraserMode} on:click={() => (eraserMode = false)}>
       Stamp: {activeAsset.visual ?? '🎮'} {activeAsset.name}
     </button>
@@ -156,26 +309,55 @@
 
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <section class="canvas" on:click={handleCanvasClick} aria-label="Game canvas">
-    <div class="horizon"></div>
-    {#each placed as item (item.instance_id)}
-      <button
-        class="stamp {item.category}"
-        style:left={`${item.position.x}px`}
-        style:top={`${item.position.y}px`}
-        title={`${item.asset_id} ${item.instance_id}`}
-        on:click|stopPropagation={() => {
-          if (eraserMode) placed = eraseEntity(placed, item.instance_id);
-        }}
-      >
-        {iconFor(item)}
-      </button>
-    {/each}
-  </section>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div 
+    class="canvas" 
+    on:mousedown={startDrawing}
+    on:mousemove={handleMouseMove}
+    on:mouseup={stopDrawing}
+    on:mouseleave={() => { isHovering = false; isDrawing = false; }}
+    on:wheel={handleWheel}
+    on:contextmenu|preventDefault
+    on:mousedown|stopPropagation={handleMouseDown}
+    on:mouseup|stopPropagation={handleMouseUp}
+    aria-label="Game canvas"
+  >
+    <div 
+      class="canvas-inner" 
+      style:transform={`translate(${offsetX}px, ${offsetY}px) scale(${zoom})`}
+      style:transform-origin="0 0"
+    >
+      <div class="horizon"></div>
+      {#each placed as item (item.instance_id)}
+        <button
+          class="stamp {item.category}"
+          style:left={`${item.position.x}px`}
+          style:top={`${item.position.y}px`}
+          title={`${item.asset_id} ${item.instance_id}`}
+          on:click|stopPropagation={() => {
+            if (eraserMode) placed = eraseEntity(placed, item.instance_id);
+          }}
+          on:mousedown|stopPropagation
+        >
+          {iconFor(item)}
+        </button>
+      {/each}
+
+      {#if isHovering && !eraserMode}
+        <div 
+          class="hover-guide {activeAsset.category}"
+          style:left={`${hoverPos.x}px`}
+          style:top={`${hoverPos.y}px`}
+        >
+          {activeAsset.visual ?? '🎮'}
+        </div>
+      {/if}
+    </div>
+  </div>
 
   <footer>
     <code>{status}</code>
-    <span>{placed.length} stamped objects</span>
+    <span>{placed.length} stamped objects | Zoom: {Math.round(zoom * 100)}%</span>
   </footer>
 
   <ToyboxModal
@@ -215,6 +397,31 @@
     margin-right: 12px;
   }
 
+  .room-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 4px 10px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .room-controls select,
+  .room-controls input {
+    background: #1f2937;
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    padding: 4px 8px;
+    font-weight: 800;
+    font-size: 0.9rem;
+  }
+
+  .room-controls input {
+    width: 130px;
+  }
+
   .save {
     background: #3b82f6;
     color: white;
@@ -245,6 +452,11 @@
     font-size: 1.2rem;
   }
 
+  .icon-btn {
+    padding: 6px 12px;
+    border-radius: 12px;
+  }
+
   .quick-ribbon {
     overflow-x: auto;
   }
@@ -262,11 +474,27 @@
   .canvas {
     position: relative;
     overflow: hidden;
+    background: linear-gradient(#31466d, #1d2d45 55%, #1b2331 55%);
+    cursor: grab;
+  }
+
+  .canvas:active {
+    cursor: grabbing;
+  }
+
+  .canvas-inner {
+    position: absolute;
+    width: 5000px;
+    height: 3000px;
+    pointer-events: none;
     background:
-      linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-      linear-gradient(#31466d, #1d2d45 55%, #1b2331 55%);
-    background-size: 32px 32px, 32px 32px, 100% 100%;
+      linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 32px 32px, 32px 32px;
+  }
+
+  .canvas-inner :global(*) {
+    pointer-events: auto;
   }
 
   .horizon {
@@ -291,6 +519,25 @@
   }
 
   .stamp.terrain {
+    width: 160px;
+    border-radius: 14px;
+  }
+
+  .hover-guide {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    width: 56px;
+    height: 56px;
+    opacity: 0.5;
+    border: 3px dashed #ffd84d;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 2rem;
+    pointer-events: none;
+  }
+
+  .hover-guide.terrain {
     width: 160px;
     border-radius: 14px;
   }
