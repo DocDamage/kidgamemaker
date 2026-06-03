@@ -621,8 +621,240 @@ pub fn export_game(project_id: String) -> Result<String, String> {
     ))
 }
 
+use base64::{Engine as _, engine::general_purpose};
+
+#[tauri::command]
+pub fn load_child_sprite(asset_id: String, category: String) -> Result<Vec<Vec<String>>, String> {
+    let repo_root = locate_repo_root()?;
+    let png_path = repo_root
+        .join("engine")
+        .join("data")
+        .join("assets")
+        .join(&category)
+        .join(&asset_id)
+        .join(format!("{}.png", asset_id));
+
+    let mut grid = vec![vec!["transparent".to_string(); 16]; 16];
+
+    if !png_path.exists() {
+        return Ok(grid);
+    }
+
+    let file = fs::File::open(&png_path).map_err(|e| e.to_string())?;
+    let decoder = png::Decoder::new(file);
+    let mut reader = decoder.read_info().map_err(|e| e.to_string())?;
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
+
+    let img_w = info.width as usize;
+    let img_h = info.height as usize;
+
+    if img_w == 0 || img_h == 0 {
+        return Ok(grid);
+    }
+
+    // Centering in 16x16 grid
+    let start_x = if img_w < 16 { (16 - img_w) / 2 } else { 0 };
+    let start_y = if img_h < 16 { (16 - img_h) / 2 } else { 0 };
+
+    if info.color_type == png::ColorType::Rgba {
+        for y in 0..img_h.min(16) {
+            for x in 0..img_w.min(16) {
+                let idx = ((y * img_w + x) * 4) as usize;
+                if idx + 3 < buf.len() {
+                    let r = buf[idx];
+                    let g = buf[idx + 1];
+                    let b = buf[idx + 2];
+                    let a = buf[idx + 3];
+
+                    if a > 10 { // not transparent
+                        let hex = format!("#{:02x}{:02x}{:02x}", r, g, b);
+                        if start_y + y < 16 && start_x + x < 16 {
+                            grid[start_y + y][start_x + x] = hex;
+                        }
+                    }
+                }
+            }
+        }
+    } else if info.color_type == png::ColorType::Rgb {
+        for y in 0..img_h.min(16) {
+            for x in 0..img_w.min(16) {
+                let idx = ((y * img_w + x) * 3) as usize;
+                if idx + 2 < buf.len() {
+                    let r = buf[idx];
+                    let g = buf[idx + 1];
+                    let b = buf[idx + 2];
+                    let hex = format!("#{:02x}{:02x}{:02x}", r, g, b);
+                    if start_y + y < 16 && start_x + x < 16 {
+                        grid[start_y + y][start_x + x] = hex;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(grid)
+}
+
+#[tauri::command]
+pub fn save_child_sprite(
+    asset_id: String,
+    category: String,
+    base64_data: String,
+) -> Result<String, String> {
+    let repo_root = locate_repo_root()?;
+    let target_dir = repo_root
+        .join("engine")
+        .join("data")
+        .join("assets")
+        .join(&category)
+        .join(&asset_id);
+
+    fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+
+    let decoded_bytes = general_purpose::STANDARD
+        .decode(base64_data.trim())
+        .map_err(|e| e.to_string())?;
+
+    // Decode the PNG to scan transparency and crop
+    let decoder = png::Decoder::new(&*decoded_bytes);
+    let mut reader = decoder.read_info().map_err(|e| e.to_string())?;
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
+
+    let img_w = info.width as usize;
+    let img_h = info.height as usize;
+
+    let mut min_x = img_w;
+    let mut max_x = 0;
+    let mut min_y = img_h;
+    let mut max_y = 0;
+    let mut has_pixels = false;
+
+    if info.color_type == png::ColorType::Rgba {
+        for y in 0..img_h {
+            for x in 0..img_w {
+                let idx = ((y * img_w + x) * 4) as usize;
+                if idx + 3 < buf.len() {
+                    let alpha = buf[idx + 3];
+                    if alpha > 10 {
+                        has_pixels = true;
+                        if x < min_x { min_x = x; }
+                        if x > max_x { max_x = x; }
+                        if y < min_y { min_y = y; }
+                        if y > max_y { max_y = y; }
+                    }
+                }
+            }
+        }
+    }
+
+    // Determine final dimensions (either cropped or default 16x16 if empty)
+    let (crop_x, crop_y, crop_w, crop_h) = if has_pixels {
+        (min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+    } else {
+        (0, 0, img_w, img_h)
+    };
+
+    // Crop the pixels into a new RGBA buffer
+    let mut cropped_buf = vec![0u8; crop_w * crop_h * 4];
+    
+    if info.color_type == png::ColorType::Rgba {
+        for y in 0..crop_h {
+            for x in 0..crop_w {
+                let orig_x = crop_x + x;
+                let orig_y = crop_y + y;
+                let orig_idx = ((orig_y * img_w + orig_x) * 4) as usize;
+                let crop_idx = ((y * crop_w + x) * 4) as usize;
+                if orig_idx + 3 < buf.len() && crop_idx + 3 < cropped_buf.len() {
+                    cropped_buf[crop_idx] = buf[orig_idx];
+                    cropped_buf[crop_idx + 1] = buf[orig_idx + 1];
+                    cropped_buf[crop_idx + 2] = buf[orig_idx + 2];
+                    cropped_buf[crop_idx + 3] = buf[orig_idx + 3];
+                }
+            }
+        }
+    } else {
+        // Fallback for non-RGBA (fill alpha with 255)
+        for y in 0..crop_h {
+            for x in 0..crop_w {
+                let orig_x = crop_x + x;
+                let orig_y = crop_y + y;
+                let orig_idx = ((orig_y * img_w + orig_x) * 3) as usize;
+                let crop_idx = ((y * crop_w + x) * 4) as usize;
+                if orig_idx + 2 < buf.len() && crop_idx + 3 < cropped_buf.len() {
+                    cropped_buf[crop_idx] = buf[orig_idx];
+                    cropped_buf[crop_idx + 1] = buf[orig_idx + 1];
+                    cropped_buf[crop_idx + 2] = buf[orig_idx + 2];
+                    cropped_buf[crop_idx + 3] = 255;
+                }
+            }
+        }
+    }
+
+    // Save the cropped image on disk
+    let png_filename = format!("{}.png", asset_id);
+    let png_path = target_dir.join(&png_filename);
+    let file = fs::File::create(&png_path).map_err(|e| e.to_string())?;
+    let ref mut w = std::io::BufWriter::new(file);
+
+    let mut encoder = png::Encoder::new(w, crop_w as u32, crop_h as u32);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+    writer.write_image_data(&cropped_buf).map_err(|e| e.to_string())?;
+
+    // Determine runtime_template and default collision/size settings based on category
+    let template_type = match category.as_str() {
+        "heroes" => "player",
+        "enemies" => "enemy",
+        "terrain" => "terrain",
+        "collectibles" => "collectible",
+        "portals" => "portal",
+        _ => "decoration",
+    };
+
+    let (col_w, col_h) = match template_type {
+        "player" => (32, 48),
+        "terrain" => (128, 32),
+        "enemy" => (32, 32),
+        "collectible" => (24, 24),
+        "portal" => (48, 64),
+        _ => (48, 48), // decoration
+    };
+
+    let sidecar_filename = format!("{}.json", asset_id);
+    let sidecar_path = target_dir.join(&sidecar_filename);
+
+    let sidecar_payload = serde_json::json!({
+        "schema_version": 1,
+        "asset_id": asset_id,
+        "asset_name": format!("Custom {}", asset_id),
+        "category": category,
+        "runtime_template": template_type,
+        "visual": png_filename,
+        "placement_logic": {
+            "snapping_type": if category == "terrain" { "edge_to_edge" } else { "gravity_snap" },
+            "parallax_bucket": "play_layer"
+        },
+        "collision": {
+            "shape": "rectangle",
+            "size": [col_w, col_h]
+        }
+    });
+
+    fs::write(
+        &sidecar_path,
+        serde_json::to_string_pretty(&sidecar_payload).unwrap(),
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(format!("Asset {} successfully saved.", asset_id))
+}
+
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]

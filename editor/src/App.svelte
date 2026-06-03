@@ -3,6 +3,7 @@
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import ToyboxModal from './ToyboxModal.svelte';
   import BookshelfModal from './BookshelfModal.svelte';
+  import SpriteEditorModal from './SpriteEditorModal.svelte';
   import {
     eraseEntity,
     fallbackInventory,
@@ -14,6 +15,30 @@
     type ToyboxAsset,
     type WorldSettings
   } from './lib/canvasState';
+
+  let spriteEditorOpen = false;
+  let editingAssetId = '';
+  let editingCategory = 'decorations';
+
+  function openCustomAssetCanvas() {
+    editingAssetId = '';
+    editingCategory = 'decorations';
+    spriteEditorOpen = true;
+  }
+
+  function editActiveAsset() {
+    if (activeAsset) {
+      editingAssetId = activeAsset.id;
+      editingCategory = activeAsset.category;
+      spriteEditorOpen = true;
+    }
+  }
+
+  function handleDrawingSaved(event: CustomEvent<string>) {
+    status = `Magic Brush auto-saved toy: ${event.detail}`;
+    refreshInventory();
+  }
+
 
   let placed: PlacedEntity[] = [
     {
@@ -622,9 +647,13 @@
       </span>
       <span>{activeAsset.name}</span>
     </button>
+    {#if activeAsset}
+      <button on:click={editActiveAsset} title="Paint/Edit this toy" style="background: #eab308; color: #0f172a; padding: 6px 12px; font-weight: 800; border-radius: 12px; border: 0; cursor: pointer; display: flex; align-items: center; gap: 4px;">🎨 Edit</button>
+    {/if}
     <button class:active={eraserMode} on:click={() => (eraserMode = !eraserMode)}>🧽 Eraser</button>
     <button class:active={snapEnabled} on:click={() => (snapEnabled = !snapEnabled)}>🧲 Snap</button>
     <button on:click={() => (toyboxOpen = true)}>🧰 Toybox</button>
+    <button on:click={openCustomAssetCanvas} style="background: linear-gradient(135deg, #a855f7, #7c3aed); color: white; font-weight: 800; border: 0; border-radius: 12px; padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 4px;">🎨 Draw Toy</button>
   </header>
 
   <section class="quick-ribbon" aria-label="Quick toybox ribbon">
@@ -794,6 +823,14 @@
     on:newRoom={() => { createNewRoom(); bookshelfOpen = false; }}
     on:deleteRoom={(e) => deleteRoom(e.detail)}
     on:close={() => (bookshelfOpen = false)}
+  />
+
+  <SpriteEditorModal
+    isVisible={spriteEditorOpen}
+    targetAssetId={editingAssetId}
+    category={editingCategory}
+    on:close={() => (spriteEditorOpen = false)}
+    on:saved={handleDrawingSaved}
   />
 </main>
 
