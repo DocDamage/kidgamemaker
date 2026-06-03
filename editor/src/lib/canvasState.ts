@@ -13,6 +13,8 @@ export type PlacedEntity = {
   modifiers: {
     variant: string;
     scale_multiplier: number;
+    target_room?: string;
+    target_portal?: string;
   };
 };
 

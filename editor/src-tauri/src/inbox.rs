@@ -298,12 +298,14 @@ fn classify_asset(filename: &str) -> (&'static str, &'static str, &'static str, 
         ("heroes", "player", "gravity_snap", parallax)
     } else if lower.contains("enemy") || lower.contains("slime") || lower.contains("boss") || lower.contains("monster") || lower.contains("hazard") {
         ("enemies", "enemy", "gravity_snap", parallax)
+    } else if lower.contains("portal") || lower.contains("door") || lower.contains("gate") || lower.contains("warp") || lower.contains("exit") {
+        ("portals", "portal", "gravity_snap", parallax)
+    } else if lower.contains("checkpoint") || lower.contains("flag") || lower.contains("savepoint") {
+        ("decorations", "checkpoint", "free_float", parallax)
     } else if lower.contains("floor") || lower.contains("tile") || lower.contains("block") || lower.contains("ground") || lower.contains("platform") || lower.contains("wall") || lower.contains("brick") || lower.contains("stone") {
         ("terrain", "terrain", "edge_to_edge", parallax)
     } else if lower.contains("coin") || lower.contains("ruby") || lower.contains("gold") || lower.contains("gem") || lower.contains("collectible") || lower.contains("item") || lower.contains("heart") {
         ("collectibles", "collectible", "free_float", parallax)
-    } else if lower.contains("checkpoint") || lower.contains("flag") || lower.contains("savepoint") {
-        ("decorations", "checkpoint", "free_float", parallax)
     } else {
         ("decorations", "decoration", "free_float", parallax)
     }
@@ -362,6 +364,7 @@ mod tests {
         assert_eq!(classify_asset("stone_floor.png"), ("terrain", "terrain", "edge_to_edge", "play_layer"));
         assert_eq!(classify_asset("ruby_coin.png"), ("collectibles", "collectible", "free_float", "play_layer"));
         assert_eq!(classify_asset("bg_tree.png"), ("decorations", "decoration", "free_float", "deep_background"));
+        assert_eq!(classify_asset("gold_portal.png"), ("portals", "portal", "gravity_snap", "play_layer"));
     }
 
     #[test]

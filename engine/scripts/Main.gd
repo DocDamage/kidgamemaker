@@ -21,6 +21,9 @@ var sidecar_cache: Dictionary = {}
 var active_player: Node2D = null
 var spawn_point: Vector2 = Vector2.ZERO
 var death_y_threshold: float = 2000.0
+var spawned_entities: Array = []
+var target_spawn_portal_id: String = ""
+var found_spawn_portal_pos: Variant = null
 
 
 func _ready() -> void:
@@ -84,6 +87,14 @@ func load_level(file_path: String) -> void:
 		if typeof(entity_data) == TYPE_DICTIONARY:
 			spawn_entity(entity_data)
 
+	if target_spawn_portal_id != "" and found_spawn_portal_pos != null and active_player != null:
+		active_player.global_position = found_spawn_portal_pos
+		spawn_point = found_spawn_portal_pos
+		print("Teleported player to target portal: ", target_spawn_portal_id, " at ", found_spawn_portal_pos)
+
+	target_spawn_portal_id = ""
+	found_spawn_portal_pos = null
+
 	_configure_camera_limits()
 
 
@@ -138,15 +149,15 @@ func _merge_terrain_entities(entities: Array) -> Array:
 				var top_b := pos_b.y - size_b.y * 0.5
 				var bottom_b := pos_b.y + size_b.y * 0.5
 
-				var same_y := abs(pos_a.y - pos_b.y) < 1.0
-				var same_h := abs(size_a.y - size_b.y) < 1.0
-				var touches_x := (left_b <= right_a + 2.0 and right_b >= left_a - 2.0)
+				var same_y: bool = abs(pos_a.y - pos_b.y) < 1.0
+				var same_h: bool = abs(size_a.y - size_b.y) < 1.0
+				var touches_x: bool = (left_b <= right_a + 2.0 and right_b >= left_a - 2.0)
 				
 				if same_y and same_h and touches_x:
-					var new_left := min(left_a, left_b)
-					var new_right := max(right_a, right_b)
-					var new_width := new_right - new_left
-					var new_center_x := new_left + new_width * 0.5
+					var new_left: float = min(left_a, left_b)
+					var new_right: float = max(right_a, right_b)
+					var new_width: float = new_right - new_left
+					var new_center_x: float = new_left + new_width * 0.5
 					
 					box_a["position"] = {"x": new_center_x, "y": pos_a.y}
 					if not box_a.has("modifiers"):
@@ -188,6 +199,8 @@ func spawn_entity(data: Dictionary) -> Node2D:
 			node = _make_collectible(data, sidecar)
 		"checkpoint":
 			node = _make_checkpoint(data, sidecar)
+		"portal":
+			node = _make_portal(data, sidecar)
 		_:
 			node = _make_decoration(data, sidecar)
 
@@ -200,6 +213,7 @@ func spawn_entity(data: Dictionary) -> Node2D:
 	node.scale = Vector2(scale_multiplier, scale_multiplier)
 
 	add_child(node)
+	spawned_entities.append(node)
 
 	if runtime_template == "player":
 		spawn_point = node.global_position
@@ -211,6 +225,14 @@ func spawn_entity(data: Dictionary) -> Node2D:
 				if body == active_player:
 					_on_checkpoint_activated(node.global_position)
 			)
+	elif runtime_template == "portal":
+		if node is Area2D:
+			node.body_entered.connect(func(body):
+				if body == active_player:
+					_on_portal_entered(node, data)
+			)
+			if str(data.get("instance_id", "")) == target_spawn_portal_id:
+				found_spawn_portal_pos = node.global_position
 
 	_apply_lighting_if_needed(node, sidecar)
 
@@ -280,6 +302,14 @@ func _make_checkpoint(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	var size := _collision_size(sidecar, Vector2(40, 56), data)
 	_add_box_collision(area, size)
 	_add_visuals(area, sidecar, size, Color(0.3, 1.0, 0.7, 0.8))
+	return area
+
+
+func _make_portal(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 64), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color(0.65, 0.45, 0.2, 0.8))
 	return area
 
 
@@ -394,7 +424,8 @@ func _add_visuals(parent: Node2D, sidecar: Dictionary, size: Vector2, default_co
 		if is_spritesheet and frames.size() > 0 and (runtime_template == "player" or runtime_template == "enemy"):
 			var animated_sprite := AnimatedSprite2D.new()
 			var sprite_frames := SpriteFrames.new()
-			sprite_frames.add_animation("default")
+			if not sprite_frames.has_animation("default"):
+				sprite_frames.add_animation("default")
 			sprite_frames.set_animation_speed("default", 8.0)
 			sprite_frames.set_animation_loop("default", true)
 			
@@ -512,6 +543,43 @@ func _respawn_player() -> void:
 		active_player.velocity = Vector2.ZERO
 
 
+func _on_portal_entered(_portal_node: Node2D, portal_data: Dictionary) -> void:
+	var modifiers: Dictionary = portal_data.get("modifiers", {}) if portal_data.has("modifiers") else {}
+	var target_room = str(modifiers.get("target_room", ""))
+	var target_portal = str(modifiers.get("target_portal", ""))
+	
+	if target_room != "":
+		call_deferred("transition_to_room", target_room, target_portal)
+
+
+func transition_to_room(target_room_name: String, target_portal_id: String) -> void:
+	print("Transitioning to room: ", target_room_name, " spawning at portal: ", target_portal_id)
+	
+	var room_path := "res://data/rooms/" + target_room_name + ".json"
+	
+	if not FileAccess.file_exists(room_path):
+		var alternate_path := "res://data/" + target_room_name + ".json"
+		if FileAccess.file_exists(alternate_path):
+			room_path = alternate_path
+		else:
+			push_error("Room JSON file not found: " + room_path)
+			return
+			
+	clear_spawned_entities()
+	active_player = null
+	sidecar_cache.clear()
+	
+	target_spawn_portal_id = target_portal_id
+	load_level(room_path)
+
+
+func clear_spawned_entities() -> void:
+	for node in spawned_entities:
+		if is_instance_valid(node):
+			node.queue_free()
+	spawned_entities.clear()
+
+
 func _configure_camera_limits() -> void:
 	if active_player == null:
 		return
@@ -533,17 +601,19 @@ func _configure_camera_limits() -> void:
 	var found_terrain := false
 	for child in get_children():
 		if child.name.begins_with("stone_floor") or child.name.begins_with("floor") or child is StaticBody2D:
-			found_terrain = true
-			var pos := child.global_position
-			var size := Vector2(128, 32)
-			
-			if child.has_meta("collision_size"):
-				size = child.get_meta("collision_size")
+			var child_node2d := child as Node2D
+			if child_node2d != null:
+				found_terrain = true
+				var pos: Vector2 = child_node2d.global_position
+				var size: Vector2 = Vector2(128, 32)
 				
-			min_x = min(min_x, pos.x - size.x * 0.5)
-			max_x = max(max_x, pos.x + size.x * 0.5)
-			min_y = min(min_y, pos.y - size.y * 0.5)
-			max_y = max(max_y, pos.y + size.y * 0.5)
+				if child_node2d.has_meta("collision_size"):
+					size = child_node2d.get_meta("collision_size")
+					
+				min_x = min(min_x, pos.x - size.x * 0.5)
+				max_x = max(max_x, pos.x + size.x * 0.5)
+				min_y = min(min_y, pos.y - size.y * 0.5)
+				max_y = max(max_y, pos.y + size.y * 0.5)
 			
 	if not found_terrain:
 		min_x = active_player.global_position.x - 1000

@@ -197,7 +197,11 @@
                Math.abs(ent.position.y - position.y) < 4
     );
     if (!exists) {
-      placed = stampEntity(placed, activeAsset, position);
+      if (activeAsset.category === 'portals' || activeAsset.type === 'portal') {
+        handlePortalPlacement(position, activeAsset);
+      } else {
+        placed = stampEntity(placed, activeAsset, position);
+      }
     }
   }
 
@@ -215,7 +219,11 @@
                Math.abs(ent.position.y - position.y) < 8
     );
     if (!exists) {
-      placed = stampEntity(placed, activeAsset, position);
+      if (activeAsset.category === 'portals' || activeAsset.type === 'portal') {
+        handlePortalPlacement(position, activeAsset);
+      } else {
+        placed = stampEntity(placed, activeAsset, position);
+      }
     }
   }
 
@@ -272,6 +280,80 @@
   function handleMouseUp(event: MouseEvent) {
     if (event.button === 1 || event.button === 2) {
       isPanning = false;
+    }
+  }
+
+  async function handlePortalPlacement(position: { x: number; y: number }, asset: ToyboxAsset) {
+    let targetRoomId = '';
+    do {
+      targetRoomId = `room_${Math.random().toString(36).substring(2, 8)}`;
+    } while (rooms.includes(targetRoomId));
+
+    const thisPortalId = `portal_${Math.random().toString(36).substring(2, 8)}`;
+    const targetPortalId = `portal_${Math.random().toString(36).substring(2, 8)}`;
+
+    const newPortal: PlacedEntity = {
+      instance_id: thisPortalId,
+      asset_id: asset.id,
+      category: asset.category,
+      type: asset.type ?? asset.category,
+      position,
+      modifiers: {
+        variant: 'default',
+        scale_multiplier: 1.0,
+        target_room: targetRoomId,
+        target_portal: targetPortalId
+      }
+    };
+
+    placed = [...placed, newPortal];
+    status = `Placed portal ${thisPortalId} linking to room ${targetRoomId}`;
+
+    try {
+      const returnPortal: PlacedEntity = {
+        instance_id: targetPortalId,
+        asset_id: asset.id,
+        category: asset.category,
+        type: asset.type ?? asset.category,
+        position: { x: position.x, y: position.y },
+        modifiers: {
+          variant: 'default',
+          scale_multiplier: 1.0,
+          target_room: activeRoomId,
+          target_portal: thisPortalId
+        }
+      };
+
+      const terrainAsset = findAsset('stone_floor') ?? { id: 'stone_floor', name: 'Stone Floor', category: 'terrain', type: 'terrain' };
+      const floorUnderPortal: PlacedEntity = {
+        instance_id: `stone_floor_${Math.random().toString(36).substring(2, 8)}`,
+        asset_id: terrainAsset.id,
+        category: terrainAsset.category,
+        type: terrainAsset.type ?? terrainAsset.category,
+        position: { x: position.x, y: position.y + 48 },
+        modifiers: {
+          variant: 'default',
+          scale_multiplier: 1.0
+        }
+      };
+
+      const targetPayload = {
+        schema_version: 1,
+        project_id: 'demo_project',
+        room_id: targetRoomId,
+        world_settings: {
+          time_of_day: 'day',
+          weather: 'clear'
+        },
+        entities: [returnPortal, floorUnderPortal]
+      };
+
+      const jsonString = JSON.stringify(targetPayload);
+      await invoke('save_room', { roomId: targetRoomId, jsonString });
+      await loadRoomList();
+      status = `Placed portal linking to auto-created room ${targetRoomId}!`;
+    } catch (err) {
+      status = `Failed to auto-create target room: ${err}`;
     }
   }
 
@@ -464,7 +546,7 @@
           class="stamp {item.category}"
           style:left={`${item.position.x}px`}
           style:top={`${item.position.y}px`}
-          title={`${item.asset_id} ${item.instance_id}`}
+          title={`${item.asset_id} ${item.instance_id}${item.modifiers.target_room ? ` (Leads to ${item.modifiers.target_room})` : ''}`}
           on:click|stopPropagation={() => {
             if (eraserMode) placed = eraseEntity(placed, item.instance_id);
           }}
