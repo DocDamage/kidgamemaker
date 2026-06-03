@@ -51,6 +51,8 @@ func _on_body_entered(body: Node) -> void:
 		main.on_collectible_picked_up(payload)
 	if main != null and main.has_method("play_custom_sfx"):
 		main.play_custom_sfx(asset_id, "coin")
+	if score_value > 0 and main != null and main.has_method("spawn_floating_text"):
+		main.spawn_floating_text("+%d" % score_value, global_position, Color(1.0, 0.85, 0.15))
 
 	print("Collected '%s' score+%d heal+%d powerup=%s" % [asset_id, score_value, heal_value, powerup_type])
 

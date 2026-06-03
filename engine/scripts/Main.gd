@@ -363,6 +363,12 @@ func _make_enemy(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
 			body.set("boss_mode", bool(modifiers.get("boss_mode")))
 		if modifiers.has("behavior_type"):
 			body.set("behavior_type", str(modifiers.get("behavior_type")))
+		if modifiers.has("shoot_projectiles"):
+			body.set("shoot_projectiles", bool(modifiers.get("shoot_projectiles")))
+		if modifiers.has("projectile_speed"):
+			body.set("projectile_speed", float(modifiers.get("projectile_speed")))
+		if modifiers.has("projectile_interval"):
+			body.set("projectile_interval", float(modifiers.get("projectile_interval")))
 
 	return body
 
@@ -444,125 +450,228 @@ func _make_locked_door(data: Dictionary, sidecar: Dictionary) -> Area2D:
 func _make_particles(data: Dictionary, sidecar: Dictionary) -> CPUParticles2D:
 	var particles := CPUParticles2D.new()
 	var asset_id := str(data.get("asset_id", ""))
+	var modifiers: Dictionary = data.get("modifiers", {})
 
-	particles.amount = 20
-	particles.lifetime = 1.0
-	particles.explosiveness = 0.0
-	particles.randomness = 0.5
-	particles.emitting = true
-
-	particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	particles.emission_rect_extents = Vector2(16, 16)
+	# Set default values depending on asset_id
+	var amount := 20
+	var lifetime := 1.0
+	var gravity_vec := Vector2(0, -90)
+	var velocity_min := 20.0
+	var velocity_max := 50.0
+	var color_ramp_grad: Gradient = null
+	var scale_curve: Curve = null
+	var single_color := Color.WHITE
+	var has_single_color := false
 
 	match asset_id:
 		"effects_fire":
-			particles.amount = 35
-			particles.lifetime = 0.8
-			particles.direction = Vector2(0, -1)
-			particles.spread = 20.0
-			particles.gravity = Vector2(0, -180)
-			particles.initial_velocity_min = 40.0
-			particles.initial_velocity_max = 80.0
+			amount = 35
+			lifetime = 0.8
+			gravity_vec = Vector2(0, -180)
+			velocity_min = 40.0
+			velocity_max = 80.0
 
 			var grad := Gradient.new()
 			grad.set_color(0, Color(1.0, 0.2, 0.0, 1.0))
 			grad.add_key(0.5, Color(1.0, 0.8, 0.0, 1.0))
 			grad.set_color(1, Color(1.0, 0.2, 0.0, 0.0))
-			particles.color_ramp = grad
+			color_ramp_grad = grad
 
 			var curve := Curve.new()
 			curve.add_point(Vector2(0, 6.0))
 			curve.add_point(Vector2(1, 1.0))
-			particles.scale_amount_curve = curve
+			scale_curve = curve
 
 		"effects_sparkles":
-			particles.amount = 15
-			particles.lifetime = 1.2
-			particles.direction = Vector2.ZERO
-			particles.spread = 180.0
-			particles.gravity = Vector2(0, 0)
-			particles.initial_velocity_min = 10.0
-			particles.initial_velocity_max = 30.0
+			amount = 15
+			lifetime = 1.2
+			gravity_vec = Vector2.ZERO
+			velocity_min = 10.0
+			velocity_max = 30.0
 
 			var grad := Gradient.new()
 			grad.set_color(0, Color(1.0, 0.9, 0.4, 1.0))
 			grad.add_key(0.5, Color(0.4, 0.9, 1.0, 1.0))
 			grad.set_color(1, Color(0.4, 0.9, 1.0, 0.0))
-			particles.color_ramp = grad
+			color_ramp_grad = grad
 
 			var curve := Curve.new()
 			curve.add_point(Vector2(0, 0.0))
 			curve.add_point(Vector2(0.2, 4.0))
 			curve.add_point(Vector2(0.8, 4.0))
 			curve.add_point(Vector2(1, 0.0))
-			particles.scale_amount_curve = curve
+			scale_curve = curve
 
 		"effects_snow":
-			particles.amount = 25
-			particles.lifetime = 2.0
-			particles.direction = Vector2(0.2, 1.0)
-			particles.spread = 15.0
-			particles.gravity = Vector2(0, 80)
-			particles.initial_velocity_min = 20.0
-			particles.initial_velocity_max = 40.0
-			particles.color = Color(1.0, 1.0, 1.0, 0.9)
+			amount = 25
+			lifetime = 2.0
+			gravity_vec = Vector2(0, 80)
+			velocity_min = 20.0
+			velocity_max = 40.0
+			single_color = Color(1.0, 1.0, 1.0, 0.9)
+			has_single_color = true
 
 			var grad := Gradient.new()
 			grad.set_color(0, Color(1.0, 1.0, 1.0, 0.9))
 			grad.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
-			particles.color_ramp = grad
-
-			particles.scale_amount_min = 2.0
-			particles.scale_amount_max = 4.0
+			color_ramp_grad = grad
 
 		"effects_hearts":
-			particles.amount = 10
-			particles.lifetime = 1.5
-			particles.direction = Vector2(0, -1)
-			particles.spread = 45.0
-			particles.gravity = Vector2(0, -60)
-			particles.initial_velocity_min = 20.0
-			particles.initial_velocity_max = 50.0
+			amount = 10
+			lifetime = 1.5
+			gravity_vec = Vector2(0, -60)
+			velocity_min = 20.0
+			velocity_max = 50.0
 
 			var grad := Gradient.new()
 			grad.set_color(0, Color(1.0, 0.4, 0.6, 1.0))
 			grad.add_key(0.6, Color(1.0, 0.1, 0.4, 1.0))
 			grad.set_color(1, Color(1.0, 0.1, 0.4, 0.0))
-			particles.color_ramp = grad
+			color_ramp_grad = grad
 
 			var curve := Curve.new()
 			curve.add_point(Vector2(0, 1.0))
 			curve.add_point(Vector2(0.4, 5.0))
 			curve.add_point(Vector2(0.8, 5.0))
 			curve.add_point(Vector2(1, 0.0))
-			particles.scale_amount_curve = curve
+			scale_curve = curve
 
 		"effects_smoke":
-			particles.amount = 15
-			particles.lifetime = 2.0
-			particles.direction = Vector2(0.5, -1.0)
-			particles.spread = 30.0
-			particles.gravity = Vector2(10, -50)
-			particles.initial_velocity_min = 15.0
-			particles.initial_velocity_max = 30.0
+			amount = 15
+			lifetime = 2.0
+			gravity_vec = Vector2(10, -50)
+			velocity_min = 15.0
+			velocity_max = 30.0
 
 			var grad := Gradient.new()
 			grad.set_color(0, Color(0.7, 0.7, 0.7, 0.8))
 			grad.add_key(0.5, Color(0.8, 0.8, 0.8, 0.4))
 			grad.set_color(1, Color(0.9, 0.9, 0.9, 0.0))
-			particles.color_ramp = grad
+			color_ramp_grad = grad
 
 			var curve := Curve.new()
 			curve.add_point(Vector2(0, 3.0))
 			curve.add_point(Vector2(0.5, 8.0))
 			curve.add_point(Vector2(1, 12.0))
-			particles.scale_amount_curve = curve
+			scale_curve = curve
 
 		_:
-			particles.amount = 10
-			particles.color = Color(1.0, 1.0, 1.0, 1.0)
+			amount = 10
+			single_color = Color(1.0, 1.0, 1.0, 1.0)
+			has_single_color = true
+
+	# ─── OVERRIDES FROM MODIFIERS ───
+	
+	# 1. Effect Theme (color palettes override)
+	var theme_type = str(modifiers.get("particle_theme", "default"))
+	if theme_type != "default" and theme_type != "":
+		has_single_color = false
+		var new_grad := Gradient.new()
+		match theme_type:
+			"rainbow":
+				new_grad.set_color(0, Color(1.0, 0.0, 0.0, 1.0))      # Red
+				new_grad.add_key(0.2, Color(1.0, 1.0, 0.0, 1.0))  # Yellow
+				new_grad.add_key(0.4, Color(0.0, 1.0, 0.0, 1.0))  # Green
+				new_grad.add_key(0.6, Color(0.0, 1.0, 1.0, 1.0))  # Cyan
+				new_grad.add_key(0.8, Color(0.5, 0.0, 1.0, 1.0))  # Purple
+				new_grad.set_color(1, Color(1.0, 0.0, 0.0, 0.0))  # Fade out Red
+			"neon":
+				new_grad.set_color(0, Color(0.0, 1.0, 0.9, 1.0))  # Cyan
+				new_grad.add_key(0.5, Color(1.0, 0.0, 0.9, 1.0))  # Magenta
+				new_grad.set_color(1, Color(0.0, 1.0, 0.0, 0.0))  # Fade out Green
+			"frost":
+				new_grad.set_color(0, Color(0.8, 0.95, 1.0, 1.0)) # Icy white
+				new_grad.add_key(0.5, Color(0.2, 0.7, 1.0, 1.0))  # Ice blue
+				new_grad.set_color(1, Color(0.0, 0.4, 0.8, 0.0))  # Fade out deep blue
+			"shadow":
+				new_grad.set_color(0, Color(0.4, 0.0, 0.6, 1.0))  # Purple shadow
+				new_grad.add_key(0.5, Color(0.1, 0.1, 0.15, 1.0)) # Dark obsidian
+				new_grad.set_color(1, Color(0.0, 0.0, 0.0, 0.0))  # Fade out black
+		color_ramp_grad = new_grad
+
+	# 2. Flow Speed / Intensity
+	var intensity = str(modifiers.get("particle_intensity", "normal"))
+	match intensity:
+		"calm":
+			amount = int(amount * 0.4)
+			lifetime = lifetime * 1.5
+			velocity_min *= 0.5
+			velocity_max *= 0.5
+		"normal":
+			pass
+		"wild":
+			amount = int(amount * 2.2)
+			lifetime = lifetime * 0.7
+			velocity_min *= 1.8
+			velocity_max *= 1.8
+
+	# 3. Wind / Gravity Direction
+	var direction_type = str(modifiers.get("particle_direction", "default"))
+	if direction_type != "default" and direction_type != "":
+		var grav_mag = max(abs(gravity_vec.x), abs(gravity_vec.y))
+		if grav_mag == 0.0:
+			grav_mag = 120.0
+		match direction_type:
+			"up":
+				gravity_vec = Vector2(0, -grav_mag)
+			"down":
+				gravity_vec = Vector2(0, grav_mag)
+			"left":
+				gravity_vec = Vector2(-grav_mag, 0)
+			"right":
+				gravity_vec = Vector2(grav_mag, 0)
+
+	# ─── APPLY FINAL CONFIGURATION ───
+	particles.amount = max(2, amount)
+	particles.lifetime = lifetime
+	particles.gravity = gravity_vec
+	particles.initial_velocity_min = velocity_min
+	particles.initial_velocity_max = velocity_max
+
+	if color_ramp_grad != null:
+		particles.color_ramp = color_ramp_grad
+	if scale_curve != null:
+		particles.scale_amount_curve = scale_curve
+	if has_single_color:
+		particles.color = single_color
+
+	particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	particles.emission_rect_extents = Vector2(16, 16)
+	particles.randomness = 0.5
+	particles.emitting = true
 
 	return particles
+
+
+func spawn_floating_text(text: String, global_pos: Vector2, color: Color) -> void:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+
+	var settings := LabelSettings.new()
+	settings.font_size = 20
+	settings.font_color = color
+	settings.outline_size = 4
+	settings.outline_color = Color.BLACK
+	label.label_settings = settings
+
+	label.size = Vector2(100, 30)
+	label.position = global_pos - label.size * 0.5
+	label.z_index = 200 # draw on top of game objects
+	add_child(label)
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(label, "position:y", label.position.y - 50.0, 0.8).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "modulate:a", 0.0, 0.8).set_ease(Tween.EASE_IN)
+
+	label.scale = Vector2(0.5, 0.5)
+	label.pivot_offset = label.size * 0.5
+	tween.tween_property(label, "scale", Vector2(1.2, 1.2), 0.15).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "scale", Vector2(1.0, 1.0), 0.15).set_delay(0.15)
+
+	tween.chain().tween_callback(label.queue_free)
 
 
 func _make_decoration(data: Dictionary, sidecar: Dictionary) -> Node2D:

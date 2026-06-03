@@ -25,6 +25,9 @@ func _ready() -> void:
 func heal(amount: int) -> void:
 	current_health = min(current_health + amount, max_health)
 	print("Player healed by %d HP. HP now: %d/%d" % [amount, current_health, max_health])
+	var main := get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.has_method("spawn_floating_text"):
+		main.spawn_floating_text("+%d HP" % amount, global_position, Color.GREEN)
 
 
 func apply_powerup(type: String) -> void:
@@ -46,6 +49,9 @@ func apply_powerup(type: String) -> void:
 			if main != null and main.has_method("play_sfx"):
 				main.play_sfx("coin")
 
+	if main != null and main.has_method("spawn_floating_text"):
+		main.spawn_floating_text(type.replace("_", " ").to_upper() + "!", global_position, Color.CYAN)
+
 
 func take_damage(amount: int) -> void:
 	if _invincible:
@@ -57,6 +63,8 @@ func take_damage(amount: int) -> void:
 		var main := get_tree().get_root().get_node_or_null("Main")
 		if main != null and main.has_method("play_sfx"):
 			main.play_sfx("coin") # Chime on shield break
+		if main != null and main.has_method("spawn_floating_text"):
+			main.spawn_floating_text("SHIELD BLOCK!", global_position, Color.MAGENTA)
 		_invincible = true
 		var tween := create_tween()
 		tween.tween_property(self, "modulate:a", 0.5, 0.1)
@@ -71,6 +79,9 @@ func take_damage(amount: int) -> void:
 	print("Player took %d damage! HP now: %d/%d" % [amount, current_health, max_health])
 
 	var main := get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.has_method("spawn_floating_text"):
+		main.spawn_floating_text("-%d HP" % amount, global_position, Color.RED)
+
 	if main != null and main.has_method("play_custom_sfx"):
 		main.play_custom_sfx(asset_id, "hit")
 

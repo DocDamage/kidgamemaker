@@ -1338,6 +1338,50 @@
           </div>
 
           <div class="option-group flex-row">
+            <span class="option-label-text">Shoots Projectiles? 🔫</span>
+            <input 
+              type="checkbox" 
+              class="option-toggle" 
+              bind:checked={selectedPlacedEntity.modifiers.shoot_projectiles} 
+              on:change={saveCurrentRoom} 
+            />
+          </div>
+
+          {#if selectedPlacedEntity.modifiers.shoot_projectiles}
+            <div class="option-group">
+              <div class="option-label">
+                <span>Shoot Speed:</span>
+                <span>{selectedPlacedEntity.modifiers.projectile_speed ?? 250}</span>
+              </div>
+              <input 
+                type="range" 
+                min="100" 
+                max="500" 
+                step="50" 
+                class="option-slider" 
+                bind:value={selectedPlacedEntity.modifiers.projectile_speed} 
+                on:change={saveCurrentRoom} 
+              />
+            </div>
+
+            <div class="option-group">
+              <div class="option-label">
+                <span>Shoot Delay:</span>
+                <span>{selectedPlacedEntity.modifiers.projectile_interval ?? 1.5}s</span>
+              </div>
+              <input 
+                type="range" 
+                min="0.5" 
+                max="4.0" 
+                step="0.5" 
+                class="option-slider" 
+                bind:value={selectedPlacedEntity.modifiers.projectile_interval} 
+                on:change={saveCurrentRoom} 
+              />
+            </div>
+          {/if}
+
+          <div class="option-group flex-row">
             <span class="option-label-text">Is it a Boss? 👑</span>
             <input 
               type="checkbox" 
@@ -1410,6 +1454,48 @@
               {#each rooms as r}
                 <option value={r}>{r === activeRoomId ? `${r} (This Room)` : r}</option>
               {/each}
+            </select>
+          </div>
+        {:else if selectedPlacedEntity.category === 'particles' || selectedPlacedEntity.type === 'particles'}
+          <div class="option-group">
+            <span class="option-label-text">Effect Theme:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.particle_theme} 
+              on:change={saveCurrentRoom}
+            >
+              <option value="default">✨ Default</option>
+              <option value="rainbow">🌈 Rainbow Spark</option>
+              <option value="neon">⚡ Electric Neon</option>
+              <option value="frost">❄️ Frost Chill</option>
+              <option value="shadow">💀 Shadow Curse</option>
+            </select>
+          </div>
+
+          <div class="option-group">
+            <span class="option-label-text">Flow Speed:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.particle_intensity} 
+              on:change={saveCurrentRoom}
+            >
+              <option value="calm">🌸 Calm</option>
+              <option value="normal">💧 Normal</option>
+              <option value="wild">🌪️ Wild</option>
+            </select>
+          </div>
+
+          <div class="option-group">
+            <span class="option-label-text">Wind Direction:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.particle_direction} 
+              on:change={saveCurrentRoom}
+            >
+              <option value="up">⬆️ Blow Up</option>
+              <option value="down">⬇️ Blow Down</option>
+              <option value="left">⬅️ Blow Left</option>
+              <option value="right">➡️ Blow Right</option>
             </select>
           </div>
         {/if}

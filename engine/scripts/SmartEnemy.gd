@@ -7,6 +7,9 @@ extends CharacterBody2D
 @export var damage_value: int = 10
 @export var boss_mode: bool = false
 @export var behavior_type: String = "patrol"
+@export var shoot_projectiles: bool = false
+@export var projectile_speed: float = 250.0
+@export var projectile_interval: float = 1.5
 
 var direction: int = -1
 var gravity: float = ProjectSettings.get_setting("physics/2d/default_gravity")
@@ -46,6 +49,12 @@ func _on_damage_area_body_entered(body: Node) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if shoot_projectiles:
+		_shoot_timer -= delta
+		if _shoot_timer <= 0.0:
+			_shoot_projectile()
+			_shoot_timer = projectile_interval
+
 	if behavior_type != "fly":
 		if not is_on_floor():
 			velocity.y += gravity * gravity_scale * delta
@@ -104,3 +113,56 @@ func _update_probe() -> void:
 		return
 	floor_probe.position = Vector2(float(direction) * ledge_probe_distance, 0)
 	floor_probe.target_position = Vector2(0, ledge_probe_depth)
+
+
+func _shoot_projectile() -> void:
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main == null:
+		return
+
+	var shoot_dir := Vector2(float(direction), 0)
+	var player = main.active_player
+	if player != null:
+		var diff = player.global_position - global_position
+		if diff.length() < 320.0:
+			shoot_dir = diff.normalized()
+
+	var bullet := Area2D.new()
+	bullet.name = "EnemyProjectile"
+
+	var visual := ColorRect.new()
+	visual.color = Color(1.0, 0.35, 0.15, 1.0)
+	visual.size = Vector2(10, 10)
+	visual.position = -visual.size * 0.5
+	bullet.add_child(visual)
+
+	var shape := CircleShape2D.new()
+	shape.radius = 6.0
+	var col := CollisionShape2D.new()
+	col.shape = shape
+	bullet.add_child(col)
+
+	bullet.collision_layer = 0
+	bullet.collision_mask = 1 # player
+
+	var bullet_script := GDScript.new()
+	bullet_script.source_code = "extends Area2D\nvar velocity := Vector2.ZERO\nfunc _physics_process(delta: float) -> void:\n\tglobal_position += velocity * delta\n"
+	bullet_script.reload()
+	bullet.set_script(bullet_script)
+
+	bullet.set("velocity", shoot_dir * projectile_speed)
+	bullet.global_position = global_position
+
+	bullet.body_entered.connect(func(body):
+		if body.has_method("take_damage"):
+			body.take_damage(damage_value)
+		bullet.queue_free()
+	)
+
+	var timer = get_tree().create_timer(3.0)
+	timer.timeout.connect(func():
+		if is_instance_valid(bullet):
+			bullet.queue_free()
+	)
+
+	main.add_child(bullet)
