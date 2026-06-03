@@ -31,10 +31,19 @@ var keys_collected: Dictionary = {}  # key_color -> count
 var hud_canvas: CanvasLayer = null
 var hud_health_label: Label = null
 var hud_score_label: Label = null
+var _js_pause_cb: JavaScriptObject
+var _js_restart_cb: JavaScriptObject
 
 
 func _ready() -> void:
 	if OS.has_feature("web"):
+		var window = JavaScriptBridge.get_interface("window")
+		if window != null:
+			_js_pause_cb = JavaScriptBridge.create_callback(_on_js_pause)
+			_js_restart_cb = JavaScriptBridge.create_callback(_on_js_restart)
+			window.set("godotPauseGame", _js_pause_cb)
+			window.set("godotRestartGame", _js_restart_cb)
+
 		var json_str = JavaScriptBridge.eval("window.parent.currentGameLevel")
 		if not json_str:
 			json_str = JavaScriptBridge.eval("window.currentGameLevel")
@@ -45,6 +54,17 @@ func _ready() -> void:
 	var level_path := _resolve_level_path()
 	print("KidGameMaker runner loading level: ", level_path)
 	load_level(level_path)
+
+
+func _on_js_pause(args: Array) -> void:
+	var pause_val: bool = args[0] if args.size() > 0 else false
+	get_tree().paused = pause_val
+	print("Game paused via JS: ", pause_val)
+
+
+func _on_js_restart(_args: Array) -> void:
+	print("Game restarting via JS...")
+	get_tree().reload_current_scene()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -799,7 +819,9 @@ func _apply_world_settings(settings: Dictionary) -> void:
 			modulate_node.color = Color(0.12, 0.12, 0.28)
 		"sunset":
 			modulate_node.color = Color(0.85, 0.58, 0.45)
-		"day", "morning":
+		"morning":
+			modulate_node.color = Color(0.88, 0.94, 1.0)
+		"day":
 			modulate_node.color = Color.WHITE
 		_:
 			modulate_node.color = Color.WHITE
@@ -1004,6 +1026,10 @@ func _play_theme_bgm(theme: String) -> void:
 			bgm_path = "res://data/assets/audio/candy_bgm.wav"
 		"jungle":
 			bgm_path = "res://data/assets/audio/jungle_bgm.wav"
+		"ice":
+			bgm_path = "res://data/assets/audio/ice_bgm.wav"
+		"volcano":
+			bgm_path = "res://data/assets/audio/volcano_bgm.wav"
 
 	if bgm_path != "":
 		var stream = _load_wav_file(bgm_path)

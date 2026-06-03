@@ -25,6 +25,39 @@
   let parentsPanelOpen = false;
   let themeSelectorOpen = false;
   let playModalOpen = false;
+  let isGamePaused = false;
+
+  function togglePauseGame() {
+    const iframe = document.querySelector('.game-iframe') as HTMLIFrameElement;
+    if (iframe && iframe.contentWindow) {
+      isGamePaused = !isGamePaused;
+      try {
+        (iframe.contentWindow as any).godotPauseGame(isGamePaused);
+        status = isGamePaused ? "Game Paused ⏸" : "Game Resumed ▶";
+      } catch (e) {
+        console.error("Failed to pause game:", e);
+      }
+    }
+  }
+
+  function restartGame() {
+    const iframe = document.querySelector('.game-iframe') as HTMLIFrameElement;
+    if (iframe && iframe.contentWindow) {
+      isGamePaused = false;
+      try {
+        iframe.src = iframe.src;
+        status = "Game Restarted 🔄";
+        playUiSound('chime');
+      } catch (e) {
+        console.error("Failed to restart game:", e);
+      }
+    }
+  }
+
+  function closePlayModal() {
+    playModalOpen = false;
+    isGamePaused = false;
+  }
 
   let audioCtx: AudioContext | null = null;
   function getAudioContext() {
@@ -184,6 +217,53 @@
 
   $: quickRibbon = Object.values(inventory).flat().slice(0, 8);
 
+  // Level editor undo/redo history stack
+  let levelHistory: PlacedEntity[][] = [];
+  let levelHistoryIndex = -1;
+
+  function saveLevelState() {
+    if (levelHistoryIndex < levelHistory.length - 1) {
+      levelHistory = levelHistory.slice(0, levelHistoryIndex + 1);
+    }
+    // Deep copy of placed entities
+    levelHistory.push(placed.map(ent => ({
+      ...ent,
+      position: { ...ent.position },
+      modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
+    })));
+    levelHistoryIndex = levelHistory.length - 1;
+    if (levelHistory.length > 50) {
+      levelHistory.shift();
+      levelHistoryIndex--;
+    }
+  }
+
+  function undoLevel() {
+    if (levelHistoryIndex > 0) {
+      levelHistoryIndex--;
+      placed = levelHistory[levelHistoryIndex].map(ent => ({
+        ...ent,
+        position: { ...ent.position },
+        modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
+      }));
+      saveCurrentRoom();
+      playUiSound('squeak');
+    }
+  }
+
+  function redoLevel() {
+    if (levelHistoryIndex < levelHistory.length - 1) {
+      levelHistoryIndex++;
+      placed = levelHistory[levelHistoryIndex].map(ent => ({
+        ...ent,
+        position: { ...ent.position },
+        modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
+      }));
+      saveCurrentRoom();
+      playUiSound('pop');
+    }
+  }
+
   onMount(async () => {
     try {
       inventory = await invoke<AssetInventory>('get_asset_inventory');
@@ -207,6 +287,12 @@
       } catch (error) {
         status += ' No saved game state found, starting fresh.';
       }
+      levelHistory = [placed.map(ent => ({
+        ...ent,
+        position: { ...ent.position },
+        modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
+      }))];
+      levelHistoryIndex = 0;
     }
 
     // Auto-save every 60 seconds
@@ -378,6 +464,8 @@
   function stopDrawing(event: MouseEvent) {
     if (event.button === 0) {
       isDrawing = false;
+      saveLevelState();
+      saveCurrentRoom();
     }
   }
 
@@ -448,6 +536,7 @@
     };
 
     placed = [...placed, newPortal];
+    saveLevelState();
     status = `Placed portal ${thisPortalId} linking to room ${targetRoomId}`;
 
     try {
@@ -544,6 +633,12 @@
           };
         }
         status = `Loaded room: ${roomId}`;
+        levelHistory = [placed.map(ent => ({
+          ...ent,
+          position: { ...ent.position },
+          modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
+        }))];
+        levelHistoryIndex = 0;
       }
     } catch (error) {
       status = `Failed to load room ${roomId}: ${error}`;
@@ -631,7 +726,7 @@
     themeSelectorOpen = true;
   }
 
-  async function applyTheme(themeName: 'space' | 'candy' | 'jungle') {
+  async function applyTheme(themeName: 'space' | 'candy' | 'jungle' | 'ice' | 'volcano') {
     themeSelectorOpen = false;
     const newId = `${themeName}_room_${Math.floor(Math.random() * 900 + 100)}`;
     activeRoomId = newId;
@@ -639,6 +734,10 @@
     if (themeName === 'space') {
       worldSettings = { time_of_day: 'night', weather: 'clear' };
     } else if (themeName === 'candy') {
+      worldSettings = { time_of_day: 'sunset', weather: 'clear' };
+    } else if (themeName === 'ice') {
+      worldSettings = { time_of_day: 'morning', weather: 'snow' };
+    } else if (themeName === 'volcano') {
       worldSettings = { time_of_day: 'sunset', weather: 'clear' };
     } else {
       worldSettings = { time_of_day: 'day', weather: 'rain' };
@@ -681,6 +780,13 @@
     }
 
     placed = newPlaced;
+    levelHistory = [placed.map(ent => ({
+      ...ent,
+      position: { ...ent.position },
+      modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
+    }))];
+    levelHistoryIndex = 0;
+
     status = `Created new ${themeName} room: ${newId}`;
     playUiSound('chime');
 
@@ -699,6 +805,7 @@
       try {
         await invoke('build_web_runner');
         playModalOpen = true;
+        isGamePaused = false;
         status = 'Loaded embedded play mode!';
         playUiSound('chime');
       } catch (err) {
@@ -809,6 +916,8 @@
 
     <button class="eraser-btn-top" class:active={eraserMode} on:click={(e) => { animateClick(e); eraserMode = !eraserMode; }} title="Eraser">🧽 Eraser</button>
     <button class="snap-btn-top" class:active={snapEnabled} on:click={(e) => { animateClick(e); snapEnabled = !snapEnabled; }} title="Snap to Grid">🧲 Snap</button>
+    <button class="undo-btn-top" disabled={levelHistoryIndex <= 0} on:click={(e) => { animateClick(e); undoLevel(); }} title="Undo last action">↺ Undo</button>
+    <button class="redo-btn-top" disabled={levelHistoryIndex >= levelHistory.length - 1} on:click={(e) => { animateClick(e); redoLevel(); }} title="Redo action">↻ Redo</button>
     <button class="toybox-btn-top" on:click={(e) => { animateClick(e); toyboxOpen = true; }} title="Toybox">🧰 Toybox</button>
     <button class="draw-toy-btn-top" on:click={(e) => { animateClick(e); openCustomAssetCanvas(); }} title="Draw Toy">🎨 Draw</button>
 
@@ -1061,6 +1170,16 @@
             <h3>Jungle Rain</h3>
             <p>Rainy green forests and wild vine jumps!</p>
           </button>
+          <button class="theme-card ice" on:click={() => applyTheme('ice')}>
+            <span class="card-icon">❄️</span>
+            <h3>Winter Wonderland</h3>
+            <p>Slide on snow under bright icy blue skies!</p>
+          </button>
+          <button class="theme-card volcano" on:click={() => applyTheme('volcano')}>
+            <span class="card-icon">🌋</span>
+            <h3>Volcano Run</h3>
+            <p>Watch out for lava blocks and sunset skies!</p>
+          </button>
         </div>
         <button class="close-btn" on:click={() => (themeSelectorOpen = false)}>✕ Close</button>
       </div>
@@ -1068,17 +1187,27 @@
   {/if}
 
   {#if playModalOpen}
-    <div class="backdrop" role="button" tabindex="-1" on:click={() => (playModalOpen = false)}>
+    <div class="backdrop" role="button" tabindex="-1" on:click={closePlayModal}>
       <div class="modal play-modal" role="dialog" tabindex="0" on:click|stopPropagation>
-        <header>
+        <header class="play-header">
           <h2>🎮 Playing Game! 🎮</h2>
-          <button class="close-btn" on:click={() => (playModalOpen = false)}>✕ Stop</button>
+          <div class="play-controls-overlay">
+            <button class="play-control-btn pause-btn" on:click={togglePauseGame} title={isGamePaused ? "Resume" : "Pause"}>
+              {isGamePaused ? "▶ Resume" : "⏸ Pause"}
+            </button>
+            <button class="play-control-btn restart-btn" on:click={restartGame} title="Restart level">
+              🔄 Restart
+            </button>
+            <button class="play-control-btn stop-btn" on:click={closePlayModal} title="Exit game">
+              🛑 Exit
+            </button>
+          </div>
         </header>
         <div class="game-container">
           <iframe src="/game/index.html" title="KidGameMaker Embedded Play View" class="game-iframe"></iframe>
         </div>
         <div class="play-options">
-          <button class="window-btn" on:click={() => { playModalOpen = false; launchNativeWindow(); }}>📺 Run in Large Window</button>
+          <button class="window-btn" on:click={() => { closePlayModal(); launchNativeWindow(); }}>📺 Run in Large Window</button>
         </div>
       </div>
     </div>
@@ -1659,5 +1788,96 @@
   @keyframes wobble {
     0% { transform: rotate(-5deg); }
     100% { transform: rotate(5deg); }
+  }
+
+  .undo-btn-top {
+    background: #f87171;
+    color: white;
+    box-shadow: 0 5px 0 #b91c1c;
+  }
+  .undo-btn-top:active {
+    transform: translateY(3px);
+    box-shadow: 0 2px 0 #b91c1c;
+  }
+  .undo-btn-top:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .redo-btn-top {
+    background: #60a5fa;
+    color: white;
+    box-shadow: 0 5px 0 #1d4ed8;
+  }
+  .redo-btn-top:active {
+    transform: translateY(3px);
+    box-shadow: 0 2px 0 #1d4ed8;
+  }
+  .redo-btn-top:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .theme-card.ice {
+    background: linear-gradient(135deg, #0284c7, #38bdf8);
+  }
+
+  .theme-card.volcano {
+    background: linear-gradient(135deg, #7c2d12, #ea580c);
+  }
+
+  .play-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+  }
+
+  .play-controls-overlay {
+    display: flex;
+    gap: 12px;
+  }
+
+  .play-control-btn {
+    border: 0;
+    border-radius: 20px;
+    padding: 10px 20px;
+    font-size: 1.1rem;
+    font-weight: 900;
+    cursor: pointer;
+    color: white;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+
+  .play-control-btn:active {
+    transform: translateY(3px);
+  }
+
+  .play-control-btn.pause-btn {
+    background: #eab308;
+    box-shadow: 0 5px 0 #ca8a04;
+  }
+  .play-control-btn.pause-btn:active {
+    box-shadow: 0 2px 0 #ca8a04;
+  }
+
+  .play-control-btn.restart-btn {
+    background: #3b82f6;
+    box-shadow: 0 5px 0 #1d4ed8;
+  }
+  .play-control-btn.restart-btn:active {
+    box-shadow: 0 2px 0 #1d4ed8;
+  }
+
+  .play-control-btn.stop-btn {
+    background: #ef4444;
+    box-shadow: 0 5px 0 #b91c1c;
+  }
+  .play-control-btn.stop-btn:active {
+    box-shadow: 0 2px 0 #b91c1c;
   }
 </style>

@@ -90,6 +90,30 @@ def jungle_bgm_vol(t, duration):
     note_t = (t * 4.0) % 1.0
     return 0.15 * (1.0 - note_t * 0.8)
 
+# 7. Ice BGM (2.5 seconds)
+def ice_bgm_freq(t, duration):
+    # Twinkling, high bell-like tones (Pentatonic Major)
+    notes = [587.33, 659.25, 880.00, 987.77, 1174.66]
+    idx = int((t * 2.0) % len(notes)) # slow
+    return notes[idx]
+
+def ice_bgm_vol(t, duration):
+    # Long, ringing decay
+    note_t = (t * 2.0) % 1.0
+    return 0.12 * (1.0 - note_t * 0.9)
+
+# 8. Volcano BGM (2.0 seconds)
+def volcano_bgm_freq(t, duration):
+    # Fast, tense minor notes (chromatic feel)
+    notes = [110.00, 116.54, 130.81, 138.59, 110.00, 146.83]
+    idx = int((t * 5.0) % len(notes)) # fast
+    return notes[idx]
+
+def volcano_bgm_vol(t, duration):
+    # Sharp tribal hits
+    note_t = (t * 5.0) % 1.0
+    return 0.18 * (1.0 - note_t * 0.95)
+
 if __name__ == "__main__":
     audio_dir = "engine/data/assets/audio"
     write_wav(os.path.join(audio_dir, "coin.wav"), 0.3, coin_freq, coin_vol)
@@ -98,3 +122,5 @@ if __name__ == "__main__":
     write_wav(os.path.join(audio_dir, "space_bgm.wav"), 2.4, space_bgm_freq, space_bgm_vol)
     write_wav(os.path.join(audio_dir, "candy_bgm.wav"), 2.0, candy_bgm_freq, candy_bgm_vol)
     write_wav(os.path.join(audio_dir, "jungle_bgm.wav"), 2.0, jungle_bgm_freq, jungle_bgm_vol)
+    write_wav(os.path.join(audio_dir, "ice_bgm.wav"), 2.5, ice_bgm_freq, ice_bgm_vol)
+    write_wav(os.path.join(audio_dir, "volcano_bgm.wav"), 2.0, volcano_bgm_freq, volcano_bgm_vol)

@@ -174,8 +174,98 @@
       '................',
       '................',
       '................'
+    ],
+    star: [
+      '.......##.......',
+      '......####......',
+      '......####......',
+      '....########....',
+      '..############..',
+      '...##########...',
+      '....########....',
+      '....########....',
+      '...##########...',
+      '..############..',
+      '..##........##..',
+      '.##..........##.',
+      '................',
+      '................',
+      '................',
+      '................'
+    ],
+    key: [
+      '......####......',
+      '....##....##....',
+      '....#......#....',
+      '....##....##....',
+      '......####......',
+      '......#..#......',
+      '......#..#......',
+      '......####......',
+      '......#..#......',
+      '......#..#......',
+      '......####......',
+      '......#..#......',
+      '......#..#......',
+      '......##........',
+      '................',
+      '................'
+    ],
+    crown: [
+      '................',
+      '.#....#...#....#',
+      '.##..#.#.#.#..##',
+      '.#.#.#.#.#.#.#.#',
+      '.#..#.......#..#',
+      '.#.............#',
+      '.###############',
+      '.###############',
+      '.###############',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................'
     ]
   };
+
+  // Undo/Redo history stack
+  let history: string[][][] = [];
+  let historyIndex = -1;
+
+  function saveHistoryState() {
+    if (historyIndex < history.length - 1) {
+      history = history.slice(0, historyIndex + 1);
+    }
+    history.push(pixels.map(row => [...row]));
+    historyIndex = history.length - 1;
+    if (history.length > 50) {
+      history.shift();
+      historyIndex--;
+    }
+  }
+
+  function handleUndo() {
+    if (historyIndex > 0) {
+      historyIndex--;
+      pixels = history[historyIndex].map(row => [...row]);
+      redrawGrid();
+      triggerAutoSave();
+      playDrawSound('draw');
+    }
+  }
+
+  function handleRedo() {
+    if (historyIndex < history.length - 1) {
+      historyIndex++;
+      pixels = history[historyIndex].map(row => [...row]);
+      redrawGrid();
+      triggerAutoSave();
+      playDrawSound('draw');
+    }
+  }
 
   function applyTemplate(templateName: keyof typeof TEMPLATES) {
     const lines = TEMPLATES[templateName];
@@ -189,6 +279,8 @@
       }
     }
     redrawGrid();
+    saveHistoryState();
+    triggerAutoSave();
     playDrawSound('chime');
   }
 
@@ -217,6 +309,9 @@
         .map(() => Array(GRID_SIZE).fill('transparent'));
     }
     redrawGrid();
+    // Reset history
+    history = [pixels.map(row => [...row])];
+    historyIndex = 0;
   }
 
   function redrawGrid() {
@@ -369,6 +464,9 @@
           <button class="tpl-btn" on:click={() => applyTemplate('monster')}>👾 Slime</button>
           <button class="tpl-btn" on:click={() => applyTemplate('coin')}>🪙 Coin</button>
           <button class="tpl-btn" on:click={() => applyTemplate('heart')}>❤️ Heart</button>
+          <button class="tpl-btn" on:click={() => applyTemplate('star')}>⭐️ Star</button>
+          <button class="tpl-btn" on:click={() => applyTemplate('key')}>🔑 Key</button>
+          <button class="tpl-btn" on:click={() => applyTemplate('crown')}>👑 Crown</button>
         </div>
       </div>
 
@@ -381,7 +479,7 @@
           class="draw-canvas"
           on:pointerdown={(e) => { isDrawing = true; handlePointer(e.clientX, e.clientY); }}
           on:pointermove={(e) => { if (isDrawing) handlePointer(e.clientX, e.clientY); }}
-          on:pointerup={() => { isDrawing = false; triggerAutoSave(); }}
+          on:pointerup={() => { if (isDrawing) { isDrawing = false; saveHistoryState(); triggerAutoSave(); } }}
           on:pointerleave={() => { isDrawing = false; }}
         ></canvas>
 
@@ -405,6 +503,12 @@
           </div>
 
           <div class="tool-actions">
+            <button class="tool-btn undo-btn" disabled={historyIndex <= 0} on:click={handleUndo} title="Undo draw stroke">
+              ↺ Undo
+            </button>
+            <button class="tool-btn redo-btn" disabled={historyIndex >= history.length - 1} on:click={handleRedo} title="Redo draw stroke">
+              ↻ Redo
+            </button>
             <button class="tool-btn eraser-btn" class:active={isEraser} on:click={() => { isEraser = true; isBucket = false; }}>
               🧽 Eraser
             </button>
