@@ -24,6 +24,7 @@ var death_y_threshold: float = 2000.0
 var spawned_entities: Array = []
 var target_spawn_portal_id: String = ""
 var found_spawn_portal_pos: Variant = null
+var current_weather: String = "clear"
 
 
 func _ready() -> void:
@@ -95,6 +96,7 @@ func load_level(file_path: String) -> void:
 	target_spawn_portal_id = ""
 	found_spawn_portal_pos = null
 
+	_apply_weather_particles()
 	_configure_camera_limits()
 
 
@@ -235,6 +237,7 @@ func spawn_entity(data: Dictionary) -> Node2D:
 				found_spawn_portal_pos = node.global_position
 
 	_apply_lighting_if_needed(node, sidecar)
+	_apply_audio_if_needed(node, sidecar)
 
 	print("Spawned ", asset_id, " as ", runtime_template, " at ", node.global_position)
 	return node
@@ -660,8 +663,23 @@ func _z_index_for_bucket(bucket: String) -> int:
 
 func _apply_world_settings(settings: Dictionary) -> void:
 	var time_of_day := str(settings.get("time_of_day", "day"))
-	var weather := str(settings.get("weather", "clear"))
-	print("World settings: time=", time_of_day, " weather=", weather)
+	current_weather = str(settings.get("weather", "clear"))
+	print("World settings: time=", time_of_day, " weather=", current_weather)
+
+	var modulate_node := CanvasModulate.new()
+	modulate_node.name = "CanvasModulateDayNight"
+	add_child(modulate_node)
+	spawned_entities.append(modulate_node)
+
+	match time_of_day:
+		"night":
+			modulate_node.color = Color(0.12, 0.12, 0.28)
+		"sunset":
+			modulate_node.color = Color(0.85, 0.58, 0.45)
+		"day", "morning":
+			modulate_node.color = Color.WHITE
+		_:
+			modulate_node.color = Color.WHITE
 
 
 func _apply_lighting_if_needed(node: Node2D, sidecar: Dictionary) -> void:
@@ -670,7 +688,105 @@ func _apply_lighting_if_needed(node: Node2D, sidecar: Dictionary) -> void:
 		return
 
 	var light := PointLight2D.new()
-	light.color = Color(str(lighting.get("light_color", "#ffffff")))
-	light.energy = float(lighting.get("light_energy", 1.0))
-	light.texture_scale = float(lighting.get("light_radius", 128.0)) / 128.0
+	light.color = Color(str(lighting.get("light_color", "#ffae34")))
+	light.energy = float(lighting.get("light_energy", 1.2))
+	light.texture_scale = float(lighting.get("light_radius", 150.0)) / 128.0
+
+	# Programmatically create a radial GradientTexture2D so PointLight2D functions correctly in Godot 4
+	var gradient := Gradient.new()
+	gradient.colors = PackedColorArray([Color.WHITE, Color(1.0, 1.0, 1.0, 0.0)])
+
+	var grad_tex := GradientTexture2D.new()
+	grad_tex.gradient = gradient
+	grad_tex.fill = GradientTexture2D.FILL_RADIAL
+	grad_tex.fill_from = Vector2(0.5, 0.5)
+	grad_tex.fill_to = Vector2(1.0, 0.5)
+	grad_tex.width = 128
+	grad_tex.height = 128
+
+	light.texture = grad_tex
 	node.add_child(light)
+
+
+func _apply_weather_particles() -> void:
+	if current_weather == "clear" or current_weather == "":
+		return
+
+	var particles := CPUParticles2D.new()
+	particles.name = "WeatherParticles"
+	particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	particles.emission_rect_extents = Vector2(1000, 10)
+	particles.amount = 150
+	particles.lifetime = 3.0
+	particles.preprocess = 3.0
+
+	match current_weather:
+		"rain":
+			particles.color = Color(0.6, 0.7, 0.9, 0.55)
+			particles.direction = Vector2(0.1, 1.0)
+			particles.spread = 4.0
+			particles.gravity = Vector2(50, 700)
+			particles.initial_velocity_min = 350.0
+			particles.initial_velocity_max = 500.0
+		"snow":
+			particles.color = Color(0.9, 0.95, 1.0, 0.8)
+			particles.direction = Vector2(0.0, 1.0)
+			particles.spread = 15.0
+			particles.gravity = Vector2(0, 80)
+			particles.initial_velocity_min = 40.0
+			particles.initial_velocity_max = 80.0
+			particles.tangential_accel_min = -10.0
+			particles.tangential_accel_max = 10.0
+			particles.scale_amount_min = 2.0
+			particles.scale_amount_max = 5.0
+
+	if active_player != null:
+		particles.position = Vector2(0, -400)
+		active_player.add_child(particles)
+	else:
+		particles.position = Vector2(500, 0)
+		add_child(particles)
+		spawned_entities.append(particles)
+
+
+func _apply_audio_if_needed(node: Node2D, sidecar: Dictionary) -> void:
+	var audio: Dictionary = sidecar.get("audio_logic", {})
+	var stream_file := str(audio.get("stream_file", ""))
+	if stream_file == "":
+		return
+
+	var sidecar_path := str(sidecar.get("sidecar_path", ""))
+	var resolved_audio_path := stream_file
+	if not stream_file.begins_with("res://") and not stream_file.begins_with("user://") and not stream_file.is_absolute_path():
+		if sidecar_path != "":
+			resolved_audio_path = sidecar_path.get_base_dir().path_join(stream_file)
+		else:
+			resolved_audio_path = ASSET_ROOT.path_join(stream_file)
+
+	var fs_path := ProjectSettings.globalize_path(resolved_audio_path)
+	if FileAccess.file_exists(fs_path):
+		var stream := AudioStreamOggVorbis.load_from_file(fs_path)
+		if stream == null:
+			stream = load(resolved_audio_path)
+
+		if stream != null:
+			var loop := bool(audio.get("loop", true))
+			if stream is AudioStreamOggVorbis:
+				stream.loop = loop
+
+			var is_global := bool(audio.get("global_bgm", true))
+			if is_global:
+				var player := AudioStreamPlayer.new()
+				player.stream = stream
+				player.volume_db = float(audio.get("volume_db", 0.0))
+				player.autoplay = true
+				node.add_child(player)
+				print("Global BGM spawned for ", node.name, " playing ", resolved_audio_path)
+			else:
+				var player := AudioStreamPlayer2D.new()
+				player.stream = stream
+				player.volume_db = float(audio.get("volume_db", 0.0))
+				player.autoplay = true
+				player.max_distance = float(audio.get("max_distance", 500.0))
+				node.add_child(player)
+				print("Spatial SFX spawned for ", node.name, " playing ", resolved_audio_path)
