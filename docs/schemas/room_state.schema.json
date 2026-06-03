@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docdamage.github.io/kidgamemaker/schemas/room_state.schema.json",
+  "title": "KidGameMaker Room State",
+  "type": "object",
+  "required": ["schema_version", "project_id", "room_id", "entities"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "project_id": { "type": "string", "minLength": 1 },
+    "room_id": { "type": "string", "minLength": 1 },
+    "world_settings": {
+      "type": "object",
+      "properties": {
+        "time_of_day": { "type": "string" },
+        "weather": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "entities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entity" }
+    }
+  },
+  "$defs": {
+    "entity": {
+      "type": "object",
+      "required": ["instance_id", "asset_id", "category", "type", "position"],
+      "properties": {
+        "instance_id": { "type": "string", "minLength": 1 },
+        "asset_id": { "type": "string", "minLength": 1 },
+        "category": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "position": { "$ref": "#/$defs/vec2" },
+        "is_camera_target": { "type": "boolean" },
+        "modifiers": {
+          "type": "object",
+          "properties": {
+            "variant": { "type": "string" },
+            "scale_multiplier": { "type": "number", "exclusiveMinimum": 0 }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "vec2": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    }
+  },
+  "additionalProperties": true
+}

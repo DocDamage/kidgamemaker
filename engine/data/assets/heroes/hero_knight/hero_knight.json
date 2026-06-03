@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "asset_id": "hero_knight",
+  "asset_name": "Hero Knight",
+  "category": "heroes",
+  "runtime_template": "player",
+  "visual": "🛡️",
+  "visual_tags": [
+    "hero",
+    "armor",
+    "balanced"
+  ],
+  "archetype": "balanced_platformer",
+  "baseline_attributes": {
+    "max_health": 100,
+    "movement_speed": 230,
+    "jump_force": -500,
+    "gravity_scale": 1.0,
+    "attack_power": 10
+  },
+  "implicit_abilities": {
+    "can_double_jump": false,
+    "can_wall_slide": false,
+    "has_shield_block": false
+  },
+  "placement_logic": {
+    "snapping_type": "gravity_snap",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      32,
+      48
+    ]
+  }
+}

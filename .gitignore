@@ -1,0 +1,17 @@
+# Node.js
+node_modules/
+dist/
+.svelte-kit/
+
+# Rust/Cargo
+target/
+target_custom/
+**/*.rs.bk
+
+# Godot
+.godot/
+*.translation
+
+# OS files
+.DS_Store
+Thumbs.db

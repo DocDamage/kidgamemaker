@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docdamage.github.io/kidgamemaker/schemas/asset_sidecar.schema.json",
+  "title": "KidGameMaker Asset Sidecar",
+  "type": "object",
+  "required": ["schema_version", "asset_id", "asset_name", "category", "runtime_template"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "asset_id": { "type": "string", "minLength": 1 },
+    "asset_name": { "type": "string", "minLength": 1 },
+    "category": { "type": "string", "minLength": 1 },
+    "runtime_template": {
+      "type": "string",
+      "enum": ["player", "terrain", "enemy", "collectible", "decoration", "checkpoint", "audio"]
+    },
+    "visual": { "type": "string" },
+    "visual_tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "placement_logic": {
+      "type": "object",
+      "properties": {
+        "snapping_type": { "type": "string" },
+        "parallax_bucket": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "collision": {
+      "type": "object",
+      "properties": {
+        "shape": { "type": "string" },
+        "size": {
+          "type": "array",
+          "prefixItems": [{ "type": "number" }, { "type": "number" }],
+          "minItems": 2,
+          "maxItems": 2
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

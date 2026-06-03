@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "asset_id": "slime_patrol",
+  "asset_name": "Slime Patrol",
+  "category": "enemies",
+  "runtime_template": "enemy",
+  "visual": "👾",
+  "visual_tags": [
+    "enemy",
+    "small",
+    "ground"
+  ],
+  "baseline_attributes": {
+    "max_health": 20,
+    "movement_speed": 70,
+    "gravity_scale": 1.0,
+    "contact_damage": 10
+  },
+  "placement_logic": {
+    "snapping_type": "gravity_snap",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      32,
+      28
+    ]
+  },
+  "implicit_behavior": {
+    "patrol": true,
+    "turn_at_walls": true,
+    "turn_at_ledges": true
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "project_id": "demo_project",
+  "room_id": "test_chamber_01",
+  "world_settings": {
+    "time_of_day": "day",
+    "weather": "clear"
+  },
+  "entities": [
+    {
+      "instance_id": "hero_001",
+      "asset_id": "hero_knight",
+      "category": "heroes",
+      "type": "player",
+      "position": { "x": 120, "y": 220 },
+      "is_camera_target": true,
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "floor_001",
+      "asset_id": "stone_floor",
+      "category": "terrain",
+      "type": "terrain",
+      "position": { "x": 320, "y": 390 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "floor_002",
+      "asset_id": "stone_floor",
+      "category": "terrain",
+      "type": "terrain",
+      "position": { "x": 470, "y": 390 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "enemy_001",
+      "asset_id": "slime_patrol",
+      "category": "enemies",
+      "type": "enemy",
+      "position": { "x": 470, "y": 335 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "ruby_001",
+      "asset_id": "gold_ruby",
+      "category": "collectibles",
+      "type": "collectible",
+      "position": { "x": 625, "y": 305 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
+      "instance_id": "sign_001",
+      "asset_id": "neon_sign",
+      "category": "decorations",
+      "type": "decoration",
+      "position": { "x": 760, "y": 250 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    }
+  ]
+}

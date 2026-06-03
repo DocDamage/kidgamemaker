@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "asset_id": "neon_sign",
+  "asset_name": "Neon Sign",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "💡",
+  "visual_tags": [
+    "light",
+    "neon",
+    "decoration"
+  ],
+  "placement_logic": {
+    "snapping_type": "surface_attach",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      80,
+      32
+    ]
+  },
+  "lighting_logic": {
+    "emits_light": true,
+    "light_color": "#ff4dff",
+    "light_radius": 220,
+    "light_energy": 1.2,
+    "flicker_effect": "neon_buzz"
+  }
+}
