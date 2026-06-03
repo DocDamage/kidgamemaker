@@ -19,12 +19,26 @@ const CATEGORY_SEARCH_ORDER := [
 
 var sidecar_cache: Dictionary = {}
 var active_player: Node2D = null
+var spawn_point: Vector2 = Vector2.ZERO
+var death_y_threshold: float = 2000.0
 
 
 func _ready() -> void:
 	var level_path := _resolve_level_path()
 	print("KidGameMaker runner loading level: ", level_path)
 	load_level(level_path)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_R:
+		print("Reset key pressed. Reloading scene...")
+		get_tree().reload_current_scene()
+
+
+func _physics_process(_delta: float) -> void:
+	if active_player != null:
+		if active_player.global_position.y > death_y_threshold:
+			_respawn_player()
 
 
 func _resolve_level_path() -> String:
@@ -64,9 +78,93 @@ func load_level(file_path: String) -> void:
 	_apply_world_settings(level_data.get("world_settings", {}))
 
 	var entities: Array = level_data.get("entities", [])
-	for entity_data in entities:
+	var processed_entities := _merge_terrain_entities(entities)
+	
+	for entity_data in processed_entities:
 		if typeof(entity_data) == TYPE_DICTIONARY:
 			spawn_entity(entity_data)
+
+	_configure_camera_limits()
+
+
+func _merge_terrain_entities(entities: Array) -> Array:
+	var terrain_entities: Array = []
+	var other_entities: Array = []
+
+	for ent in entities:
+		if typeof(ent) != TYPE_DICTIONARY:
+			continue
+		var category := str(ent.get("category", ""))
+		var type := str(ent.get("type", ""))
+		var asset_id := str(ent.get("asset_id", ""))
+		var sidecar := _load_sidecar(asset_id, category)
+		var runtime_template := str(sidecar.get("runtime_template", type))
+		
+		if runtime_template == "terrain":
+			terrain_entities.append(ent.duplicate(true))
+		else:
+			other_entities.append(ent)
+
+	var merged_any := true
+	while merged_any:
+		merged_any = false
+		var merged_list: Array = []
+		var skip_indices := {}
+
+		for i in range(terrain_entities.size()):
+			if skip_indices.has(i):
+				continue
+			var box_a: Dictionary = terrain_entities[i]
+			var pos_a := _read_position(box_a.get("position", {"x": 0, "y": 0}))
+			var size_a := _collision_size(_load_sidecar(str(box_a.get("asset_id", "")), str(box_a.get("category", ""))), Vector2(128, 32), box_a)
+			
+			var left_a := pos_a.x - size_a.x * 0.5
+			var right_a := pos_a.x + size_a.x * 0.5
+			var top_a := pos_a.y - size_a.y * 0.5
+			var bottom_a := pos_a.y + size_a.y * 0.5
+
+			for j in range(i + 1, terrain_entities.size()):
+				if skip_indices.has(j):
+					continue
+				var box_b: Dictionary = terrain_entities[j]
+				if box_a.get("asset_id") != box_b.get("asset_id"):
+					continue
+				
+				var pos_b := _read_position(box_b.get("position", {"x": 0, "y": 0}))
+				var size_b := _collision_size(_load_sidecar(str(box_b.get("asset_id", "")), str(box_b.get("category", ""))), Vector2(128, 32), box_b)
+
+				var left_b := pos_b.x - size_b.x * 0.5
+				var right_b := pos_b.x + size_b.x * 0.5
+				var top_b := pos_b.y - size_b.y * 0.5
+				var bottom_b := pos_b.y + size_b.y * 0.5
+
+				var same_y := abs(pos_a.y - pos_b.y) < 1.0
+				var same_h := abs(size_a.y - size_b.y) < 1.0
+				var touches_x := (left_b <= right_a + 2.0 and right_b >= left_a - 2.0)
+				
+				if same_y and same_h and touches_x:
+					var new_left := min(left_a, left_b)
+					var new_right := max(right_a, right_b)
+					var new_width := new_right - new_left
+					var new_center_x := new_left + new_width * 0.5
+					
+					box_a["position"] = {"x": new_center_x, "y": pos_a.y}
+					if not box_a.has("modifiers"):
+						box_a["modifiers"] = {}
+					box_a["modifiers"]["override_size"] = [new_width, size_a.y]
+					
+					pos_a.x = new_center_x
+					size_a.x = new_width
+					left_a = new_left
+					right_a = new_right
+
+					skip_indices[j] = true
+					merged_any = true
+
+			merged_list.append(box_a)
+		terrain_entities = merged_list
+
+	return other_entities + terrain_entities
 
 
 func spawn_entity(data: Dictionary) -> Node2D:
@@ -103,9 +201,16 @@ func spawn_entity(data: Dictionary) -> Node2D:
 
 	add_child(node)
 
-	if bool(data.get("is_camera_target", false)):
+	if runtime_template == "player":
+		spawn_point = node.global_position
 		active_player = node
 		_attach_camera(node)
+	elif runtime_template == "checkpoint":
+		if node is Area2D:
+			node.body_entered.connect(func(body):
+				if body == active_player:
+					_on_checkpoint_activated(node.global_position)
+			)
 
 	_apply_lighting_if_needed(node, sidecar)
 
@@ -113,11 +218,11 @@ func spawn_entity(data: Dictionary) -> Node2D:
 	return node
 
 
-func _make_player(_data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
+func _make_player(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
 	var body := CharacterBody2D.new()
-	var size := _collision_size(sidecar, Vector2(32, 48))
+	var size := _collision_size(sidecar, Vector2(32, 48), data)
 	_add_box_collision(body, size)
-	_add_placeholder_polygon(body, size, Color(0.2, 0.55, 1.0, 0.9))
+	_add_visuals(body, sidecar, size, Color(0.2, 0.55, 1.0, 0.9))
 
 	var script := load(PLAYER_SCRIPT)
 	if script != null:
@@ -131,19 +236,19 @@ func _make_player(_data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
 	return body
 
 
-func _make_terrain(_data: Dictionary, sidecar: Dictionary) -> StaticBody2D:
+func _make_terrain(data: Dictionary, sidecar: Dictionary) -> StaticBody2D:
 	var body := StaticBody2D.new()
-	var size := _collision_size(sidecar, Vector2(128, 32))
+	var size := _collision_size(sidecar, Vector2(128, 32), data)
 	_add_box_collision(body, size)
-	_add_placeholder_polygon(body, size, Color(0.45, 0.45, 0.45, 1.0))
+	_add_visuals(body, sidecar, size, Color(0.45, 0.45, 0.45, 1.0))
 	return body
 
 
-func _make_enemy(_data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
+func _make_enemy(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
 	var body := CharacterBody2D.new()
-	var size := _collision_size(sidecar, Vector2(32, 32))
+	var size := _collision_size(sidecar, Vector2(32, 32), data)
 	_add_box_collision(body, size)
-	_add_placeholder_polygon(body, size, Color(1.0, 0.25, 0.25, 0.9))
+	_add_visuals(body, sidecar, size, Color(1.0, 0.25, 0.25, 0.9))
 
 	var script := load(ENEMY_SCRIPT)
 	if script != null:
@@ -155,11 +260,11 @@ func _make_enemy(_data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
 	return body
 
 
-func _make_collectible(_data: Dictionary, sidecar: Dictionary) -> Area2D:
+func _make_collectible(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	var area := Area2D.new()
-	var size := _collision_size(sidecar, Vector2(24, 24))
+	var size := _collision_size(sidecar, Vector2(24, 24), data)
 	_add_box_collision(area, size)
-	_add_placeholder_polygon(area, size, Color(1.0, 0.85, 0.15, 0.95))
+	_add_visuals(area, sidecar, size, Color(1.0, 0.85, 0.15, 0.95))
 
 	var script := load(COLLECTIBLE_SCRIPT)
 	if script != null:
@@ -170,18 +275,18 @@ func _make_collectible(_data: Dictionary, sidecar: Dictionary) -> Area2D:
 	return area
 
 
-func _make_checkpoint(_data: Dictionary, sidecar: Dictionary) -> Area2D:
+func _make_checkpoint(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	var area := Area2D.new()
-	var size := _collision_size(sidecar, Vector2(40, 56))
+	var size := _collision_size(sidecar, Vector2(40, 56), data)
 	_add_box_collision(area, size)
-	_add_placeholder_polygon(area, size, Color(0.3, 1.0, 0.7, 0.8))
+	_add_visuals(area, sidecar, size, Color(0.3, 1.0, 0.7, 0.8))
 	return area
 
 
-func _make_decoration(_data: Dictionary, sidecar: Dictionary) -> Node2D:
+func _make_decoration(data: Dictionary, sidecar: Dictionary) -> Node2D:
 	var node := Node2D.new()
-	var size := _collision_size(sidecar, Vector2(48, 48))
-	_add_placeholder_polygon(node, size, Color(0.65, 0.35, 1.0, 0.75))
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_visuals(node, sidecar, size, Color(0.65, 0.35, 1.0, 0.75))
 	return node
 
 
@@ -217,6 +322,7 @@ func _load_sidecar(asset_id: String, category_hint: String = "") -> Dictionary:
 			if json.parse(file.get_as_text()) == OK:
 				var parsed: Variant = json.get_data()
 				if typeof(parsed) == TYPE_DICTIONARY:
+					parsed["sidecar_path"] = path
 					sidecar_cache[asset_id] = parsed
 					return parsed
 
@@ -226,13 +332,20 @@ func _load_sidecar(asset_id: String, category_hint: String = "") -> Dictionary:
 		"asset_name": asset_id,
 		"runtime_template": "decoration",
 		"placement_logic": {"parallax_bucket": "play_layer"},
-		"collision": {"size": [48, 48]}
+		"collision": {"size": [48, 48]},
+		"sidecar_path": ""
 	}
 	sidecar_cache[asset_id] = fallback
 	return fallback
 
 
-func _collision_size(sidecar: Dictionary, fallback: Vector2) -> Vector2:
+func _collision_size(sidecar: Dictionary, fallback: Vector2, entity_data: Dictionary = {}) -> Vector2:
+	var modifiers: Dictionary = entity_data.get("modifiers", {}) if entity_data.has("modifiers") else {}
+	if modifiers.has("override_size"):
+		var override_size: Variant = modifiers.get("override_size")
+		if typeof(override_size) == TYPE_ARRAY and override_size.size() >= 2:
+			return Vector2(float(override_size[0]), float(override_size[1]))
+
 	var collision: Dictionary = sidecar.get("collision", {})
 	var size_value: Variant = collision.get("size", [fallback.x, fallback.y])
 	if typeof(size_value) == TYPE_ARRAY and size_value.size() >= 2:
@@ -259,6 +372,146 @@ func _add_placeholder_polygon(parent: Node2D, size: Vector2, color: Color) -> vo
 	])
 	poly.color = color
 	parent.add_child(poly)
+
+
+func _add_visuals(parent: Node2D, sidecar: Dictionary, size: Vector2, default_color: Color) -> void:
+	var visual: String = str(sidecar.get("visual", ""))
+	
+	var is_image := false
+	var ext := visual.get_extension().to_lower()
+	if ext == "png" or ext == "jpg" or ext == "jpeg" or ext == "svg" or ext == "webp":
+		is_image = true
+		
+	var texture: Texture2D = null
+	if is_image:
+		texture = _load_texture_dynamic(visual, str(sidecar.get("sidecar_path", "")))
+		
+	if texture != null:
+		var sprite := Sprite2D.new()
+		sprite.texture = texture
+		parent.set_meta("collision_size", size)
+		
+		var runtime_template := str(sidecar.get("runtime_template", ""))
+		if runtime_template == "terrain":
+			sprite.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+			sprite.region_enabled = true
+			sprite.region_rect = Rect2(Vector2.ZERO, size)
+		else:
+			var tex_size := texture.get_size()
+			if tex_size.x > 0 and tex_size.y > 0:
+				sprite.scale = size / tex_size
+				
+		parent.add_child(sprite)
+	else:
+		_add_placeholder_polygon(parent, size, default_color)
+		if visual != "":
+			var label := Label.new()
+			label.text = visual
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			
+			var settings := LabelSettings.new()
+			settings.font_size = 24
+			settings.font_color = Color.WHITE
+			settings.outline_size = 4
+			settings.outline_color = Color.BLACK
+			label.label_settings = settings
+			
+			label.size = size
+			label.position = -size * 0.5
+			parent.add_child(label)
+
+
+func _load_texture_dynamic(path: String, sidecar_file_path: String) -> Texture2D:
+	var resolved_path := path
+	
+	if not path.begins_with("res://") and not path.begins_with("user://") and not path.is_absolute_path():
+		if sidecar_file_path != "":
+			var base_dir := sidecar_file_path.get_base_dir()
+			resolved_path = base_dir.path_join(path)
+		else:
+			resolved_path = ASSET_ROOT.path_join(path)
+			
+	if resolved_path.begins_with("file://"):
+		resolved_path = resolved_path.replace("file://", "")
+		if OS.get_name() == "Windows" and resolved_path.begins_with("/"):
+			resolved_path = resolved_path.substr(1)
+
+	if resolved_path.begins_with("res://") and ResourceLoader.exists(resolved_path):
+		var tex := load(resolved_path) as Texture2D
+		if tex != null:
+			return tex
+
+	var final_fs_path := ProjectSettings.globalize_path(resolved_path)
+	if FileAccess.file_exists(final_fs_path):
+		var img := Image.load_from_file(final_fs_path)
+		if img != null:
+			return ImageTexture.create_from_image(img)
+			
+	print("Failed to load texture at path: ", resolved_path, " (FS path: ", final_fs_path, ")")
+	return null
+
+
+func _on_checkpoint_activated(pos: Vector2) -> void:
+	spawn_point = pos
+	print("Checkpoint activated at: ", spawn_point)
+
+
+func _respawn_player() -> void:
+	print("Player fell! Respawning at: ", spawn_point)
+	active_player.global_position = spawn_point
+	if active_player.has_method("set_velocity"):
+		active_player.set("velocity", Vector2.ZERO)
+	elif "velocity" in active_player:
+		active_player.velocity = Vector2.ZERO
+
+
+func _configure_camera_limits() -> void:
+	if active_player == null:
+		return
+		
+	var camera: Camera2D = null
+	for child in active_player.get_children():
+		if child is Camera2D:
+			camera = child
+			break
+			
+	if camera == null:
+		return
+
+	var min_x := 999999.0
+	var max_x := -999999.0
+	var min_y := 999999.0
+	var max_y := -999999.0
+	
+	var found_terrain := false
+	for child in get_children():
+		if child.name.begins_with("stone_floor") or child.name.begins_with("floor") or child is StaticBody2D:
+			found_terrain = true
+			var pos := child.global_position
+			var size := Vector2(128, 32)
+			
+			if child.has_meta("collision_size"):
+				size = child.get_meta("collision_size")
+				
+			min_x = min(min_x, pos.x - size.x * 0.5)
+			max_x = max(max_x, pos.x + size.x * 0.5)
+			min_y = min(min_y, pos.y - size.y * 0.5)
+			max_y = max(max_y, pos.y + size.y * 0.5)
+			
+	if not found_terrain:
+		min_x = active_player.global_position.x - 1000
+		max_x = active_player.global_position.x + 1000
+		min_y = active_player.global_position.y - 1000
+		max_y = active_player.global_position.y + 1000
+		
+	camera.limit_left = int(min_x - 400)
+	camera.limit_right = int(max_x + 400)
+	camera.limit_top = int(min_y - 600)
+	camera.limit_bottom = int(max_y + 400)
+	
+	death_y_threshold = camera.limit_bottom + 100
+	print("Camera limits configured: Left=", camera.limit_left, " Right=", camera.limit_right, " Bottom=", camera.limit_bottom, " DeathPlane=", death_y_threshold)
 
 
 func _attach_camera(target: Node2D) -> void:
