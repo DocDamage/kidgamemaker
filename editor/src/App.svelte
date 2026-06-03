@@ -683,7 +683,8 @@
     enemies: '#f87171',
     collectibles: '#fbbf24',
     portals: '#a78bfa',
-    decorations: '#34d399'
+    decorations: '#34d399',
+    particles: '#c084fc'
   };
 
   function generateThumbnail(roomId: string) {
@@ -862,6 +863,18 @@
     }
   }
 
+  async function shareGame() {
+    status = 'Saving and packaging Toybox...';
+    try {
+      await saveCurrentRoom();
+      const path = await invoke<string>('package_game_project');
+      status = `Toybox packaged successfully! Saved to: ${path}`;
+      playUiSound('chime');
+    } catch (error) {
+      status = `Packaging failed: ${String(error)}`;
+    }
+  }
+
   function selectAsset(asset: ToyboxAsset) {
     activeAsset = asset;
     eraserMode = false;
@@ -979,6 +992,7 @@
           <div class="panel-row">
             <button id="btn-save" class="save" on:click={(e) => { animateClick(e); saveCurrentRoom(); }}>💾 SAVE</button>
             <button id="btn-export" class="export" on:click={(e) => { animateClick(e); exportGame(); }} style="background: #10b981; color: white;">📦 EXPORT</button>
+            <button id="btn-share" class="share" on:click={(e) => { animateClick(e); shareGame(); }} style="background: #a855f7; color: white;">✨ SHARE TOYBOX (.ktoy)</button>
             <button id="btn-refresh-toybox" class="icon-btn refresh-btn" on:click={(e) => { animateClick(e); refreshInventory(); }} title="Refresh Toybox from disk">🔄 RELOAD</button>
           </div>
         </div>

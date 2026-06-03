@@ -30,7 +30,43 @@ fn process_inbox(inbox_dir: &Path, repo_root: &Path) -> Result<(), String> {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let lower_name = name.to_lowercase();
 
-        if lower_name.ends_with(".zip") {
+        if lower_name.ends_with(".ktoy") {
+            println!("Asset inbox found .ktoy package: {}", name);
+            let temp_extract = inbox_dir.join(format!("_temp_extract_ktoy_{}", name.replace('.', "_")));
+            
+            // Extract the ZIP contents
+            if let Err(err) = unzip_file(&path, &temp_extract) {
+                eprintln!("Failed to unzip .ktoy file {}: {}", name, err);
+                let _ = fs::remove_dir_all(&temp_extract);
+                continue;
+            }
+
+            // Ingest rooms
+            let temp_rooms = temp_extract.join("rooms");
+            if temp_rooms.exists() {
+                let dest_rooms = repo_root.join("engine").join("data").join("rooms");
+                let _ = fs::create_dir_all(&dest_rooms);
+                if let Err(err) = copy_dir_all(&temp_rooms, &dest_rooms) {
+                    eprintln!("Failed to copy rooms from .ktoy: {}", err);
+                }
+            }
+
+            // Ingest assets
+            let temp_assets = temp_extract.join("assets");
+            if temp_assets.exists() {
+                let dest_assets = repo_root.join("engine").join("data").join("assets");
+                let _ = fs::create_dir_all(&dest_assets);
+                if let Err(err) = copy_dir_all(&temp_assets, &dest_assets) {
+                    eprintln!("Failed to copy assets from .ktoy: {}", err);
+                }
+            }
+
+            // Clean up extraction folder and .ktoy file
+            let _ = fs::remove_dir_all(&temp_extract);
+            let _ = fs::remove_file(&path);
+            println!("Successfully processed and cleaned up .ktoy package: {}", name);
+
+        } else if lower_name.ends_with(".zip") {
             println!("Asset inbox found ZIP package: {}", name);
             let temp_extract = inbox_dir.join(format!("_temp_extract_{}", name.replace('.', "_")));
             
@@ -432,6 +468,20 @@ fn read_png_dimensions(path: &Path) -> Option<(u32, u32)> {
     let height = u32::from_be_bytes([header[20], header[21], header[22], header[23]]);
     
     Some((width, height))
+}
+
+fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    fs::create_dir_all(&dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

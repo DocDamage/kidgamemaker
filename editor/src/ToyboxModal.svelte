@@ -20,7 +20,8 @@
     enemies: { label: 'Monster', emoji: '👾', color: '#f87171' },
     collectibles: { label: 'Reward', emoji: '🪙', color: '#34d399' },
     portals: { label: 'Portal', emoji: '🚪', color: '#a78bfa' },
-    decorations: { label: 'Toy', emoji: '🎪', color: '#ec4899' }
+    decorations: { label: 'Toy', emoji: '🎪', color: '#ec4899' },
+    particles: { label: 'Effects', emoji: '✨', color: '#c084fc' }
   };
 
   // Keep first available category active if 'terrain' doesn't exist

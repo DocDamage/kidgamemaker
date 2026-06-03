@@ -107,5 +107,12 @@ export const fallbackInventory: AssetInventory = {
   terrain: [{ id: 'stone_floor', name: 'Stone Floor', category: 'terrain', visual: '🪨', type: 'terrain', snapping_type: 'edge_to_edge' }],
   enemies: [{ id: 'slime_patrol', name: 'Slime Patrol', category: 'enemies', visual: '👾', type: 'enemy', snapping_type: 'gravity_snap' }],
   collectibles: [{ id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', visual: '💎', type: 'collectible', snapping_type: 'free_float' }],
-  decorations: [{ id: 'neon_sign', name: 'Neon Sign', category: 'decorations', visual: '💡', type: 'decoration', snapping_type: 'free_float' }]
+  decorations: [{ id: 'neon_sign', name: 'Neon Sign', category: 'decorations', visual: '💡', type: 'decoration', snapping_type: 'free_float' }],
+  particles: [
+    { id: 'effects_fire', name: 'Fire Effect', category: 'particles', visual: '🔥', type: 'particles', snapping_type: 'free_float' },
+    { id: 'effects_sparkles', name: 'Magic Sparkles', category: 'particles', visual: '✨', type: 'particles', snapping_type: 'free_float' },
+    { id: 'effects_snow', name: 'Snow Flurry', category: 'particles', visual: '❄️', type: 'particles', snapping_type: 'free_float' },
+    { id: 'effects_hearts', name: 'Hearts Aura', category: 'particles', visual: '💖', type: 'particles', snapping_type: 'free_float' },
+    { id: 'effects_smoke', name: 'Smoke Puff', category: 'particles', visual: '💨', type: 'particles', snapping_type: 'free_float' }
+  ]
 };

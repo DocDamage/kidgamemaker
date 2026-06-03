@@ -262,6 +262,8 @@ func spawn_entity(data: Dictionary) -> Node2D:
 			node = _make_portal(data, sidecar)
 		"locked_door":
 			node = _make_locked_door(data, sidecar)
+		"particles":
+			node = _make_particles(data, sidecar)
 		_:
 			node = _make_decoration(data, sidecar)
 
@@ -437,6 +439,130 @@ func _make_locked_door(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	area.set_meta("key_color", str(gameplay.get("key_color", "gold")))
 
 	return area
+
+
+func _make_particles(data: Dictionary, sidecar: Dictionary) -> CPUParticles2D:
+	var particles := CPUParticles2D.new()
+	var asset_id := str(data.get("asset_id", ""))
+
+	particles.amount = 20
+	particles.lifetime = 1.0
+	particles.explosiveness = 0.0
+	particles.randomness = 0.5
+	particles.emitting = true
+
+	particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	particles.emission_rect_extents = Vector2(16, 16)
+
+	match asset_id:
+		"effects_fire":
+			particles.amount = 35
+			particles.lifetime = 0.8
+			particles.direction = Vector2(0, -1)
+			particles.spread = 20.0
+			particles.gravity = Vector2(0, -180)
+			particles.initial_velocity_min = 40.0
+			particles.initial_velocity_max = 80.0
+
+			var grad := Gradient.new()
+			grad.set_color(0, Color(1.0, 0.2, 0.0, 1.0))
+			grad.add_key(0.5, Color(1.0, 0.8, 0.0, 1.0))
+			grad.set_color(1, Color(1.0, 0.2, 0.0, 0.0))
+			particles.color_ramp = grad
+
+			var curve := Curve.new()
+			curve.add_point(Vector2(0, 6.0))
+			curve.add_point(Vector2(1, 1.0))
+			particles.scale_amount_curve = curve
+
+		"effects_sparkles":
+			particles.amount = 15
+			particles.lifetime = 1.2
+			particles.direction = Vector2.ZERO
+			particles.spread = 180.0
+			particles.gravity = Vector2(0, 0)
+			particles.initial_velocity_min = 10.0
+			particles.initial_velocity_max = 30.0
+
+			var grad := Gradient.new()
+			grad.set_color(0, Color(1.0, 0.9, 0.4, 1.0))
+			grad.add_key(0.5, Color(0.4, 0.9, 1.0, 1.0))
+			grad.set_color(1, Color(0.4, 0.9, 1.0, 0.0))
+			particles.color_ramp = grad
+
+			var curve := Curve.new()
+			curve.add_point(Vector2(0, 0.0))
+			curve.add_point(Vector2(0.2, 4.0))
+			curve.add_point(Vector2(0.8, 4.0))
+			curve.add_point(Vector2(1, 0.0))
+			particles.scale_amount_curve = curve
+
+		"effects_snow":
+			particles.amount = 25
+			particles.lifetime = 2.0
+			particles.direction = Vector2(0.2, 1.0)
+			particles.spread = 15.0
+			particles.gravity = Vector2(0, 80)
+			particles.initial_velocity_min = 20.0
+			particles.initial_velocity_max = 40.0
+			particles.color = Color(1.0, 1.0, 1.0, 0.9)
+
+			var grad := Gradient.new()
+			grad.set_color(0, Color(1.0, 1.0, 1.0, 0.9))
+			grad.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+			particles.color_ramp = grad
+
+			particles.scale_amount_min = 2.0
+			particles.scale_amount_max = 4.0
+
+		"effects_hearts":
+			particles.amount = 10
+			particles.lifetime = 1.5
+			particles.direction = Vector2(0, -1)
+			particles.spread = 45.0
+			particles.gravity = Vector2(0, -60)
+			particles.initial_velocity_min = 20.0
+			particles.initial_velocity_max = 50.0
+
+			var grad := Gradient.new()
+			grad.set_color(0, Color(1.0, 0.4, 0.6, 1.0))
+			grad.add_key(0.6, Color(1.0, 0.1, 0.4, 1.0))
+			grad.set_color(1, Color(1.0, 0.1, 0.4, 0.0))
+			particles.color_ramp = grad
+
+			var curve := Curve.new()
+			curve.add_point(Vector2(0, 1.0))
+			curve.add_point(Vector2(0.4, 5.0))
+			curve.add_point(Vector2(0.8, 5.0))
+			curve.add_point(Vector2(1, 0.0))
+			particles.scale_amount_curve = curve
+
+		"effects_smoke":
+			particles.amount = 15
+			particles.lifetime = 2.0
+			particles.direction = Vector2(0.5, -1.0)
+			particles.spread = 30.0
+			particles.gravity = Vector2(10, -50)
+			particles.initial_velocity_min = 15.0
+			particles.initial_velocity_max = 30.0
+
+			var grad := Gradient.new()
+			grad.set_color(0, Color(0.7, 0.7, 0.7, 0.8))
+			grad.add_key(0.5, Color(0.8, 0.8, 0.8, 0.4))
+			grad.set_color(1, Color(0.9, 0.9, 0.9, 0.0))
+			particles.color_ramp = grad
+
+			var curve := Curve.new()
+			curve.add_point(Vector2(0, 3.0))
+			curve.add_point(Vector2(0.5, 8.0))
+			curve.add_point(Vector2(1, 12.0))
+			particles.scale_amount_curve = curve
+
+		_:
+			particles.amount = 10
+			particles.color = Color(1.0, 1.0, 1.0, 1.0)
+
+	return particles
 
 
 func _make_decoration(data: Dictionary, sidecar: Dictionary) -> Node2D:

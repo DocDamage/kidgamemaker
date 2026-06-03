@@ -933,6 +933,56 @@ pub fn save_custom_audio(
 }
 
 #[tauri::command]
+pub fn package_game_project() -> Result<String, String> {
+    let repo_root = locate_repo_root()?;
+    let data_dir = repo_root.join("engine").join("data");
+    let exports_dir = repo_root.join("exports");
+
+    fs::create_dir_all(&exports_dir)
+        .map_err(|err| format!("Failed to create exports directory: {err}"))?;
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let temp_dir = exports_dir.join(format!("toybox_temp_{}", timestamp));
+    if temp_dir.exists() {
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+    fs::create_dir_all(&temp_dir)
+        .map_err(|err| format!("Failed to create temp packaging directory: {err}"))?;
+
+    let src_rooms = data_dir.join("rooms");
+    if src_rooms.exists() {
+        let dst_rooms = temp_dir.join("rooms");
+        copy_dir_all(&src_rooms, &dst_rooms)
+            .map_err(|err| format!("Failed to copy rooms folder: {err}"))?;
+    }
+
+    let src_assets = data_dir.join("assets");
+    if src_assets.exists() {
+        let dst_assets = temp_dir.join("assets");
+        copy_dir_all(&src_assets, &dst_assets)
+            .map_err(|err| format!("Failed to copy assets folder: {err}"))?;
+    }
+
+    let ktoy_filename = format!("toybox_game_{}.ktoy", timestamp);
+    let ktoy_path = exports_dir.join(&ktoy_filename);
+
+    if ktoy_path.exists() {
+        let _ = fs::remove_file(&ktoy_path);
+    }
+
+    zip_dir_to_file(&temp_dir, &ktoy_path)
+        .map_err(|err| format!("Failed to package ktoy ZIP: {err}"))?;
+
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    Ok(ktoy_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub fn build_web_runner() -> Result<String, String> {
     let repo_root = locate_repo_root()?;
     let engine_dir = repo_root.join("engine");
