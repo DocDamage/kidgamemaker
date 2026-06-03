@@ -123,16 +123,22 @@
     }
 
     // Auto-save every 60 seconds
-    setInterval(() => {
+    const saveId = setInterval(() => {
       if (placed.length > 0) saveCurrentRoom();
     }, 60_000);
 
     // Refresh Toybox inventory every 5 seconds (picks up inbox-ingested assets)
-    setInterval(async () => {
+    const refreshId = setInterval(async () => {
       try {
         inventory = await invoke<AssetInventory>('get_asset_inventory');
       } catch { /* silent */ }
     }, 5_000);
+
+    // Return cleanup so intervals are cancelled on unmount / hot-reload
+    return () => {
+      clearInterval(saveId);
+      clearInterval(refreshId);
+    };
   });
 
   async function loadRoomList() {

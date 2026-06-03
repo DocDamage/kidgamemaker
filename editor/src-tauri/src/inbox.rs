@@ -1,6 +1,6 @@
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 pub fn start_inbox_watcher(repo_root: PathBuf) {
     std::thread::spawn(move || {
@@ -105,37 +105,75 @@ fn is_supported_asset(filename: &str) -> bool {
 fn unzip_file(zip_path: &Path, dest_path: &Path) -> Result<(), String> {
     fs::create_dir_all(dest_path).map_err(|err| err.to_string())?;
 
-    if cfg!(target_os = "windows") {
-        let zip_str = zip_path.to_str().ok_or("Invalid zip path")?;
-        let dest_str = dest_path.to_str().ok_or("Invalid dest path")?;
-        
-        let output = Command::new("powershell")
-            .arg("-Command")
-            .arg(format!("Expand-Archive -Path '{}' -DestinationPath '{}' -Force", zip_str, dest_str))
-            .output()
-            .map_err(|err| format!("Failed to run PowerShell Expand-Archive: {err}"))?;
+    // Canonicalize the destination so we can validate extracted paths (Zip Slip protection).
+    let canonical_dest = fs::canonicalize(dest_path).map_err(|err| {
+        format!("Failed to canonicalize dest path '{}': {err}", dest_path.display())
+    })?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Expand-Archive failed: {stderr}"));
+    let zip_file = fs::File::open(zip_path)
+        .map_err(|err| format!("Failed to open zip file '{}': {err}", zip_path.display()))?;
+    let mut archive = zip::ZipArchive::new(zip_file)
+        .map_err(|err| format!("Failed to read zip archive: {err}"))?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|err| format!("Failed to read zip entry {i}: {err}"))?;
+
+        // Resolve the sanitized entry name (zip::ZipFile::enclosed_name strips leading '/' and '..').
+        let entry_path = match entry.enclosed_name() {
+            Some(p) => p.to_path_buf(),
+            None => {
+                eprintln!("Skipping zip entry with unsafe name: {:?}", entry.name());
+                continue;
+            }
+        };
+
+        let target_path = dest_path.join(&entry_path);
+
+        // Zip Slip guard: make sure the resolved target stays inside dest_path.
+        // We construct the canonical parent by appending components one by one.
+        // Using `fs::canonicalize` would fail for paths that don't exist yet, so
+        // we normalise manually by stripping '.' and collapsing '..' via PathBuf.
+        let mut normalised = canonical_dest.clone();
+        for component in entry_path.components() {
+            use std::path::Component;
+            match component {
+                Component::Normal(name) => normalised.push(name),
+                Component::ParentDir => {
+                    // '..' would escape the sandbox — skip this entry.
+                    eprintln!(
+                        "Zip Slip guard: rejecting entry '{}' which would escape destination.",
+                        entry.name()
+                    );
+                    continue;
+                }
+                _ => {}
+            }
         }
-    } else {
-        let zip_str = zip_path.to_str().ok_or("Invalid zip path")?;
-        let dest_str = dest_path.to_str().ok_or("Invalid dest path")?;
-        
-        let output = Command::new("unzip")
-            .arg("-o")
-            .arg(zip_str)
-            .arg("-d")
-            .arg(dest_str)
-            .output()
-            .map_err(|err| format!("Failed to run unzip command: {err}"))?;
+        if !normalised.starts_with(&canonical_dest) {
+            eprintln!(
+                "Zip Slip guard: rejecting entry '{}' — resolved path is outside destination.",
+                entry.name()
+            );
+            continue;
+        }
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("unzip failed: {stderr}"));
+        if entry.is_dir() {
+            fs::create_dir_all(&target_path)
+                .map_err(|err| format!("Failed to create directory '{}': {err}", target_path.display()))?;
+        } else {
+            if let Some(parent) = target_path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|err| format!("Failed to create parent dir '{}': {err}", parent.display()))?;
+            }
+            let mut out_file = fs::File::create(&target_path)
+                .map_err(|err| format!("Failed to create file '{}': {err}", target_path.display()))?;
+            io::copy(&mut entry, &mut out_file)
+                .map_err(|err| format!("Failed to write file '{}': {err}", target_path.display()))?;
         }
     }
+
     Ok(())
 }
 

@@ -19,3 +19,7 @@ Thumbs.db
 # Inbox
 _Inbox/*
 !_Inbox/.gitkeep
+
+# Binary artifacts — development archives and patches (do not track in VCS)
+/*.zip
+/*.patch

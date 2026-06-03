@@ -667,6 +667,13 @@ func clear_spawned_entities() -> void:
 		if is_instance_valid(node):
 			node.queue_free()
 	spawned_entities.clear()
+	# Free the HUD canvas explicitly so it is not left on screen if load_level
+	# returns early (before _create_hud() is called on the new room).
+	if hud_canvas != null and is_instance_valid(hud_canvas):
+		hud_canvas.queue_free()
+		hud_canvas = null
+	hud_health_label = null
+	hud_score_label = null
 
 
 func on_collectible_picked_up(payload: Dictionary) -> void:

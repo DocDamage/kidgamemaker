@@ -3,6 +3,7 @@ use serde_json::Value;
 use std::{
     collections::BTreeMap,
     fs,
+    io,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -577,40 +578,8 @@ pub fn export_game(project_id: String) -> Result<String, String> {
         let _ = fs::remove_file(&zip_path);
     }
 
-    if cfg!(target_os = "windows") {
-        let package_dir_str = package_dir.display().to_string();
-        let zip_path_str = zip_path.display().to_string();
-
-        let output = std::process::Command::new("powershell")
-            .arg("-NoProfile")
-            .arg("-Command")
-            .arg(format!(
-                "Compress-Archive -Path '{}/*' -DestinationPath '{}' -Force",
-                package_dir_str, zip_path_str
-            ))
-            .output()
-            .map_err(|err| format!("Failed to execute PowerShell zip command: {err}"))?;
-
-        if !output.status.success() {
-            let err_msg = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("PowerShell zip execution failed: {err_msg}"));
-        }
-    } else {
-        let zip_path_str = zip_path.display().to_string();
-
-        let output = std::process::Command::new("zip")
-            .arg("-r")
-            .arg(&zip_path_str)
-            .arg(".")
-            .current_dir(&package_dir)
-            .output()
-            .map_err(|err| format!("Failed to execute zip command: {err}"))?;
-
-        if !output.status.success() {
-            let err_msg = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Zip command execution failed: {err_msg}"));
-        }
-    }
+    zip_dir_to_file(&package_dir, &zip_path)
+        .map_err(|err| format!("Failed to create export ZIP: {err}"))?;
 
     let _ = fs::remove_dir_all(&package_dir);
 
@@ -619,6 +588,51 @@ pub fn export_game(project_id: String) -> Result<String, String> {
         zip_path.display(),
         notice
     ))
+}
+
+/// Walk `source_dir` recursively and write all files into a ZIP archive at `zip_path`.
+fn zip_dir_to_file(source_dir: &Path, zip_path: &Path) -> Result<(), String> {
+    let out_file = fs::File::create(zip_path)
+        .map_err(|err| format!("Cannot create zip file '{}': {err}", zip_path.display()))?;
+    let out_buf = io::BufWriter::new(out_file);
+    let mut zip_writer = zip::ZipWriter::new(out_buf);
+    let options =
+        zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+
+    let mut stack: Vec<PathBuf> = vec![source_dir.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(&dir)
+            .map_err(|err| format!("Cannot read dir '{}': {err}", dir.display()))?
+        {
+            let entry = entry.map_err(|err| err.to_string())?;
+            let path = entry.path();
+            // Relative path inside the ZIP (strip the source_dir prefix)
+            let relative = path
+                .strip_prefix(source_dir)
+                .map_err(|_| format!("Path prefix error for '{}'", path.display()))?;
+            let zip_name = relative.to_string_lossy().replace('\\', "/");
+
+            if path.is_dir() {
+                zip_writer
+                    .add_directory(&zip_name, options)
+                    .map_err(|err| format!("Failed to add dir '{zip_name}': {err}"))?;
+                stack.push(path);
+            } else {
+                zip_writer
+                    .start_file(&zip_name, options)
+                    .map_err(|err| format!("Failed to start zip entry '{zip_name}': {err}"))?;
+                let mut file = fs::File::open(&path)
+                    .map_err(|err| format!("Cannot read file '{}': {err}", path.display()))?;
+                io::copy(&mut file, &mut zip_writer)
+                    .map_err(|err| format!("Failed to write '{zip_name}' into zip: {err}"))?;
+            }
+        }
+    }
+
+    zip_writer
+        .finish()
+        .map_err(|err| format!("Failed to finalize zip: {err}"))?;
+    Ok(())
 }
 
 use base64::{Engine as _, engine::general_purpose};
