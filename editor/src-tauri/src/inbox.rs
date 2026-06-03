@@ -172,6 +172,7 @@ fn unzip_file(zip_path: &Path, dest_path: &Path) -> Result<(), String> {
         // Using `fs::canonicalize` would fail for paths that don't exist yet, so
         // we normalise manually by stripping '.' and collapsing '..' via PathBuf.
         let mut normalised = canonical_dest.clone();
+        let mut is_unsafe = false;
         for component in entry_path.components() {
             use std::path::Component;
             match component {
@@ -182,12 +183,13 @@ fn unzip_file(zip_path: &Path, dest_path: &Path) -> Result<(), String> {
                         "Zip Slip guard: rejecting entry '{}' which would escape destination.",
                         entry.name()
                     );
-                    continue;
+                    is_unsafe = true;
+                    break;
                 }
                 _ => {}
             }
         }
-        if !normalised.starts_with(&canonical_dest) {
+        if is_unsafe || !normalised.starts_with(&canonical_dest) {
             eprintln!(
                 "Zip Slip guard: rejecting entry '{}' — resolved path is outside destination.",
                 entry.name()

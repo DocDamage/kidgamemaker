@@ -23,3 +23,6 @@ _Inbox/*
 # Binary artifacts — development archives and patches (do not track in VCS)
 /*.zip
 /*.patch
+
+# Exports
+exports/
