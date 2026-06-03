@@ -1,6 +1,11 @@
 # Sprite Sheet Processor
 
+> [!NOTE]
+> This sprite editor and cutting toolset (`realspriteeditor-cutter`) is integrated into the **KidGameMaker** workspace on the `sprite-editor` branch.
+> It provides the core BFS-based sprite sheet parsing, color palette replacement, and asset exporting pipelines for game runtime handoff.
+
 Production-oriented tools for cutting packed 2D sprite sheets, reviewing the results, exporting engine metadata, and keeping non-destructive `.spritecut.json` project state.
+
 
 ## Quick Start
 
