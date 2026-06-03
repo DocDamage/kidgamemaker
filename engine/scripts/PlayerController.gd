@@ -16,6 +16,9 @@ var speed_boost_timer: float = 0.0
 var shield_active: bool = false
 var double_jump_enabled: bool = false
 var _jumps_remaining: int = 1
+var giant_timer: float = 0.0
+var is_giant: bool = false
+var gravity_inverted: bool = false
 
 # Water & Speed pad physics states
 var inside_water: bool = false
@@ -28,6 +31,9 @@ var speed_pad_velocity: Vector2 = Vector2.ZERO
 var has_glider: bool = false
 var has_jetpack: bool = false
 var jetpack_fuel: float = 0.0
+var has_hammer: bool = false
+var has_lantern: bool = false
+var lantern_light: PointLight2D = null
 
 
 
@@ -72,6 +78,29 @@ func apply_powerup(type: String) -> void:
 			print("Player acquired Jetpack!")
 			if main != null and main.has_method("play_sfx"):
 				main.play_sfx("coin")
+		"giant":
+			giant_timer = 6.0
+			is_giant = true
+			scale = Vector2(2.0, 2.0)
+			print("Player acquired Giant Growth!")
+			if main != null and main.has_method("play_sfx"):
+				main.play_sfx("coin")
+		"gravity":
+			gravity_inverted = not gravity_inverted
+			gravity_scale = -1.0 if gravity_inverted else 1.0
+			print("Player toggled gravity!")
+			if main != null and main.has_method("play_sfx"):
+				main.play_sfx("coin")
+		"hammer":
+			has_hammer = true
+			print("Player acquired Toy Hammer!")
+			if main != null and main.has_method("play_sfx"):
+				main.play_sfx("coin")
+		"lantern":
+			has_lantern = true
+			print("Player acquired Lantern!")
+			if main != null and main.has_method("play_sfx"):
+				main.play_sfx("coin")
 
 	if main != null and main.has_method("spawn_floating_text"):
 		main.spawn_floating_text(type.replace("_", " ").to_upper() + "!", global_position, Color.CYAN)
@@ -112,8 +141,11 @@ func take_damage(amount: int) -> void:
 	if current_health <= 0:
 		current_health = 0
 		print("Player has died!")
-		if main != null and main.has_method("_respawn_player"):
-			main.call_deferred("_respawn_player")
+		if main != null:
+			if main.has_method("handle_player_death"):
+				main.call_deferred("handle_player_death")
+			elif main.has_method("_respawn_player"):
+				main.call_deferred("_respawn_player")
 		return
 
 	_invincible = true
@@ -128,6 +160,31 @@ func take_damage(amount: int) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Configure up direction dynamically
+	if gravity_inverted:
+		up_direction = Vector2.DOWN
+	else:
+		up_direction = Vector2.UP
+
+	# Handle lantern illumination
+	if has_lantern:
+		if lantern_light == null:
+			lantern_light = PointLight2D.new()
+			var tex := GradientTexture2D.new()
+			tex.fill = GradientTexture2D.FILL_RADIAL
+			tex.fill_from = Vector2(0.5, 0.5)
+			tex.fill_to = Vector2(1.0, 0.5)
+			var grad := Gradient.new()
+			grad.colors = PackedColorArray([Color.WHITE, Color(1, 1, 1, 0)])
+			tex.gradient = grad
+			tex.width = 300
+			tex.height = 300
+			
+			lantern_light.texture = tex
+			lantern_light.energy = 1.3
+			lantern_light.blend_mode = Light2D.BLEND_MODE_ADD
+			add_child(lantern_light)
+
 	# Handle water damage tick
 	if inside_water and (water_type == "toxic" or water_type == "lava"):
 		water_hurt_timer -= delta
@@ -136,6 +193,15 @@ func _physics_process(delta: float) -> void:
 			take_damage(dmg)
 			water_hurt_timer = 0.8 # tick every 0.8 seconds
 
+	# Handle giant timer
+	if giant_timer > 0.0:
+		giant_timer -= delta
+		is_giant = true
+		scale = Vector2(2.0, 2.0)
+	elif is_giant:
+		is_giant = false
+		scale = Vector2(1.0, 1.0)
+
 	var active_speed := movement_speed
 	if speed_boost_timer > 0.0:
 		speed_boost_timer -= delta
@@ -143,6 +209,10 @@ func _physics_process(delta: float) -> void:
 		modulate = Color(0.4, 1.0, 1.0) # Cyan modulation for speed
 	elif shield_active:
 		modulate = Color(1.0, 0.5, 1.0) # Pink modulation for shield
+	elif is_giant:
+		modulate = Color(1.0, 0.8, 0.2) # Orange/gold modulation for giant
+	elif gravity_inverted:
+		modulate = Color(0.6, 0.4, 1.0) # Purple modulation for gravity
 	else:
 		if not _invincible:
 			modulate = Color(1.0, 1.0, 1.0)
@@ -160,14 +230,17 @@ func _physics_process(delta: float) -> void:
 		velocity.y += gravity * (1.0 - water_buoyancy) * delta
 		velocity.y = clamp(velocity.y, -220.0, 180.0)
 	elif has_jetpack and jetpack_fuel > 0.0 and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
-		velocity.y = -260.0
+		velocity.y = -260.0 if not gravity_inverted else 260.0
 		jetpack_fuel -= delta * 35.0
 		modulate = Color(1.0, 0.5, 0.2) # Jetpack orange visual tint
 		var main := get_tree().get_root().get_node_or_null("Main")
 		if main != null and main.has_method("spawn_floating_text") and randf() < delta * 4.0:
 			main.spawn_floating_text("🔥", global_position, Color.ORANGE)
-	elif has_glider and not is_on_floor() and velocity.y > 0.0 and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
-		velocity.y = min(velocity.y, 45.0) # Glide cap fall velocity
+	elif has_glider and not is_on_floor() and (velocity.y > 0.0 if not gravity_inverted else velocity.y < 0.0) and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
+		if gravity_inverted:
+			velocity.y = max(velocity.y, -45.0)
+		else:
+			velocity.y = min(velocity.y, 45.0)
 		modulate = Color(1.0, 0.8, 0.5) # Glider yellow/peach visual tint
 	elif not is_on_floor():
 		velocity.y += gravity * gravity_scale * delta
@@ -179,17 +252,17 @@ func _physics_process(delta: float) -> void:
 		var did_jump := false
 		if inside_water:
 			# Swim stroke
-			velocity.y = -220.0
+			velocity.y = -220.0 if not gravity_inverted else 220.0
 			did_jump = true
 			var main := get_tree().get_root().get_node_or_null("Main")
 			if main != null and main.has_method("play_sfx"):
 				main.play_sfx("jump")
 		elif is_on_floor():
-			velocity.y = jump_force
+			velocity.y = jump_force if not gravity_inverted else -jump_force
 			_jumps_remaining = 1 if double_jump_enabled else 0
 			did_jump = true
 		elif _jumps_remaining > 0:
-			velocity.y = jump_force * 0.9
+			velocity.y = jump_force * 0.9 if not gravity_inverted else -jump_force * 0.9
 			_jumps_remaining -= 1
 			did_jump = true
 			scale = Vector2(0.8, 1.3)
@@ -202,3 +275,39 @@ func _physics_process(delta: float) -> void:
 				main.play_custom_sfx(asset_id, "jump")
 
 	move_and_slide()
+
+	# Destructible block check
+	for i in get_slide_collision_count():
+		var collision = get_slide_collision(i)
+		var collider = collision.get_collider()
+		if collider != null and collider.has_meta("is_destructible") and collider.get_meta("is_destructible") == true:
+			if has_hammer:
+				collider.call_deferred("shatter")
+				var main = get_tree().get_root().get_node_or_null("Main")
+				if main != null and main.has_method("play_sfx"):
+					main.play_sfx("hit")
+			else:
+				var main = get_tree().get_root().get_node_or_null("Main")
+				if main != null and main.has_method("spawn_floating_text") and randf() < delta * 1.5:
+					main.spawn_floating_text("NEED HAMMER! 🔨", global_position, Color.GOLD)
+
+	# Stomp check immediately after move_and_slide()
+	var is_falling := velocity.y > 0.0 if not gravity_inverted else velocity.y < 0.0
+	if not is_on_floor() and is_falling:
+		for i in get_slide_collision_count():
+			var collision = get_slide_collision(i)
+			var collider = collision.get_collider()
+			if collider != null and collider.has_method("take_damage") and not collider.name.begins_with("Player"):
+				var normal = collision.get_normal()
+				var is_stomp = normal.y < -0.7 if not gravity_inverted else normal.y > 0.7
+				if is_stomp:
+					var bounce = jump_force * 0.75
+					velocity.y = bounce if not gravity_inverted else -bounce
+					
+					var stomp_dmg = 40 if is_giant else 20
+					collider.take_damage(stomp_dmg)
+					
+					var main = get_tree().get_root().get_node_or_null("Main")
+					if main != null and main.has_method("play_sfx"):
+						main.play_sfx("jump")
+					break

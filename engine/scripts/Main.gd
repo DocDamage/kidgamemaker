@@ -27,6 +27,8 @@ var found_spawn_portal_pos: Variant = null
 var current_weather: String = "clear"
 var score: int = 0
 var keys_collected: Dictionary = {}  # key_color -> count
+var victory_rules: Dictionary = {"win_condition": "all_enemies", "celebration": "confetti"}
+var loss_rules: Dictionary = {"lose_condition": "health_0", "action": "game_over"}
 
 # Chiptune synthesizer state
 var bpm_sequence: Array = []
@@ -331,6 +333,10 @@ func spawn_entity(data: Dictionary) -> Node2D:
 			node = _make_crumbling_cloud(data, sidecar)
 		"hazard":
 			node = _make_hazard(data, sidecar)
+		"destructible_terrain":
+			node = _make_destructible_terrain(data, sidecar)
+		"shopkeeper":
+			node = _make_shopkeeper(data, sidecar)
 		_:
 			node = _make_decoration(data, sidecar)
 
@@ -536,18 +542,35 @@ func _make_key_collectible(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	var area := Area2D.new()
 	var size := _collision_size(sidecar, Vector2(20, 20), data)
 	_add_box_collision(area, size)
-	_add_visuals(area, sidecar, size, Color(1.0, 0.85, 0.0, 0.95))
+	
+	var asset_id := str(data.get("asset_id", ""))
+	var modifiers: Dictionary = data.get("modifiers", {})
+	var key_col := str(modifiers.get("key_color", ""))
+	if key_col == "":
+		if asset_id.contains("red"):
+			key_col = "red"
+		elif asset_id.contains("blue"):
+			key_col = "blue"
+		else:
+			var gameplay: Dictionary = sidecar.get("gameplay_logic", {})
+			key_col = str(gameplay.get("key_color", "gold"))
+	
+	var col_tint := Color(1.0, 0.85, 0.0, 0.95)
+	if key_col == "red":
+		col_tint = Color(1.0, 0.2, 0.2, 0.95)
+	elif key_col == "blue":
+		col_tint = Color(0.2, 0.5, 1.0, 0.95)
+		
+	_add_visuals(area, sidecar, size, col_tint)
 	area.set_meta("is_collectible", true)
 
 	var script := load(COLLECTIBLE_SCRIPT)
 	if script != null:
 		area.set_script(script)
-		var gameplay: Dictionary = sidecar.get("gameplay_logic", {})
 		area.set("score_value", 0)
 		area.set("heal_value", 0)
-		area.set("asset_id", str(data.get("asset_id", "")))
-		# Store key_color as metadata so on_collectible_picked_up can read it
-		area.set_meta("key_color", str(gameplay.get("key_color", "gold")))
+		area.set("asset_id", asset_id)
+		area.set_meta("key_color", key_col)
 
 	return area
 
@@ -572,11 +595,32 @@ func _make_locked_door(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	var area := Area2D.new()
 	var size := _collision_size(sidecar, Vector2(48, 64), data)
 	_add_box_collision(area, size)
-	_add_visuals(area, sidecar, size, Color(0.8, 0.15, 0.15, 0.9))
+	
+	var asset_id := str(data.get("asset_id", ""))
+	var modifiers: Dictionary = data.get("modifiers", {})
+	var key_col := str(modifiers.get("key_color", ""))
+	if key_col == "":
+		if asset_id.contains("red"):
+			key_col = "red"
+		elif asset_id.contains("blue"):
+			key_col = "blue"
+		else:
+			var gameplay: Dictionary = sidecar.get("gameplay_logic", {})
+			key_col = str(gameplay.get("key_color", "gold"))
+			
+	var col_tint := Color(0.8, 0.15, 0.15, 0.9)
+	if key_col == "red":
+		col_tint = Color(1.0, 0.2, 0.2, 0.9)
+	elif key_col == "blue":
+		col_tint = Color(0.2, 0.4, 1.0, 0.9)
+	elif key_col == "gold":
+		col_tint = Color(1.0, 0.8, 0.0, 0.9)
+		
+	_add_visuals(area, sidecar, size, col_tint)
 
 	var gameplay: Dictionary = sidecar.get("gameplay_logic", {})
 	area.set_meta("requires_key", bool(gameplay.get("requires_key", true)))
-	area.set_meta("key_color", str(gameplay.get("key_color", "gold")))
+	area.set_meta("key_color", key_col)
 
 	return area
 
@@ -1149,6 +1193,10 @@ func execute_rules(trigger_type: String, trigger_id: String = "") -> void:
 
 
 func _on_portal_entered(_portal_node: Node2D, portal_data: Dictionary) -> void:
+	if victory_rules.get("win_condition", "all_enemies") == "portal":
+		trigger_victory()
+		return
+
 	var modifiers: Dictionary = portal_data.get("modifiers", {}) if portal_data.has("modifiers") else {}
 	var target_room = str(modifiers.get("target_room", ""))
 	var target_portal = str(modifiers.get("target_portal", ""))
@@ -1209,6 +1257,278 @@ func transition_to_room(target_room_name: String, target_portal_id: String) -> v
 	load_level(room_path)
 
 
+func check_victory_conditions() -> void:
+	var win_cond := str(victory_rules.get("win_condition", "all_enemies"))
+	print("Checking victory conditions... win_cond: ", win_cond)
+	
+	if win_cond == "all_enemies":
+		var enemies_left := 0
+		for ent in spawned_entities:
+			if is_instance_valid(ent) and ent.has_method("take_damage") and not ent.name.begins_with("Player"):
+				# Filter out pets/companions if they have take_damage
+				var asset_id_meta = ent.get_meta("asset_id") if ent.has_meta("asset_id") else ""
+				if not asset_id_meta.begins_with("pet_") and not ent.name.begins_with("pet_"):
+					enemies_left += 1
+		print("Enemies left: ", enemies_left)
+		if enemies_left == 0:
+			trigger_victory()
+			
+	elif win_cond == "all_coins":
+		var coins_left := 0
+		for ent in spawned_entities:
+			if is_instance_valid(ent) and ent.has_meta("is_collectible"):
+				var a_id = str(ent.get("asset_id")) if "asset_id" in ent else ""
+				if not a_id.contains("key"):
+					coins_left += 1
+		print("Coins/Gems left: ", coins_left)
+		if coins_left == 0:
+			trigger_victory()
+
+
+func trigger_victory() -> void:
+	if get_tree().paused:
+		return
+	print("VICTORY TRIGGERED!")
+	play_sfx("coin")
+	
+	# Fullscreen overlay CanvasLayer
+	var overlay := CanvasLayer.new()
+	overlay.layer = 200
+	overlay.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(overlay)
+	
+	# Panel
+	var panel := Panel.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.06, 0.09, 0.16, 0.85)
+	style.border_width_left = 8
+	style.border_width_top = 8
+	style.border_width_right = 8
+	style.border_width_bottom = 8
+	style.border_color = Color(0.98, 0.75, 0.14) # gold border
+	style.corner_radius_top_left = 24
+	style.corner_radius_top_right = 24
+	style.corner_radius_bottom_left = 24
+	style.corner_radius_bottom_right = 24
+	panel.add_theme_stylebox_override("panel", style)
+	overlay.add_child(panel)
+	
+	# Victory Label
+	var label := Label.new()
+	label.text = "🏆 VICTORY! 🏆"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var settings := LabelSettings.new()
+	settings.font_size = 48
+	settings.font_color = Color(0.98, 0.75, 0.14)
+	settings.outline_size = 8
+	settings.outline_color = Color.BLACK
+	label.label_settings = settings
+	label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	label.anchor_left = 0.5
+	label.anchor_right = 0.5
+	label.anchor_top = 0.35
+	label.anchor_bottom = 0.35
+	label.offset_left = -200
+	label.offset_right = 200
+	label.offset_top = -30
+	label.offset_bottom = 30
+	panel.add_child(label)
+	
+	# Scale animation for victory text
+	label.scale = Vector2(0.2, 0.2)
+	label.pivot_offset = Vector2(200, 30)
+	var tween := create_tween().set_process_mode(Tween.TWEEN_PROCESS_ALWAYS)
+	tween.tween_property(label, "scale", Vector2(1.1, 1.1), 0.35).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "scale", Vector2(1.0, 1.0), 0.15)
+	
+	# Confetti celebration particles
+	var celeb = str(victory_rules.get("celebration", "confetti"))
+	if celeb == "confetti":
+		var particles := CPUParticles2D.new()
+		particles.amount = 120
+		particles.lifetime = 4.0
+		particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+		particles.emission_rect_extents = Vector2(800, 10)
+		particles.direction = Vector2(0, 1.0)
+		particles.spread = 15.0
+		particles.gravity = Vector2(0, 150)
+		particles.initial_velocity_min = 100.0
+		particles.initial_velocity_max = 200.0
+		particles.scale_amount_min = 4.0
+		particles.scale_amount_max = 8.0
+		particles.position = Vector2(500, -300)
+		particles.process_mode = Node.PROCESS_MODE_ALWAYS
+		
+		var grad := Gradient.new()
+		grad.set_color(0, Color(1.0, 0.2, 0.2)) # red
+		grad.add_key(0.2, Color(1.0, 0.8, 0.2)) # orange/yellow
+		grad.add_key(0.4, Color(0.2, 1.0, 0.2)) # green
+		grad.add_key(0.6, Color(0.2, 0.8, 1.0)) # cyan/blue
+		grad.add_key(0.8, Color(0.8, 0.2, 1.0)) # purple
+		grad.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+		particles.color_ramp = grad
+		
+		panel.add_child(particles)
+		particles.emitting = true
+		
+	# Play Again Button
+	var btn_play := Button.new()
+	btn_play.text = "Play Again 🔄"
+	btn_play.custom_minimum_size = Vector2(180, 50)
+	btn_play.anchor_left = 0.5
+	btn_play.anchor_right = 0.5
+	btn_play.anchor_top = 0.65
+	btn_play.anchor_bottom = 0.65
+	btn_play.offset_left = -200
+	btn_play.offset_right = -20
+	btn_play.offset_top = -25
+	btn_play.offset_bottom = 25
+	btn_play.pressed.connect(func():
+		get_tree().paused = false
+		overlay.queue_free()
+		get_tree().reload_current_scene()
+	)
+	panel.add_child(btn_play)
+	
+	# Close Button
+	var btn_close := Button.new()
+	btn_close.text = "Close Game ❌"
+	btn_close.custom_minimum_size = Vector2(180, 50)
+	btn_close.anchor_left = 0.5
+	btn_close.anchor_right = 0.5
+	btn_close.anchor_top = 0.65
+	btn_close.anchor_bottom = 0.65
+	btn_close.offset_left = 20
+	btn_close.offset_right = 200
+	btn_close.offset_top = -25
+	btn_close.offset_bottom = 25
+	btn_close.pressed.connect(func():
+		get_tree().paused = false
+		overlay.queue_free()
+		if OS.has_feature("web"):
+			JavaScriptBridge.eval("window.parent.postMessage('close_game', '*')")
+		else:
+			get_tree().quit()
+	)
+	panel.add_child(btn_close)
+	
+	# Pause the game tree
+	get_tree().paused = true
+
+
+func trigger_game_over() -> void:
+	if get_tree().paused:
+		return
+	print("GAME OVER TRIGGERED!")
+	
+	# Fullscreen overlay CanvasLayer
+	var overlay := CanvasLayer.new()
+	overlay.layer = 200
+	overlay.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(overlay)
+	
+	# Panel
+	var panel := Panel.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.18, 0.05, 0.05, 0.85)
+	style.border_width_left = 8
+	style.border_width_top = 8
+	style.border_width_right = 8
+	style.border_width_bottom = 8
+	style.border_color = Color(0.9, 0.15, 0.15)
+	style.corner_radius_top_left = 24
+	style.corner_radius_top_right = 24
+	style.corner_radius_bottom_left = 24
+	style.corner_radius_bottom_right = 24
+	panel.add_theme_stylebox_override("panel", style)
+	overlay.add_child(panel)
+	
+	# Game Over Label
+	var label := Label.new()
+	label.text = "💀 GAME OVER 💀"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var settings := LabelSettings.new()
+	settings.font_size = 48
+	settings.font_color = Color(0.9, 0.15, 0.15)
+	settings.outline_size = 8
+	settings.outline_color = Color.BLACK
+	label.label_settings = settings
+	label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	label.anchor_left = 0.5
+	label.anchor_right = 0.5
+	label.anchor_top = 0.35
+	label.anchor_bottom = 0.35
+	label.offset_left = -200
+	label.offset_right = 200
+	label.offset_top = -30
+	label.offset_bottom = 30
+	panel.add_child(label)
+	
+	# Scale animation
+	label.scale = Vector2(0.2, 0.2)
+	label.pivot_offset = Vector2(200, 30)
+	var tween := create_tween().set_process_mode(Tween.TWEEN_PROCESS_ALWAYS)
+	tween.tween_property(label, "scale", Vector2(1.1, 1.1), 0.35).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "scale", Vector2(1.0, 1.0), 0.15)
+	
+	# Try Again Button
+	var btn_play := Button.new()
+	btn_play.text = "Try Again 🔄"
+	btn_play.custom_minimum_size = Vector2(180, 50)
+	btn_play.anchor_left = 0.5
+	btn_play.anchor_right = 0.5
+	btn_play.anchor_top = 0.65
+	btn_play.anchor_bottom = 0.65
+	btn_play.offset_left = -200
+	btn_play.offset_right = -20
+	btn_play.offset_top = -25
+	btn_play.offset_bottom = 25
+	btn_play.pressed.connect(func():
+		get_tree().paused = false
+		overlay.queue_free()
+		get_tree().reload_current_scene()
+	)
+	panel.add_child(btn_play)
+	
+	# Close Button
+	var btn_close := Button.new()
+	btn_close.text = "Close Game ❌"
+	btn_close.custom_minimum_size = Vector2(180, 50)
+	btn_close.anchor_left = 0.5
+	btn_close.anchor_right = 0.5
+	btn_close.anchor_top = 0.65
+	btn_close.anchor_bottom = 0.65
+	btn_close.offset_left = 20
+	btn_close.offset_right = 200
+	btn_close.offset_top = -25
+	btn_close.offset_bottom = 25
+	btn_close.pressed.connect(func():
+		get_tree().paused = false
+		overlay.queue_free()
+		if OS.has_feature("web"):
+			JavaScriptBridge.eval("window.parent.postMessage('close_game', '*')")
+		else:
+			get_tree().quit()
+	)
+	panel.add_child(btn_close)
+	
+	# Pause the game tree
+	get_tree().paused = true
+
+
+func handle_player_death() -> void:
+	var action = loss_rules.get("action", "game_over")
+	print("handle_player_death called. loss action rule: ", action)
+	if action == "respawn":
+		_respawn_player()
+	else:
+		trigger_game_over()
+
+
 func clear_spawned_entities() -> void:
 	for node in spawned_entities:
 		if is_instance_valid(node):
@@ -1237,17 +1557,15 @@ func on_collectible_picked_up(payload: Dictionary) -> void:
 		elif collectibles_collected == 10:
 			execute_rules("coins_10")
 
-	# Key pickup — find the node that emitted it to read key_color
+	# Key pickup
 	var asset_id_val := str(payload.get("asset_id", ""))
-	if asset_id_val.contains("key"):
-		var key_color := "gold"
-		# Try to find node by asset_id to get stored key_color metadata
-		for node in spawned_entities:
-			if is_instance_valid(node) and node.has_meta("key_color"):
-				key_color = str(node.get_meta("key_color"))
-				break
+	if asset_id_val.contains("key") or payload.has("key_color"):
+		var key_color := str(payload.get("key_color", "gold"))
 		keys_collected[key_color] = keys_collected.get(key_color, 0) + 1
 		print("Key collected! %s keys of color '%s'" % [keys_collected[key_color], key_color])
+		
+		# Play chime sfx
+		play_sfx("coin")
 
 
 func _configure_camera_limits() -> void:
@@ -1352,6 +1670,8 @@ func _apply_world_settings(settings: Dictionary) -> void:
 
 	bpm_sequence = settings.get("custom_bgm_sequence", [])
 	room_rules = settings.get("room_rules", [])
+	victory_rules = settings.get("victory_rules", {"win_condition": "all_enemies", "celebration": "confetti"})
+	loss_rules = settings.get("loss_rules", {"lose_condition": "health_0", "action": "game_over"})
 	var theme := str(settings.get("theme", "default"))
 	_play_theme_bgm(theme)
 
@@ -1506,6 +1826,73 @@ func _create_hud() -> void:
 	hud_score_label.label_settings = score_settings
 	control.add_child(hud_score_label)
 
+	# Minimap HUD widget
+	var minimap := Control.new()
+	minimap.name = "Minimap"
+	minimap.custom_minimum_size = Vector2(160, 100)
+	minimap.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	minimap.anchor_left = 1.0
+	minimap.anchor_right = 1.0
+	minimap.anchor_top = 1.0
+	minimap.anchor_bottom = 1.0
+	minimap.offset_left = -180
+	minimap.offset_right = -20
+	minimap.offset_top = -120
+	minimap.offset_bottom = -20
+	
+	var map_script := GDScript.new()
+	map_script.source_code = "extends Control\n" + \
+		"var main: Node2D = null\n" + \
+		"func _ready() -> void:\n" + \
+		"\tmain = get_tree().get_root().get_node_or_null('Main')\n" + \
+		"func _process(_delta: float) -> void:\n" + \
+		"\tqueue_redraw()\n" + \
+		"func _draw() -> void:\n" + \
+		"\tdraw_rect(Rect2(Vector2.ZERO, size), Color(0.08, 0.12, 0.2, 0.75), true)\n" + \
+		"\tdraw_rect(Rect2(Vector2.ZERO, size), Color(0.3, 0.6, 0.9, 0.9), false, 2.0)\n" + \
+		"\tif main == null or not is_instance_valid(main) or main.active_player == null or not is_instance_valid(main.active_player):\n" + \
+		"\t\treturn\n" + \
+		"\tvar min_x := 999999.0\n" + \
+		"\tvar max_x := -999999.0\n" + \
+		"\tvar min_y := 999999.0\n" + \
+		"\tvar max_y := -999999.0\n" + \
+		"\tvar found := false\n" + \
+		"\tfor ent in main.spawned_entities:\n" + \
+		"\t\tif is_instance_valid(ent) and (ent is StaticBody2D or ent.name.begins_with('stone_floor') or ent.name.begins_with('floor') or ent.name.begins_with('brick_destructible')):\n" + \
+		"\t\t\tfound = true\n" + \
+		"\t\t\tvar pos = ent.global_position\n" + \
+		"\t\t\tmin_x = min(min_x, pos.x - 64)\n" + \
+		"\t\t\tmax_x = max(max_x, pos.x + 64)\n" + \
+		"\t\t\tmin_y = min(min_y, pos.y - 16)\n" + \
+		"\t\t\tmax_y = max(max_y, pos.y + 16)\n" + \
+		"\tif not found:\n" + \
+		"\t\treturn\n" + \
+		"\tvar w = max_x - min_x\n" + \
+		"\tvar h = max_y - min_y\n" + \
+		"\tif w <= 0.0 or h <= 0.0:\n" + \
+		"\t\treturn\n" + \
+		"\tvar scale_x = (size.x - 20.0) / w\n" + \
+		"\tvar scale_y = (size.y - 20.0) / h\n" + \
+		"\tvar m_scale = min(scale_x, scale_y)\n" + \
+		"\tfor ent in main.spawned_entities:\n" + \
+		"\t\tif is_instance_valid(ent):\n" + \
+		"\t\t\tvar pos = ent.global_position\n" + \
+		"\t\t\tvar local_pos = Vector2((pos.x - min_x) * m_scale + 10.0, (pos.y - min_y) * m_scale + 10.0)\n" + \
+		"\t\t\tif ent is StaticBody2D or ent.name.begins_with('stone_floor') or ent.name.begins_with('floor'):\n" + \
+		"\t\t\t\tdraw_rect(Rect2(local_pos - Vector2(12, 3) * m_scale, Vector2(24, 6) * m_scale), Color(0.45, 0.45, 0.45, 0.9), true)\n" + \
+		"\t\t\telif ent.name.begins_with('brick_destructible') or ent.name.begins_with('ice_destructible'):\n" + \
+		"\t\t\t\tdraw_rect(Rect2(local_pos - Vector2(12, 3) * m_scale, Vector2(24, 6) * m_scale), Color(0.85, 0.55, 0.3, 0.9), true)\n" + \
+		"\t\t\telif ent.has_meta('is_collectible'):\n" + \
+		"\t\t\t\tdraw_circle(local_pos, 2.0, Color.GOLD)\n" + \
+		"\t\t\telif ent is Area2D and (ent.name.begins_with('portal') or ent.name.begins_with('locked_door')):\n" + \
+		"\t\t\t\tdraw_circle(local_pos, 3.0, Color.PURPLE)\n" + \
+		"\tvar p_pos = main.active_player.global_position\n" + \
+		"\tvar p_local = Vector2((p_pos.x - min_x) * m_scale + 10.0, (p_pos.y - min_y) * m_scale + 10.0)\n" + \
+		"\tdraw_circle(p_local, 4.0, Color.YELLOW)\n"
+	map_script.reload()
+	minimap.set_script(map_script)
+	control.add_child(minimap)
+
 
 func _update_hud() -> void:
 	if hud_health_label == null or not is_instance_valid(hud_health_label):
@@ -1539,6 +1926,22 @@ func _update_hud() -> void:
 		if active_player.get("has_jetpack") == true:
 			var fuel = active_player.get("jetpack_fuel")
 			hud_score_label.text = "🚀 " + str(int(fuel)) + "% | " + hud_score_label.text
+			
+	var keys_str := ""
+	for color in keys_collected.keys():
+		var count: int = keys_collected[color]
+		if count > 0:
+			var emoji := "🔑"
+			if color == "red":
+				emoji = "🔴🔑"
+			elif color == "blue":
+				emoji = "🔵🔑"
+			else:
+				emoji = "🟡🔑"
+			keys_str += " %s×%d" % [emoji, count]
+			
+	if keys_str != "":
+		hud_score_label.text = keys_str + " | " + hud_score_label.text
 
 
 var _bgm_player: AudioStreamPlayer = null
@@ -2127,4 +2530,222 @@ func _process(delta: float) -> void:
 		node.add_child(light)
 
 	return node
+
+
+func _make_shopkeeper(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color(0.1, 0.8, 0.3, 0.9))
+	
+	var marker := Label.new()
+	marker.text = "🛍️ SHOP"
+	marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var settings := LabelSettings.new()
+	settings.font_size = 14
+	settings.outline_size = 3
+	settings.outline_color = Color.BLACK
+	marker.label_settings = settings
+	marker.size = Vector2(100, 20)
+	marker.position = Vector2(-50, -45)
+	area.add_child(marker)
+	
+	var shop_script := GDScript.new()
+	shop_script.source_code = "extends Area2D\n" + \
+		"var cooldown: float = 0.0\n" + \
+		"func _ready() -> void:\n" + \
+		"\tbody_entered.connect(_on_body_entered)\n" + \
+		"func _process(delta: float) -> void:\n" + \
+		"\tif cooldown > 0.0:\n" + \
+		"\t\tcooldown -= delta\n" + \
+		"func _on_body_entered(body: Node) -> void:\n" + \
+		"\tif cooldown <= 0.0 and body is CharacterBody2D and body.name.begins_with('Player'):\n" + \
+		"\t\tcooldown = 1.0\n" + \
+		"\t\tvar main = get_tree().get_root().get_node_or_null('Main')\n" + \
+		"\t\tif main != null and main.has_method('open_shop_ui'):\n" + \
+		"\t\t\tmain.call_deferred('open_shop_ui')\n"
+	shop_script.reload()
+	area.set_script(shop_script)
+	return area
+
+
+func _make_destructible_terrain(data: Dictionary, sidecar: Dictionary) -> StaticBody2D:
+	var body := StaticBody2D.new()
+	var size := _collision_size(sidecar, Vector2(128, 32), data)
+	_add_box_collision(body, size)
+	
+	var gameplay: Dictionary = sidecar.get("gameplay_logic", {})
+	var block_type := str(gameplay.get("block_type", "brick"))
+	
+	var tint := Color(0.7, 0.35, 0.25)
+	if block_type == "ice":
+		tint = Color(0.6, 0.85, 1.0)
+	_add_visuals(body, sidecar, size, tint)
+	
+	var dest_script := GDScript.new()
+	dest_script.source_code = "extends StaticBody2D\n" + \
+		"var block_type: String = 'brick'\n" + \
+		"func _ready() -> void:\n" + \
+		"\tset_meta('is_destructible', true)\n" + \
+		"\tset_meta('block_type', block_type)\n" + \
+		"func shatter() -> void:\n" + \
+		"\tvar main = get_tree().get_root().get_node_or_null('Main')\n" + \
+		"\tif main != null:\n" + \
+		"\t\tif main.has_method('spawn_floating_text'):\n" + \
+		"\t\t\tvar txt_col = Color(0.6, 0.85, 1.0) if block_type == 'ice' else Color(0.9, 0.4, 0.2)\n" + \
+		"\t\t\tmain.spawn_floating_text('💥 CRASH!', global_position, txt_col)\n" + \
+		"\t\tvar particles = CPUParticles2D.new()\n" + \
+		"\t\tparticles.global_position = global_position\n" + \
+		"\t\tparticles.amount = 12\n" + \
+		"\t\tparticles.one_shot = true\n" + \
+		"\t\tparticles.explosiveness = 1.0\n" + \
+		"\t\tparticles.lifetime = 0.6\n" + \
+		"\t\tparticles.spread = 180.0\n" + \
+		"\t\tparticles.initial_velocity_min = 120.0\n" + \
+		"\t\tparticles.initial_velocity_max = 240.0\n" + \
+		"\t\tparticles.scale_amount_min = 4.0\n" + \
+		"\t\tparticles.scale_amount_max = 8.0\n" + \
+		"\t\tparticles.color = Color(0.6, 0.85, 1.0, 0.9) if block_type == 'ice' else Color(0.7, 0.3, 0.2, 0.9)\n" + \
+		"\t\tmain.add_child(particles)\n" + \
+		"\t\tparticles.emitting = true\n" + \
+		"\t\tvar t = get_tree().create_timer(0.6)\n" + \
+		"\t\tt.timeout.connect(particles.queue_free)\n" + \
+		"\tqueue_free()\n"
+	dest_script.reload()
+	body.set_script(dest_script)
+	body.set("block_type", block_type)
+	return body
+
+
+func open_shop_ui() -> void:
+	if get_tree().paused:
+		return
+	print("SHOP OPENED!")
+	play_sfx("coin")
+	
+	var overlay := CanvasLayer.new()
+	overlay.name = "ShopOverlay"
+	overlay.layer = 150
+	overlay.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(overlay)
+	
+	var panel := Panel.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.12, 0.22, 0.9)
+	style.border_width_left = 6
+	style.border_width_top = 6
+	style.border_width_right = 6
+	style.border_width_bottom = 6
+	style.border_color = Color(0.2, 0.6, 0.9)
+	style.corner_radius_top_left = 20
+	style.corner_radius_top_right = 20
+	style.corner_radius_bottom_left = 20
+	style.corner_radius_bottom_right = 20
+	panel.add_theme_stylebox_override("panel", style)
+	overlay.add_child(panel)
+	
+	var label := Label.new()
+	label.text = "🧸 Toy Shopkeeper's Stall 💎"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var settings := LabelSettings.new()
+	settings.font_size = 36
+	settings.font_color = Color(0.3, 0.8, 1.0)
+	settings.outline_size = 6
+	settings.outline_color = Color.BLACK
+	label.label_settings = settings
+	label.anchor_left = 0.5
+	label.anchor_right = 0.5
+	label.offset_left = -300
+	label.offset_right = 300
+	label.offset_top = 40
+	label.offset_bottom = 90
+	panel.add_child(label)
+	
+	var gems_label := Label.new()
+	gems_label.text = "Your Score: ⭐ " + str(score)
+	gems_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var g_settings := LabelSettings.new()
+	g_settings.font_size = 20
+	g_settings.font_color = Color.GOLD
+	gems_label.label_settings = g_settings
+	gems_label.anchor_left = 0.5
+	gems_label.anchor_right = 0.5
+	gems_label.offset_left = -200
+	gems_label.offset_right = 200
+	gems_label.offset_top = 100
+	gems_label.offset_bottom = 130
+	panel.add_child(gems_label)
+
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.anchor_left = 0.5
+	grid.anchor_right = 0.5
+	grid.anchor_top = 0.5
+	grid.anchor_bottom = 0.5
+	grid.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	grid.grow_vertical = Control.GROW_DIRECTION_BOTH
+	grid.offset_left = -330
+	grid.offset_right = 330
+	grid.offset_top = -100
+	grid.offset_bottom = 150
+	grid.add_theme_constant_override("h_separation", 20)
+	grid.add_theme_constant_override("v_separation", 20)
+	panel.add_child(grid)
+
+	var items = [
+		{"id": "speed", "name": "Speed Potion 🧪", "cost": 150, "desc": "Run super fast!"},
+		{"id": "double_jump", "name": "Jump Shoes 👟", "cost": 200, "desc": "Double jump mid-air!"},
+		{"id": "shield", "name": "Shield Bubble 🛡️", "cost": 250, "desc": "Block next hit!"},
+		{"id": "giant", "name": "Growth Potion 🍄", "cost": 300, "desc": "Double size & stomps!"},
+		{"id": "hammer", "name": "Toy Hammer 🔨", "cost": 350, "desc": "Break cracked blocks!"},
+		{"id": "lantern", "name": "Lantern 🔦", "cost": 100, "desc": "Light up dark nights!"}
+	]
+
+	for item in items:
+		var card := Button.new()
+		card.custom_minimum_size = Vector2(200, 100)
+		card.text = item.name + "\nCost: " + str(item.cost) + " pts\n(" + item.desc + ")"
+		card.pressed.connect(func():
+			if score >= item.cost:
+				score -= item.cost
+				_update_hud()
+				if active_player != null and is_instance_valid(active_player):
+					if item.id == "hammer":
+						active_player.has_hammer = true
+					elif item.id == "lantern":
+						active_player.has_lantern = true
+					else:
+						active_player.apply_powerup(item.id)
+					spawn_floating_text("BOUGHT " + item.name + "! 🛒", active_player.global_position, Color.GREEN)
+				else:
+					spawn_floating_text("BOUGHT!", Vector2(500, 300), Color.GREEN)
+				play_sfx("coin")
+				get_tree().paused = false
+				overlay.queue_free()
+			else:
+				play_sfx("hit")
+				if active_player != null and is_instance_valid(active_player):
+					spawn_floating_text("NEED MORE POINTS! ⭐", active_player.global_position, Color.RED)
+		)
+		grid.add_child(card)
+
+	var btn_close := Button.new()
+	btn_close.text = "Back to Game ❌"
+	btn_close.custom_minimum_size = Vector2(160, 45)
+	btn_close.anchor_left = 0.5
+	btn_close.anchor_right = 0.5
+	btn_close.anchor_top = 0.9
+	btn_close.anchor_bottom = 0.9
+	btn_close.offset_left = -80
+	btn_close.offset_right = 80
+	btn_close.offset_top = -22
+	btn_close.offset_bottom = 22
+	btn_close.pressed.connect(func():
+		get_tree().paused = false
+		overlay.queue_free()
+	)
+	panel.add_child(btn_close)
+
+	get_tree().paused = true
 

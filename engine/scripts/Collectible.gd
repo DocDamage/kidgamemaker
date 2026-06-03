@@ -14,6 +14,19 @@ var _collected := false
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
+	if powerup_type == "":
+		if asset_id == "alchemy_potion_speed":
+			powerup_type = "speed"
+		elif asset_id == "alchemy_potion_giant":
+			powerup_type = "giant"
+		elif asset_id == "alchemy_potion_gravity":
+			powerup_type = "gravity"
+		elif asset_id == "alchemy_potion_jump":
+			powerup_type = "double_jump"
+		elif asset_id == "gadget_glider":
+			powerup_type = "glider"
+		elif asset_id == "gadget_jetpack":
+			powerup_type = "jetpack"
 
 
 func _on_body_entered(body: Node) -> void:
@@ -43,6 +56,8 @@ func _on_body_entered(body: Node) -> void:
 		"heal_value": heal_value,
 		"asset_id": asset_id,
 	}
+	if has_meta("key_color"):
+		payload["key_color"] = str(get_meta("key_color"))
 	emit_signal("collected", payload)
 
 	# Forward to Main node if it has a receiver

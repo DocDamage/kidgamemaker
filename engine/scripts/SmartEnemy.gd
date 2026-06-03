@@ -17,6 +17,9 @@ var floor_probe: RayCast2D
 var _damage_area: Area2D = null
 var _time_passed: float = 0.0
 var _jump_cooldown: float = 2.0
+var _shoot_timer: float = 0.0
+var max_health: int = 20
+var current_health: int = max_health
 
 
 func _ready() -> void:
@@ -24,6 +27,7 @@ func _ready() -> void:
 	floor_probe.enabled = true
 	add_child(floor_probe)
 	_update_probe()
+	_shoot_timer = projectile_interval
 
 	# Boss: scale up and move faster
 	if boss_mode:
@@ -45,6 +49,12 @@ func _ready() -> void:
 
 func _on_damage_area_body_entered(body: Node) -> void:
 	if body.has_method("take_damage"):
+		if body is CharacterBody2D:
+			var diff_y = body.global_position.y - global_position.y
+			var gravity_inv = body.get("gravity_inverted") if "gravity_inverted" in body else false
+			var is_on_top = diff_y < -12.0 if not gravity_inv else diff_y > 12.0
+			if is_on_top and body.velocity.y * (1.0 if not gravity_inv else -1.0) >= 0.0:
+				return # Player is stomping us, don't damage them
 		body.take_damage(damage_value)
 
 
@@ -166,3 +176,53 @@ func _shoot_projectile() -> void:
 	)
 
 	main.add_child(bullet)
+	
+
+
+func take_damage(amount: int) -> void:
+	current_health -= amount
+	
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.has_method("spawn_floating_text"):
+		main.spawn_floating_text(str(-amount), global_position, Color.RED)
+	if main != null and main.has_method("play_custom_sfx"):
+		main.play_custom_sfx(str(get_meta("asset_id")) if has_meta("asset_id") else "slime_patrol", "hit")
+	elif main != null and main.has_method("play_sfx"):
+		main.play_sfx("hurt")
+
+	# Wobble Scale Animation using Tween
+	var base_scale = scale
+	var tween = create_tween()
+	tween.tween_property(self, "scale", Vector2(base_scale.x * 1.4, base_scale.y * 0.6), 0.08)
+	tween.tween_property(self, "scale", Vector2(base_scale.x * 0.8, base_scale.y * 1.3), 0.08)
+	tween.tween_property(self, "scale", base_scale, 0.1)
+
+	if current_health <= 0:
+		current_health = 0
+		die()
+
+
+func die() -> void:
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.has_method("spawn_floating_text"):
+		main.spawn_floating_text("DEFEATED! 🏆", global_position, Color.GOLD)
+	
+	# Spawn a smoke puff particles block programmatically
+	if main != null:
+		var smoke_data = {
+			"asset_id": "effects_smoke",
+			"category": "particles",
+			"position": {"x": global_position.x, "y": global_position.y},
+			"modifiers": {"particle_theme": "default", "particle_intensity": "normal"}
+		}
+		var p_node = main.spawn_entity(smoke_data)
+		if p_node != null:
+			var timer = get_tree().create_timer(1.2)
+			timer.timeout.connect(func():
+				if is_instance_valid(p_node):
+					p_node.queue_free()
+			)
+	
+	queue_free()
+	if main != null and main.has_method("check_victory_conditions"):
+		main.call_deferred("check_victory_conditions")

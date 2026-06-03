@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "asset_id": "npc_shopkeeper",
+  "asset_name": "Toy Shopkeeper",
+  "category": "decorations",
+  "runtime_template": "shopkeeper",
+  "visual": "🧸",
+  "visual_tags": ["npc", "shop", "bear"],
+  "placement_logic": {
+    "snapping_type": "gravity_snap",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [48, 48]
+  },
+  "gameplay_logic": {
+    "dialogue": "Welcome to my shop! Spend gems to buy toys!"
+  }
+}

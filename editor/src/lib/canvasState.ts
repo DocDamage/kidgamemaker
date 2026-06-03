@@ -112,7 +112,9 @@ export const fallbackInventory: AssetInventory = {
   terrain: [
     { id: 'stone_floor', name: 'Stone Floor', category: 'terrain', visual: '🪨', type: 'terrain', snapping_type: 'edge_to_edge' },
     { id: 'water_block', name: 'Water Block', category: 'terrain', visual: '💧', type: 'water_block', snapping_type: 'free_float' },
-    { id: 'crumbling_cloud', name: 'Crumbling Cloud', category: 'terrain', visual: '☁️', type: 'crumbling_cloud', snapping_type: 'free_float' }
+    { id: 'crumbling_cloud', name: 'Crumbling Cloud', category: 'terrain', visual: '☁️', type: 'crumbling_cloud', snapping_type: 'free_float' },
+    { id: 'brick_destructible', name: 'Cracked Brick 🧱', category: 'terrain', visual: '🧱', type: 'destructible_terrain', snapping_type: 'edge_to_edge' },
+    { id: 'ice_destructible', name: 'Brittle Ice 🧊', category: 'terrain', visual: '🧊', type: 'destructible_terrain', snapping_type: 'edge_to_edge' }
   ],
   enemies: [
     { id: 'slime_patrol', name: 'Slime Patrol', category: 'enemies', visual: '👾', type: 'enemy', snapping_type: 'gravity_snap' },
@@ -122,17 +124,28 @@ export const fallbackInventory: AssetInventory = {
   collectibles: [
     { id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', visual: '💎', type: 'collectible', snapping_type: 'free_float' },
     { id: 'gadget_glider', name: 'Glider Cape', category: 'collectibles', visual: '🪂', type: 'collectible', snapping_type: 'free_float' },
-    { id: 'gadget_jetpack', name: 'Jetpack', category: 'collectibles', visual: '🚀', type: 'collectible', snapping_type: 'free_float' }
+    { id: 'gadget_jetpack', name: 'Jetpack', category: 'collectibles', visual: '🚀', type: 'collectible', snapping_type: 'free_float' },
+    { id: 'adventure_key_red', name: 'Red Key 🔑', category: 'collectibles', visual: '🔑', type: 'key_collectible', snapping_type: 'free_float' },
+    { id: 'adventure_key_blue', name: 'Blue Key 🗝️', category: 'collectibles', visual: '🗝️', type: 'key_collectible', snapping_type: 'free_float' },
+    { id: 'alchemy_potion_speed', name: 'Speed Potion 🧪', category: 'collectibles', visual: '🧪', type: 'collectible', snapping_type: 'free_float' },
+    { id: 'alchemy_potion_jump', name: 'Jump Potion 🥤', category: 'collectibles', visual: '🥤', type: 'collectible', snapping_type: 'free_float' },
+    { id: 'alchemy_potion_giant', name: 'Growth Potion 🍄', category: 'collectibles', visual: '🍄', type: 'collectible', snapping_type: 'free_float' },
+    { id: 'alchemy_potion_gravity', name: 'Gravity Potion 🔮', category: 'collectibles', visual: '🔮', type: 'collectible', snapping_type: 'free_float' },
+    { id: 'tool_hammer', name: 'Toy Hammer 🔨', category: 'collectibles', visual: '🔨', type: 'collectible', snapping_type: 'free_float' },
+    { id: 'tool_lantern', name: 'Lantern 🔦', category: 'collectibles', visual: '🔦', type: 'collectible', snapping_type: 'free_float' }
   ],
   decorations: [
     { id: 'neon_sign', name: 'Neon Sign', category: 'decorations', visual: '💡', type: 'decoration', snapping_type: 'free_float' },
     { id: 'trigger_button', name: 'Floor Button', category: 'decorations', visual: '🔘', type: 'trigger', snapping_type: 'free_float' },
     { id: 'trigger_lever', name: 'Wall Lever', category: 'decorations', visual: '🕹️', type: 'trigger', snapping_type: 'free_float' },
     { id: 'gate_block', name: 'Switch Gate', category: 'decorations', visual: '🚪', type: 'gate', snapping_type: 'free_float' },
+    { id: 'locked_gate_red', name: 'Red Gate 🟥', category: 'decorations', visual: '🟥', type: 'locked_door', snapping_type: 'free_float' },
+    { id: 'locked_gate_blue', name: 'Blue Gate 🟦', category: 'decorations', visual: '🟦', type: 'locked_door', snapping_type: 'free_float' },
     { id: 'jelly_trampoline', name: 'Bouncy Jelly', category: 'decorations', visual: '🪼', type: 'jelly', snapping_type: 'free_float' },
     { id: 'speed_pad', name: 'Turbo Arrow', category: 'decorations', visual: '⏩', type: 'speed_pad', snapping_type: 'free_float' },
     { id: 'speech_sign', name: 'Chatty Sign', category: 'decorations', visual: '🪧', type: 'speech_sign', snapping_type: 'free_float' },
-    { id: 'wizard_buddy', name: 'Wandering Wizard', category: 'decorations', visual: '🧙‍♂️', type: 'speech_sign', snapping_type: 'free_float' }
+    { id: 'wizard_buddy', name: 'Wandering Wizard', category: 'decorations', visual: '🧙‍♂️', type: 'speech_sign', snapping_type: 'free_float' },
+    { id: 'npc_shopkeeper', name: 'Toy Shopkeeper 🧸', category: 'decorations', visual: '🧸', type: 'shopkeeper', snapping_type: 'gravity_snap' }
   ],
   particles: [
     { id: 'effects_fire', name: 'Fire Effect', category: 'particles', visual: '🔥', type: 'particles', snapping_type: 'free_float' },

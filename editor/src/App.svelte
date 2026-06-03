@@ -89,6 +89,12 @@
     if (item.type === 'hazard' && item.modifiers.damage_value === undefined) {
       item.modifiers.damage_value = 15;
     }
+    if (item.type === 'key_collectible' && item.modifiers.key_color === undefined) {
+      item.modifiers.key_color = 'gold';
+    }
+    if (item.type === 'locked_door' && item.modifiers.key_color === undefined) {
+      item.modifiers.key_color = 'gold';
+    }
     selectedPlacedEntity = item;
     playUiSound('chime');
   }
@@ -489,8 +495,13 @@
   let snapEnabled = true;
   let status = 'Ready';
 
-  // World settings — drives time_of_day / weather in saved JSON
-  let worldSettings: WorldSettings = { time_of_day: 'day', weather: 'clear' };
+  let worldSettings: WorldSettings = {
+    time_of_day: 'day',
+    weather: 'clear',
+    victory_rules: { win_condition: 'all_enemies', celebration: 'confetti' },
+    loss_rules: { lose_condition: 'health_0', action: 'game_over' },
+    room_rules: []
+  };
 
   // Multi-room state
   let rooms: string[] = ['test_chamber_01'];
@@ -923,7 +934,22 @@
         if (savedState.world_settings) {
           worldSettings = {
             time_of_day: savedState.world_settings.time_of_day ?? 'day',
-            weather: savedState.world_settings.weather ?? 'clear'
+            weather: savedState.world_settings.weather ?? 'clear',
+            victory_rules: savedState.world_settings.victory_rules ?? { win_condition: 'all_enemies', celebration: 'confetti' },
+            loss_rules: savedState.world_settings.loss_rules ?? { lose_condition: 'health_0', action: 'game_over' },
+            room_rules: savedState.world_settings.room_rules ?? [],
+            custom_bgm_sequence: savedState.world_settings.custom_bgm_sequence ?? null
+          };
+          if (savedState.world_settings.theme) {
+            (worldSettings as any).theme = savedState.world_settings.theme;
+          }
+        } else {
+          worldSettings = {
+            time_of_day: 'day',
+            weather: 'clear',
+            victory_rules: { win_condition: 'all_enemies', celebration: 'confetti' },
+            loss_rules: { lose_condition: 'health_0', action: 'game_over' },
+            room_rules: []
           };
         }
         status = `Loaded room: ${roomId}`;
@@ -1356,6 +1382,71 @@
       </p>
 
       <div style="width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 16px; margin-bottom: 30px;">
+        <!-- Victory & Loss Global Rules Card -->
+        <div class="global-rules-card" style="background: #1e293b; border: 3px solid #fbbf24; border-radius: 16px; padding: 20px; color: white; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.35);">
+          <h3 style="color: #fbbf24; margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1.25rem;">🏆 Victory & Loss Rules</h3>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Victory Rules Column -->
+            <div style="display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.15); padding: 12px; border-radius: 10px;">
+              <span style="font-weight: 900; color: #10b981;">🥇 VICTORY RULE</span>
+              {#if worldSettings.victory_rules}
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <span style="font-size: 0.85rem; color: #94a3b8;">Win Condition:</span>
+                  <select 
+                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 8px; font-size: 0.9rem;"
+                    bind:value={worldSettings.victory_rules.win_condition}
+                    on:change={saveCurrentRoom}
+                  >
+                    <option value="all_enemies">👾 Defeat all Monsters</option>
+                    <option value="all_coins">💎 Collect all Rubies</option>
+                    <option value="portal">🌀 Reach the Exit Portal</option>
+                  </select>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <span style="font-size: 0.85rem; color: #94a3b8;">Celebration Effect:</span>
+                  <select 
+                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 8px; font-size: 0.9rem;"
+                    bind:value={worldSettings.victory_rules.celebration}
+                    on:change={saveCurrentRoom}
+                  >
+                    <option value="confetti">🎉 Rainbow Confetti</option>
+                    <option value="simple">🌟 Simple Victory Page</option>
+                  </select>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Loss Rules Column -->
+            <div style="display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.15); padding: 12px; border-radius: 10px;">
+              <span style="font-weight: 900; color: #ef4444;">💀 GAME OVER RULE</span>
+              {#if worldSettings.loss_rules}
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <span style="font-size: 0.85rem; color: #94a3b8;">Lose Condition:</span>
+                  <select 
+                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 8px; font-size: 0.9rem;"
+                    bind:value={worldSettings.loss_rules.lose_condition}
+                    on:change={saveCurrentRoom}
+                  >
+                    <option value="health_0">💔 Health Falls to 0</option>
+                  </select>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <span style="font-size: 0.85rem; color: #94a3b8;">Action on Defeat:</span>
+                  <select 
+                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 8px; font-size: 0.9rem;"
+                    bind:value={worldSettings.loss_rules.action}
+                    on:change={saveCurrentRoom}
+                  >
+                    <option value="game_over">💀 Show Game Over Screen</option>
+                    <option value="respawn">🔄 Auto-Respawn Player</option>
+                  </select>
+                </div>
+              {/if}
+            </div>
+          </div>
+        </div>
+
         <button 
           style="align-self: flex-end; padding: 8px 16px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; background: #10b981; color: white; font-size: 0.9rem;"
           on:click={addNewRule}
@@ -1996,6 +2087,47 @@
               <option value="double_jump">👟 Double Jump Shoes</option>
               <option value="glider">🪂 Glider Cape</option>
               <option value="jetpack">🚀 Jetpack Thruster</option>
+              <option value="giant">🍄 Giant Growth Potion</option>
+              <option value="gravity">🔮 Gravity Inversion Potion</option>
+            </select>
+          </div>
+        {:else if selectedPlacedEntity.type === 'key_collectible'}
+          <div class="option-group">
+            <span class="option-label-text">Key Color:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.key_color} 
+              on:change={saveCurrentRoom}
+            >
+              <option value="gold">🟡 Gold Key</option>
+              <option value="red">🔴 Red Key</option>
+              <option value="blue">🔵 Blue Key</option>
+            </select>
+          </div>
+        {:else if selectedPlacedEntity.type === 'locked_door'}
+          <div class="option-group">
+            <span class="option-label-text">Required Key Color:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.key_color} 
+              on:change={saveCurrentRoom}
+            >
+              <option value="gold">🟡 Gold Key</option>
+              <option value="red">🔴 Red Key</option>
+              <option value="blue">🔵 Blue Key</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <span class="option-label-text">Select Link Room (Optional portal exit):</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.target_room} 
+              on:change={saveCurrentRoom}
+            >
+              <option value="">(No Teleport, Just Unlocks)</option>
+              {#each rooms as r}
+                <option value={r}>{r === activeRoomId ? `${r} (This Room)` : r}</option>
+              {/each}
             </select>
           </div>
         {:else if selectedPlacedEntity.category === 'portals' || selectedPlacedEntity.type === 'portal'}

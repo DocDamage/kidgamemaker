@@ -2,7 +2,18 @@ import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [
+    svelte({
+      onwarn(warning, defaultHandler) {
+        if (warning.code?.startsWith('a11y_')) return;
+        if (warning.code?.startsWith('a11y-')) return;
+        if (warning.code === 'css_unused_selector' || warning.code === 'css-unused-selector') return;
+        if (defaultHandler) {
+          defaultHandler(warning);
+        }
+      }
+    })
+  ],
   clearScreen: false,
   server: {
     port: 5173,

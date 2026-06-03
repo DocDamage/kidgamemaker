@@ -35,6 +35,9 @@
   let isEraser = false;
   let brushSize = 1;
   let isBucket = false;
+  let symmetryMode: 'none' | 'horizontal' | 'vertical' | 'both' = 'none';
+  let isRainbowBrush = false;
+  let rainbowHue = 0;
 
   let activeTab: 'draw' | 'sound' = 'draw';
   
@@ -464,23 +467,95 @@
     ctx.imageSmoothingEnabled = false;
   }
 
+  // Animation frames state
+  let frameList: string[][][] = [
+    Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill('transparent'))
+  ];
+  let currentFrameIdx = 0;
+  let isAnimPlaying = false;
+  let animIntervalId: any = null;
+
+  function addFrame() {
+    if (frameList.length >= 4) return;
+    // Save current frame before adding new one
+    frameList[currentFrameIdx] = pixels.map(row => [...row]);
+    
+    // Duplicate current frame
+    const newFrame = pixels.map(row => [...row]);
+    frameList = [...frameList, newFrame];
+    currentFrameIdx = frameList.length - 1;
+    pixels = frameList[currentFrameIdx];
+    redrawGrid();
+    saveHistoryState();
+    triggerAutoSave();
+    playDrawSound('chime');
+  }
+
+  function deleteFrame(idx: number) {
+    if (frameList.length <= 1) return;
+    if (isAnimPlaying) toggleAnimPlayback();
+    frameList = frameList.filter((_, i) => i !== idx);
+    currentFrameIdx = Math.max(0, currentFrameIdx - 1);
+    pixels = frameList[currentFrameIdx];
+    redrawGrid();
+    saveHistoryState();
+    triggerAutoSave();
+    playDrawSound('clear');
+  }
+
+  function selectFrame(idx: number) {
+    if (isAnimPlaying) toggleAnimPlayback();
+    // Save current editing grid into frameList
+    frameList[currentFrameIdx] = pixels.map(row => [...row]);
+    currentFrameIdx = idx;
+    pixels = frameList[currentFrameIdx];
+    redrawGrid();
+    playDrawSound('draw');
+  }
+
+  function toggleAnimPlayback() {
+    isAnimPlaying = !isAnimPlaying;
+    if (isAnimPlaying) {
+      // Save current frame before starting playback
+      frameList[currentFrameIdx] = pixels.map(row => [...row]);
+      animIntervalId = setInterval(() => {
+        currentFrameIdx = (currentFrameIdx + 1) % frameList.length;
+        pixels = frameList[currentFrameIdx];
+        redrawGrid();
+      }, 150); // 8fps loop
+    } else {
+      if (animIntervalId) {
+        clearInterval(animIntervalId);
+        animIntervalId = null;
+      }
+      // Re-align pixels to the correct current frame
+      pixels = frameList[currentFrameIdx];
+      redrawGrid();
+    }
+  }
+
   async function loadExistingSprite() {
     if (targetAssetId) {
       try {
-        pixels = await invoke<string[][]>('load_child_sprite', {
+        const loadedFrames = await invoke<string[][][]>('load_child_sprite', {
           assetId: targetAssetId,
           category: category
         });
+        if (loadedFrames && loadedFrames.length > 0) {
+          frameList = loadedFrames;
+          currentFrameIdx = 0;
+          pixels = frameList[0];
+        }
       } catch (err) {
         console.error('Failed to load existing sprite:', err);
-        pixels = Array(GRID_SIZE)
-          .fill(null)
-          .map(() => Array(GRID_SIZE).fill('transparent'));
+        frameList = [Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill('transparent'))];
+        currentFrameIdx = 0;
+        pixels = frameList[0];
       }
     } else {
-      pixels = Array(GRID_SIZE)
-        .fill(null)
-        .map(() => Array(GRID_SIZE).fill('transparent'));
+      frameList = [Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill('transparent'))];
+      currentFrameIdx = 0;
+      pixels = frameList[0];
     }
     redrawGrid();
     // Reset history
@@ -504,6 +579,26 @@
     }
   }
 
+  function paintPixel(x: number, y: number, color: string): boolean {
+    const startX = x - Math.floor(brushSize / 2);
+    const startY = y - Math.floor(brushSize / 2);
+    let drawnAny = false;
+    
+    for (let dy = 0; dy < brushSize; dy++) {
+      for (let dx = 0; dx < brushSize; dx++) {
+        const px = startX + dx;
+        const py = startY + dy;
+        if (px >= 0 && px < GRID_SIZE && py >= 0 && py < GRID_SIZE) {
+          if (pixels[py][px] !== color) {
+            pixels[py][px] = color;
+            drawnAny = true;
+          }
+        }
+      }
+    }
+    return drawnAny;
+  }
+
   function handlePointer(clientX: number, clientY: number) {
     if (!canvasElement || !ctx) return;
     const rect = canvasElement.getBoundingClientRect();
@@ -511,7 +606,11 @@
     const y = Math.floor((clientY - rect.top) / (canvasElement.height / GRID_SIZE));
 
     if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
-      const colorToUse = isEraser ? 'transparent' : currentColor;
+      let colorToUse = isEraser ? 'transparent' : currentColor;
+      if (isRainbowBrush && !isEraser && !isBucket) {
+        colorToUse = `hsl(${rainbowHue}, 100%, 50%)`;
+        rainbowHue = (rainbowHue + 15) % 360;
+      }
       
       if (isBucket) {
         const targetColor = pixels[y][x];
@@ -521,21 +620,17 @@
           playDrawSound('chime');
         }
       } else {
-        const startX = x - Math.floor(brushSize / 2);
-        const startY = y - Math.floor(brushSize / 2);
         let drawnAny = false;
+        drawnAny = paintPixel(x, y, colorToUse) || drawnAny;
         
-        for (let dy = 0; dy < brushSize; dy++) {
-          for (let dx = 0; dx < brushSize; dx++) {
-            const px = startX + dx;
-            const py = startY + dy;
-            if (px >= 0 && px < GRID_SIZE && py >= 0 && py < GRID_SIZE) {
-              if (pixels[py][px] !== colorToUse) {
-                pixels[py][px] = colorToUse;
-                drawnAny = true;
-              }
-            }
-          }
+        if (symmetryMode === 'horizontal' || symmetryMode === 'both') {
+          drawnAny = paintPixel(GRID_SIZE - 1 - x, y, colorToUse) || drawnAny;
+        }
+        if (symmetryMode === 'vertical' || symmetryMode === 'both') {
+          drawnAny = paintPixel(x, GRID_SIZE - 1 - y, colorToUse) || drawnAny;
+        }
+        if (symmetryMode === 'both') {
+          drawnAny = paintPixel(GRID_SIZE - 1 - x, GRID_SIZE - 1 - y, colorToUse) || drawnAny;
         }
         
         if (drawnAny) {
@@ -569,28 +664,63 @@
       targetAssetId = `custom_${category.slice(0, 4)}_${randomId}`;
     }
 
+    // Save current frame into frameList list
+    frameList[currentFrameIdx] = pixels.map(row => [...row]);
+
+    const isSpritesheetVal = frameList.length > 1 && (category === 'heroes' || category === 'enemies');
     const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = GRID_SIZE;
-    exportCanvas.height = GRID_SIZE;
+    
+    if (isSpritesheetVal) {
+      exportCanvas.width = GRID_SIZE * frameList.length;
+      exportCanvas.height = GRID_SIZE;
+    } else {
+      exportCanvas.width = GRID_SIZE;
+      exportCanvas.height = GRID_SIZE;
+    }
+    
     const exportCtx = exportCanvas.getContext('2d');
     if (!exportCtx) return;
 
-    for (let y = 0; y < GRID_SIZE; y++) {
-      for (let x = 0; x < GRID_SIZE; x++) {
-        if (pixels[y][x] !== 'transparent') {
-          exportCtx.fillStyle = pixels[y][x];
-          exportCtx.fillRect(x, y, 1, 1);
+    if (isSpritesheetVal) {
+      for (let f = 0; f < frameList.length; f++) {
+        const frameGrid = frameList[f];
+        for (let y = 0; y < GRID_SIZE; y++) {
+          for (let x = 0; x < GRID_SIZE; x++) {
+            if (frameGrid[y][x] !== 'transparent') {
+              exportCtx.fillStyle = frameGrid[y][x];
+              exportCtx.fillRect(f * GRID_SIZE + x, y, 1, 1);
+            }
+          }
+        }
+      }
+    } else {
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (pixels[y][x] !== 'transparent') {
+            exportCtx.fillStyle = pixels[y][x];
+            exportCtx.fillRect(x, y, 1, 1);
+          }
         }
       }
     }
 
     const base64Data = exportCanvas.toDataURL('image/png').split(',')[1];
+    
+    // Compile frames array coordinates
+    const framesCoords = frameList.map((_, idx) => ({
+      x: idx * GRID_SIZE,
+      y: 0,
+      w: GRID_SIZE,
+      h: GRID_SIZE
+    }));
 
     try {
       await invoke('save_child_sprite', {
         assetId: targetAssetId,
         category: category,
-        base64Data: base64Data
+        base64Data: base64Data,
+        isSpritesheet: isSpritesheetVal,
+        frames: isSpritesheetVal ? framesCoords : null
       });
       dispatch('saved', targetAssetId);
     } catch (err) {
@@ -651,17 +781,44 @@
         </div>
 
         <div class="editor-workspace">
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <canvas
-            bind:this={canvasElement}
-            width="360"
-            height="360"
-            class="draw-canvas"
-            on:pointerdown={(e) => { isDrawing = true; handlePointer(e.clientX, e.clientY); }}
-            on:pointermove={(e) => { if (isDrawing) handlePointer(e.clientX, e.clientY); }}
-            on:pointerup={() => { if (isDrawing) { isDrawing = false; saveHistoryState(); triggerAutoSave(); } }}
-            on:pointerleave={() => { isDrawing = false; }}
-          ></canvas>
+          <div class="canvas-area" style="display: flex; flex-direction: column; gap: 16px;">
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <canvas
+              bind:this={canvasElement}
+              width="360"
+              height="360"
+              class="draw-canvas"
+              on:pointerdown={(e) => { isDrawing = true; handlePointer(e.clientX, e.clientY); }}
+              on:pointermove={(e) => { if (isDrawing) handlePointer(e.clientX, e.clientY); }}
+              on:pointerup={() => { if (isDrawing) { isDrawing = false; saveHistoryState(); triggerAutoSave(); } }}
+              on:pointerleave={() => { isDrawing = false; }}
+            ></canvas>
+
+            {#if category === 'heroes' || category === 'enemies'}
+              <div class="animation-timeline">
+                <div class="timeline-frames">
+                  {#each frameList as _, idx}
+                    <button 
+                      class="frame-tab" 
+                      class:active={currentFrameIdx === idx} 
+                      on:click={() => selectFrame(idx)}
+                    >
+                      🎬 {idx + 1}
+                      {#if frameList.length > 1}
+                        <span class="del-frame-x" on:click|stopPropagation={() => deleteFrame(idx)} role="button" tabindex="-1" title="Delete Frame">✕</span>
+                      {/if}
+                    </button>
+                  {/each}
+                  {#if frameList.length < 4}
+                    <button class="frame-add-btn" on:click={addFrame}>➕ Copy Frame</button>
+                  {/if}
+                </div>
+                <button class="anim-play-btn" class:playing={isAnimPlaying} on:click={toggleAnimPlayback}>
+                  {isAnimPlaying ? '⏹️ Stop Preview' : '▶️ Loop Preview'}
+                </button>
+              </div>
+            {/if}
+          </div>
 
           <div class="side-panel">
             <div class="brush-selector">
@@ -680,6 +837,22 @@
                   aria-label="Color {color}"
                 ></button>
               {/each}
+            </div>
+
+            <div class="brush-selector" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; background: #0f172a; padding: 10px; border-radius: 14px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); border: 2px solid #334155;">
+              <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <span style="font-size: 0.85rem; color: #94a3b8; font-weight: 800;">🪞 Mirror:</span>
+                <select bind:value={symmetryMode} style="background: #1e293b; color: white; border: 1px solid #475569; border-radius: 6px; padding: 4px; font-size: 0.8rem; font-weight: bold; cursor: pointer; outline: none;">
+                  <option value="none">None</option>
+                  <option value="horizontal">↔️ Horiz</option>
+                  <option value="vertical">↕️ Vert</option>
+                  <option value="both">🔲 Both</option>
+                </select>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <span style="font-size: 0.85rem; color: #94a3b8; font-weight: 800;">🌈 Rainbow:</span>
+                <input type="checkbox" bind:checked={isRainbowBrush} style="cursor: pointer; width: 16px; height: 16px; accent-color: #fbbf24;" />
+              </div>
             </div>
 
             <div class="tool-actions">
@@ -1201,5 +1374,88 @@
     font-weight: 800;
     color: #fbbf24;
     min-height: 24px;
+  }
+
+  /* Timeline Styles */
+  .animation-timeline {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0f172a;
+    padding: 10px 16px;
+    border-radius: 18px;
+    gap: 12px;
+    border: 2px solid #334155;
+  }
+
+  .timeline-frames {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .frame-tab {
+    position: relative;
+    border: 0;
+    background: #1e293b;
+    color: white;
+    font-weight: 800;
+    padding: 8px 12px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .frame-tab.active {
+    background: #fbbf24;
+    color: #0f172a;
+  }
+
+  .del-frame-x {
+    background: #ef4444;
+    color: white;
+    border: 0;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    box-shadow: none;
+    line-height: 1;
+  }
+
+  .frame-add-btn {
+    border: 0;
+    background: #10b981;
+    color: white;
+    font-weight: 800;
+    padding: 8px 12px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.3);
+  }
+
+  .anim-play-btn {
+    border: 0;
+    background: #6366f1;
+    color: white;
+    font-weight: 800;
+    padding: 8px 14px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.3);
+  }
+
+  .anim-play-btn.playing {
+    background: #ef4444;
   }
 </style>

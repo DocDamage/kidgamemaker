@@ -652,7 +652,10 @@ fn zip_dir_to_file(source_dir: &Path, zip_path: &Path) -> Result<(), String> {
 use base64::{Engine as _, engine::general_purpose};
 
 #[tauri::command]
-pub fn load_child_sprite(asset_id: String, category: String) -> Result<Vec<Vec<String>>, String> {
+pub fn load_child_sprite(
+    asset_id: String,
+    category: String,
+) -> Result<Vec<Vec<Vec<String>>>, String> {
     let repo_root = locate_repo_root()?;
     let png_path = repo_root
         .join("engine")
@@ -662,10 +665,11 @@ pub fn load_child_sprite(asset_id: String, category: String) -> Result<Vec<Vec<S
         .join(&asset_id)
         .join(format!("{}.png", asset_id));
 
-    let mut grid = vec![vec!["transparent".to_string(); 16]; 16];
+    let default_grid = vec![vec!["transparent".to_string(); 16]; 16];
+    let mut frames_grids = vec![default_grid];
 
     if !png_path.exists() {
-        return Ok(grid);
+        return Ok(frames_grids);
     }
 
     let file = fs::File::open(&png_path).map_err(|e| e.to_string())?;
@@ -678,50 +682,63 @@ pub fn load_child_sprite(asset_id: String, category: String) -> Result<Vec<Vec<S
     let img_h = info.height as usize;
 
     if img_w == 0 || img_h == 0 {
-        return Ok(grid);
+        return Ok(frames_grids);
     }
 
-    // Centering in 16x16 grid
-    let start_x = if img_w < 16 { (16 - img_w) / 2 } else { 0 };
-    let start_y = if img_h < 16 { (16 - img_h) / 2 } else { 0 };
+    // Number of 16x16 frames
+    let num_frames = (img_w / 16).max(1);
+    frames_grids.clear();
 
-    if info.color_type == png::ColorType::Rgba {
-        for y in 0..img_h.min(16) {
-            for x in 0..img_w.min(16) {
-                let idx = ((y * img_w + x) * 4) as usize;
-                if idx + 3 < buf.len() {
-                    let r = buf[idx];
-                    let g = buf[idx + 1];
-                    let b = buf[idx + 2];
-                    let a = buf[idx + 3];
+    for f_idx in 0..num_frames {
+        let mut grid = vec![vec!["transparent".to_string(); 16]; 16];
+        let offset_x = f_idx * 16;
+        
+        if info.color_type == png::ColorType::Rgba {
+            for y in 0..img_h.min(16) {
+                for x in 0..16 {
+                    let orig_x = offset_x + x;
+                    if orig_x >= img_w {
+                        continue;
+                    }
+                    let idx = ((y * img_w + orig_x) * 4) as usize;
+                    if idx + 3 < buf.len() {
+                        let r = buf[idx];
+                        let g = buf[idx + 1];
+                        let b = buf[idx + 2];
+                        let a = buf[idx + 3];
 
-                    if a > 10 { // not transparent
-                        let hex = format!("#{:02x}{:02x}{:02x}", r, g, b);
-                        if start_y + y < 16 && start_x + x < 16 {
-                            grid[start_y + y][start_x + x] = hex;
+                        if a > 10 {
+                            let hex = format!("#{:02x}{:02x}{:02x}", r, g, b);
+                            grid[y][x] = hex;
                         }
                     }
                 }
             }
-        }
-    } else if info.color_type == png::ColorType::Rgb {
-        for y in 0..img_h.min(16) {
-            for x in 0..img_w.min(16) {
-                let idx = ((y * img_w + x) * 3) as usize;
-                if idx + 2 < buf.len() {
-                    let r = buf[idx];
-                    let g = buf[idx + 1];
-                    let b = buf[idx + 2];
-                    let hex = format!("#{:02x}{:02x}{:02x}", r, g, b);
-                    if start_y + y < 16 && start_x + x < 16 {
-                        grid[start_y + y][start_x + x] = hex;
+        } else if info.color_type == png::ColorType::Rgb {
+            for y in 0..img_h.min(16) {
+                for x in 0..16 {
+                    let orig_x = offset_x + x;
+                    if orig_x >= img_w {
+                        continue;
+                    }
+                    let idx = ((y * img_w + orig_x) * 3) as usize;
+                    if idx + 2 < buf.len() {
+                        let r = buf[idx];
+                        let g = buf[idx + 1];
+                        let b = buf[idx + 2];
+                        let hex = format!("#{:02x}{:02x}{:02x}", r, g, b);
+                        grid[y][x] = hex;
                     }
                 }
             }
         }
+        frames_grids.push(grid);
     }
 
-    Ok(grid)
+    if frames_grids.is_empty() {
+        frames_grids.push(vec![vec!["transparent".to_string(); 16]; 16]);
+    }
+    Ok(frames_grids)
 }
 
 #[tauri::command]
@@ -729,6 +746,8 @@ pub fn save_child_sprite(
     asset_id: String,
     category: String,
     base64_data: String,
+    is_spritesheet: Option<bool>,
+    frames: Option<Vec<serde_json::Value>>,
 ) -> Result<String, String> {
     let repo_root = locate_repo_root()?;
     let target_dir = repo_root
@@ -777,8 +796,12 @@ pub fn save_child_sprite(
         }
     }
 
-    // Determine final dimensions (either cropped or default 16x16 if empty)
-    let (crop_x, crop_y, crop_w, crop_h) = if has_pixels {
+    let is_sheet_val = is_spritesheet.unwrap_or(false);
+
+    // Determine final dimensions (skip cropping if it is a spritesheet to maintain frame spacing)
+    let (crop_x, crop_y, crop_w, crop_h) = if is_sheet_val {
+        (0, 0, img_w, img_h)
+    } else if has_pixels {
         (min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
     } else {
         (0, 0, img_w, img_h)
@@ -854,7 +877,7 @@ pub fn save_child_sprite(
     let sidecar_filename = format!("{}.json", asset_id);
     let sidecar_path = target_dir.join(&sidecar_filename);
 
-    let sidecar_payload = serde_json::json!({
+    let mut sidecar_payload = serde_json::json!({
         "schema_version": 1,
         "asset_id": asset_id,
         "asset_name": format!("Custom {}", asset_id),
@@ -870,6 +893,13 @@ pub fn save_child_sprite(
             "size": [col_w, col_h]
         }
     });
+
+    if is_sheet_val {
+        sidecar_payload["is_spritesheet"] = serde_json::json!(true);
+    }
+    if let Some(frs) = frames {
+        sidecar_payload["frames"] = serde_json::json!(frs);
+    }
 
     fs::write(
         &sidecar_path,

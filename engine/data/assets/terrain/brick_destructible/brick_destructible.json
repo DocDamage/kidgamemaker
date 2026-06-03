@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "asset_id": "brick_destructible",
+  "asset_name": "Cracked Brick",
+  "category": "terrain",
+  "runtime_template": "destructible_terrain",
+  "visual": "🧱",
+  "visual_tags": ["block", "breakable", "brick"],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [128, 32]
+  },
+  "gameplay_logic": {
+    "block_type": "brick",
+    "is_destructible": true
+  }
+}
