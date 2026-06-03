@@ -474,6 +474,28 @@ pub fn list_rooms() -> Result<Vec<String>, String> {
     Ok(rooms)
 }
 
+#[tauri::command]
+pub fn delete_room(room_id: String) -> Result<String, String> {
+    let repo_root = locate_repo_root()?;
+    let rooms_dir = repo_root.join("engine").join("data").join("rooms");
+
+    let safe_room_id = room_id.replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "_");
+    if safe_room_id.is_empty() {
+        return Err("Room ID cannot be empty".to_string());
+    }
+
+    let room_path = rooms_dir.join(format!("{safe_room_id}.json"));
+
+    if !room_path.exists() {
+        return Err(format!("Room does not exist: {safe_room_id}"));
+    }
+
+    fs::remove_file(&room_path)
+        .map_err(|err| format!("Failed to delete room file: {err}"))?;
+
+    Ok(format!("Room '{safe_room_id}' deleted successfully"))
+}
+
 fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     fs::create_dir_all(&dst)?;
     for entry in fs::read_dir(src)? {

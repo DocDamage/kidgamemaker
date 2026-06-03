@@ -19,6 +19,7 @@ pub fn run() {
             commands::save_room,
             commands::load_room,
             commands::list_rooms,
+            commands::delete_room,
             commands::export_game
         ])
         .run(tauri::generate_context!())

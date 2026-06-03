@@ -25,6 +25,7 @@ var spawned_entities: Array = []
 var target_spawn_portal_id: String = ""
 var found_spawn_portal_pos: Variant = null
 var current_weather: String = "clear"
+var score: int = 0
 
 
 func _ready() -> void:
@@ -296,6 +297,8 @@ func _make_collectible(data: Dictionary, sidecar: Dictionary) -> Area2D:
 		area.set_script(script)
 		var gameplay: Dictionary = sidecar.get("gameplay_logic", {})
 		area.set("score_value", int(gameplay.get("score_value", 0)))
+		area.set("heal_value", int(gameplay.get("heal_value", 0)))
+		area.set("asset_id", str(data.get("asset_id", "")))
 
 	return area
 
@@ -581,6 +584,11 @@ func clear_spawned_entities() -> void:
 		if is_instance_valid(node):
 			node.queue_free()
 	spawned_entities.clear()
+
+
+func on_collectible_picked_up(payload: Dictionary) -> void:
+	score += int(payload.get("score_value", 0))
+	print("Score: ", score, "  (+", payload.get("score_value", 0), ")")
 
 
 func _configure_camera_limits() -> void:

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import ToyboxModal from './ToyboxModal.svelte';
+  import BookshelfModal from './BookshelfModal.svelte';
   import {
     eraseEntity,
     fallbackInventory,
@@ -10,7 +11,8 @@
     toRoomPayload,
     type AssetInventory,
     type PlacedEntity,
-    type ToyboxAsset
+    type ToyboxAsset,
+    type WorldSettings
   } from './lib/canvasState';
 
   let placed: PlacedEntity[] = [
@@ -45,8 +47,12 @@
   let activeAsset: ToyboxAsset = fallbackInventory.terrain[0];
   let eraserMode = false;
   let toyboxOpen = false;
+  let bookshelfOpen = false;
   let snapEnabled = true;
   let status = 'Ready';
+
+  // World settings — drives time_of_day / weather in saved JSON
+  let worldSettings: WorldSettings = { time_of_day: 'day', weather: 'clear' };
 
   // Multi-room state
   let rooms: string[] = ['test_chamber_01'];
@@ -360,13 +366,30 @@
   async function saveCurrentRoom() {
     status = `Saving room ${activeRoomId}...`;
     try {
-      const payload = toRoomPayload(placed);
-      payload.room_id = activeRoomId;
+      const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
       const jsonString = JSON.stringify(payload);
       status = await invoke<string>('save_room', { roomId: activeRoomId, jsonString });
       await loadRoomList();
     } catch (error) {
       status = `Save failed: ${String(error)}`;
+    }
+  }
+
+  async function deleteRoom(roomId: string) {
+    if (!confirm(`Delete room "${roomId}"? This cannot be undone.`)) return;
+    try {
+      await invoke('delete_room', { roomId });
+      await loadRoomList();
+      if (activeRoomId === roomId) {
+        activeRoomId = rooms[0] ?? 'test_chamber_01';
+        placed = [];
+        status = `Deleted room. Now editing: ${activeRoomId}`;
+      } else {
+        status = `Deleted room: ${roomId}`;
+      }
+    } catch (error) {
+      // delete_room command may not exist yet — fallback gracefully
+      status = `Could not delete room: ${String(error)}`;
     }
   }
 
@@ -395,8 +418,7 @@
     status = 'Saving and launching...';
     try {
       await saveCurrentRoom();
-      const payload = toRoomPayload(placed);
-      payload.room_id = activeRoomId;
+      const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
       status = await invoke<string>('compile_and_play', { roomPayload: payload });
     } catch (error) {
       status = `Play failed: ${String(error)}`;
@@ -442,20 +464,39 @@
 <main class="app-shell">
   <header class="topbar">
     <span class="logo">🧸 KidGameMaker</span>
-    
+
+    <button class="bookshelf-btn" id="btn-bookshelf" on:click={() => (bookshelfOpen = true)}>📚 Rooms</button>
+
     <div class="room-controls">
-      <select value={activeRoomId} on:change={(e) => loadSelectedRoom(e.currentTarget.value)}>
+      <select id="room-selector" value={activeRoomId} on:change={(e) => loadSelectedRoom(e.currentTarget.value)}>
         {#each rooms as room}
           <option value={room}>{room}</option>
         {/each}
       </select>
-      <input type="text" bind:value={activeRoomId} placeholder="Room ID" title="Change Room Name" />
-      <button on:click={createNewRoom} title="New Room" class="icon-btn">➕ New</button>
+      <input id="room-name-input" type="text" bind:value={activeRoomId} placeholder="Room ID" title="Change Room Name" />
+      <button id="btn-new-room" on:click={createNewRoom} title="New Room" class="icon-btn">➕ New</button>
     </div>
 
-    <button class="play" on:click={play}>▶ PLAY</button>
-    <button class="save" on:click={saveCurrentRoom}>💾 SAVE</button>
-    <button class="export" on:click={exportGame} style="background: #10b981; color: white;">📦 EXPORT</button>
+    <!-- World settings: time of day + weather -->
+    <div class="world-controls">
+      <label class="world-label" for="world-time">🕐</label>
+      <select id="world-time" bind:value={worldSettings.time_of_day} class="world-select" title="Time of day">
+        <option value="day">☀️ Day</option>
+        <option value="morning">🌅 Morning</option>
+        <option value="sunset">🌇 Sunset</option>
+        <option value="night">🌙 Night</option>
+      </select>
+      <label class="world-label" for="world-weather">🌤</label>
+      <select id="world-weather" bind:value={worldSettings.weather} class="world-select" title="Weather">
+        <option value="clear">Clear</option>
+        <option value="rain">🌧 Rain</option>
+        <option value="snow">❄️ Snow</option>
+      </select>
+    </div>
+
+    <button id="btn-play" class="play" on:click={play}>▶ PLAY</button>
+    <button id="btn-save" class="save" on:click={saveCurrentRoom}>💾 SAVE</button>
+    <button id="btn-export" class="export" on:click={exportGame} style="background: #10b981; color: white;">📦 EXPORT</button>
     <button class:active={!eraserMode} on:click={() => (eraserMode = false)} style="display: flex; align-items: center; gap: 8px;">
       <span>Stamp:</span>
       <span class="active-visual-container">
@@ -649,6 +690,16 @@
     on:itemSelected={(event) => selectAsset(event.detail)}
     on:close={() => (toyboxOpen = false)}
   />
+
+  <BookshelfModal
+    isVisible={bookshelfOpen}
+    {rooms}
+    {activeRoomId}
+    on:selectRoom={(e) => { loadSelectedRoom(e.detail); bookshelfOpen = false; }}
+    on:newRoom={() => { createNewRoom(); bookshelfOpen = false; }}
+    on:deleteRoom={(e) => deleteRoom(e.detail)}
+    on:close={() => (bookshelfOpen = false)}
+  />
 </main>
 
 <style>
@@ -720,6 +771,37 @@
 
   .room-controls input {
     width: 130px;
+  }
+
+  .bookshelf-btn {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+  }
+
+  .world-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 4px 10px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .world-label {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .world-select {
+    background: #1f2937;
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 4px 8px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
   }
 
   .save {

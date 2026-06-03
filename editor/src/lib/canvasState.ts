@@ -27,18 +27,21 @@ export type ToyboxAsset = {
   sidecar_path?: string;
   is_spritesheet?: boolean;
   frames?: Array<{ x: number; y: number; w: number; h: number }>;
+  snapping_type?: string;
 };
 
 export type AssetInventory = Record<string, ToyboxAsset[]>;
+
+export type WorldSettings = {
+  time_of_day: 'day' | 'morning' | 'sunset' | 'night';
+  weather: 'clear' | 'rain' | 'snow';
+};
 
 export type RoomPayload = {
   schema_version: 1;
   project_id: string;
   room_id: string;
-  world_settings: {
-    time_of_day: string;
-    weather: string;
-  };
+  world_settings: WorldSettings;
   entities: PlacedEntity[];
 };
 
@@ -84,23 +87,25 @@ export function eraseEntity(current: PlacedEntity[], instanceId: string): Placed
   return current.filter((item) => item.instance_id !== instanceId);
 }
 
-export function toRoomPayload(entities: PlacedEntity[]): RoomPayload {
+export function toRoomPayload(
+  entities: PlacedEntity[],
+  worldSettings?: WorldSettings,
+  projectId = 'demo_project',
+  roomId = 'test_chamber_01'
+): RoomPayload {
   return {
     schema_version: 1,
-    project_id: 'demo_project',
-    room_id: 'test_chamber_01',
-    world_settings: {
-      time_of_day: 'day',
-      weather: 'clear'
-    },
+    project_id: projectId,
+    room_id: roomId,
+    world_settings: worldSettings ?? { time_of_day: 'day', weather: 'clear' },
     entities
   };
 }
 
 export const fallbackInventory: AssetInventory = {
-  heroes: [{ id: 'hero_knight', name: 'Hero Knight', category: 'heroes', visual: '🛡️', type: 'player' }],
-  terrain: [{ id: 'stone_floor', name: 'Stone Floor', category: 'terrain', visual: '🪨', type: 'terrain' }],
-  enemies: [{ id: 'slime_patrol', name: 'Slime Patrol', category: 'enemies', visual: '👾', type: 'enemy' }],
-  collectibles: [{ id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', visual: '💎', type: 'collectible' }],
-  decorations: [{ id: 'neon_sign', name: 'Neon Sign', category: 'decorations', visual: '💡', type: 'decoration' }]
+  heroes: [{ id: 'hero_knight', name: 'Hero Knight', category: 'heroes', visual: '🛡️', type: 'player', snapping_type: 'gravity_snap' }],
+  terrain: [{ id: 'stone_floor', name: 'Stone Floor', category: 'terrain', visual: '🪨', type: 'terrain', snapping_type: 'edge_to_edge' }],
+  enemies: [{ id: 'slime_patrol', name: 'Slime Patrol', category: 'enemies', visual: '👾', type: 'enemy', snapping_type: 'gravity_snap' }],
+  collectibles: [{ id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', visual: '💎', type: 'collectible', snapping_type: 'free_float' }],
+  decorations: [{ id: 'neon_sign', name: 'Neon Sign', category: 'decorations', visual: '💡', type: 'decoration', snapping_type: 'free_float' }]
 };

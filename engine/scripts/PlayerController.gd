@@ -13,6 +13,11 @@ func _ready() -> void:
 	current_health = max_health
 
 
+func heal(amount: int) -> void:
+	current_health = min(current_health + amount, max_health)
+	print("Player healed by %d HP. HP now: %d/%d" % [amount, current_health, max_health])
+
+
 func _physics_process(delta: float) -> void:
 	var input_dir := Input.get_axis("ui_left", "ui_right")
 	velocity.x = input_dir * movement_speed
@@ -23,3 +28,4 @@ func _physics_process(delta: float) -> void:
 		velocity.y = jump_force
 
 	move_and_slide()
+
