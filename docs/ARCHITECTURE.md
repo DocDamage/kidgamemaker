@@ -28,11 +28,12 @@ Responsibilities:
 
 - Show a large child-friendly canvas.
 - Show toybox/stamp assets.
-- Apply simple snap-to-position assistance.
-- Save a clean room JSON payload.
-- Ask the Rust backend to launch the runner.
+- Apply grid snap-to-position assistance.
+- Save a clean room JSON layout payload.
+- Automatically save state (every 60s) and track projects via the Bookshelf room manager.
+- Call the Rust backend to save files, load visual thumbnails, and run the Godot runner.
 
-The editor should never expose scripts, file trees, raw metadata, or engine internals to the child.
+The editor never exposes scripts, file trees, raw metadata, or engine internals to the child.
 
 ### Rust Backend
 
@@ -40,10 +41,10 @@ The Rust backend is the bridge between the UI and the file system.
 
 Responsibilities:
 
-- Write `engine/data/game_state.json`.
-- Scan `engine/data/assets/**/**.json` sidecars for the toybox.
-- Launch the Godot runner when an exported executable exists.
-- Later: watch `_Inbox`, unzip packs, slice spritesheets, generate sidecars, route assets.
+- Write and load room JSON configurations (`save_room`, `load_room`, etc.).
+- Scan `engine/data/assets/**/**.json` sidecars to supply the Toybox inventory.
+- Run a background directory watcher on `_Inbox/` to extract archives, slice sheets, and classify textures/audio.
+- Launch the Godot runner (or an exported `Runner.exe` executable).
 
 ### Godot Runner
 
@@ -53,8 +54,10 @@ Responsibilities:
 
 - Read `game_state.json` or a command-line `--level-json` path.
 - Resolve each entity's sidecar metadata.
-- Spawn physical objects.
-- Apply gravity, collision, camera, baseline behaviors, and later parallax/lighting/weather/audio.
+- Spawn physical objects dynamically.
+- Apply gravity, collision bounds, camera boundaries, and checkpoint respawning.
+- Manage atmospheric effects (day/night tints, weather particles, ambient sound/music loops).
+- Stream transitions between rooms via portals.
 
 ## Asset Sidecars
 
@@ -63,20 +66,18 @@ Each asset lives in its own folder with its own metadata file.
 ```text
 engine/data/assets/enemies/slime_patrol/
   slime_patrol.json
-  slime_patrol.png      # future real art
+  slime_patrol.png
 ```
 
 Sidecars are the long-term contract between the ingestor, editor, and runner.
 
-## Why This Beats an Adult Mode
+## Behavior Emergence
 
-The project should not rely on a hidden adult node editor. Complex behavior must emerge from metadata and placement rules.
+The project does not rely on a hidden adult node editor. Complex behavior emerges from metadata and placement rules.
 
 Example:
 
-- A red key sidecar declares itself as `logic_signal: key_red`.
-- A red door sidecar declares `requires_signal: key_red`.
+- A key asset declares itself in sidecar metadata as a `key_collectible`.
+- A door portal asset declares itself as `locked_door`.
 - The child places both visually.
-- The runner links them without menus.
-
-That comes later. Phase 1 only establishes the contract shape.
+- The runner links them by color tags without any UI scripting menus required.

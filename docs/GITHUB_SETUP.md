@@ -1,25 +1,41 @@
-# GitHub Notes
+# Git and GitHub Notes
 
-Target repo:
-
+Target Repository:
 ```text
 https://github.com/DocDamage/kidgamemaker
 ```
 
-At the time this Phase 1 package was prepared, the public repo only contained the starter README. The GitHub write connector available in the working session was not directly scoped to this repo, so this package includes a patch and apply script instead of a pushed commit.
+The repository contains two active branches representing the core engine and its integrated components.
 
-## Apply Locally
+## Branch Strategy
 
-From a local clone of `DocDamage/kidgamemaker`:
+- **`main`**: The stable branch containing the completed KidGameMaker zero-code engine, Svelte/Tauri editor frontend, Rust backend asset watcher/ingestor, and Godot 2D runner.
+- **`sprite-editor`**: The branch housing the `realspriteeditor-cutter` codebase imported directly under the `sprite-editor/` folder. This is used for sprite sheet cutting, review UI, color variant exports, and rule generator scripts.
+
+## Basic Operations
+
+### Switching Branches
+
+To switch between the core engine and sprite editor development workspace:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\apply_phase1.ps1 -SourcePath C:\path\to\kidgamemaker_phase1_contract_runner
+# Switch to core engine
+git checkout main
+
+# Switch to sprite editor workspace
+git checkout sprite-editor
 ```
 
-Or copy the package contents into the repo root and commit:
+### Pushing Changes
+
+Ensure you push commits to their appropriate remote targets:
 
 ```powershell
-git add .
-git commit -m "Start contract-first KidGameMaker runner"
-git push
+# Pushing main core engine updates
+git checkout main
+git push origin main
+
+# Pushing sprite-editor updates
+git checkout sprite-editor
+git push origin sprite-editor
 ```
