@@ -27,6 +27,8 @@
   let playModalOpen = false;
   let isGamePaused = false;
   let isMuted = false;
+  let selectedPlacedEntity: PlacedEntity | null = null;
+
 
   function togglePauseGame() {
     const iframe = document.querySelector('.game-iframe') as HTMLIFrameElement;
@@ -416,6 +418,7 @@
   }
 
   function handleCanvasClick(event: MouseEvent) {
+    selectedPlacedEntity = null;
     const target = event.currentTarget as HTMLDivElement;
     const rect = target.getBoundingClientRect();
     const rawCoords = getCanvasCoords(event.clientX, event.clientY, rect);
@@ -1064,6 +1067,9 @@
             if (eraserMode) {
               placed = eraseEntity(placed, item.instance_id);
               playUiSound('squeak');
+            } else {
+              selectedPlacedEntity = item;
+              playUiSound('chime');
             }
           }}
           on:mousedown|stopPropagation
@@ -1238,6 +1244,171 @@
           <button class="window-btn" on:click={() => { closePlayModal(); launchNativeWindow(); }}>📺 Run in Large Window</button>
         </div>
       </div>
+    </div>
+  {/if}
+
+  {#if selectedPlacedEntity}
+    <div class="customizer-panel">
+      <header class="customizer-header">
+        <h3>Customize Toy 🎛️</h3>
+        <button class="close-customizer-btn" on:click={() => selectedPlacedEntity = null}>✕</button>
+      </header>
+
+      <div class="customizer-body">
+        <div class="toy-info">
+          <span class="toy-icon">{findAsset(selectedPlacedEntity.asset_id)?.visual ?? '🎮'}</span>
+          <span class="toy-name">{findAsset(selectedPlacedEntity.asset_id)?.name ?? selectedPlacedEntity.asset_id}</span>
+        </div>
+
+        <div class="option-group">
+          <div class="option-label">
+            <span>Toy Size:</span>
+            <span>{selectedPlacedEntity.modifiers.scale_multiplier.toFixed(1)}x</span>
+          </div>
+          <input 
+            type="range" 
+            min="0.5" 
+            max="3.0" 
+            step="0.1" 
+            class="option-slider" 
+            bind:value={selectedPlacedEntity.modifiers.scale_multiplier} 
+            on:change={saveCurrentRoom} 
+          />
+        </div>
+
+        {#if selectedPlacedEntity.category === 'enemies' || selectedPlacedEntity.type === 'enemy'}
+          <div class="option-group">
+            <div class="option-label">
+              <span>Monster Speed:</span>
+              <span>{selectedPlacedEntity.modifiers.patrol_speed ?? 70}</span>
+            </div>
+            <input 
+              type="range" 
+              min="20" 
+              max="300" 
+              step="10" 
+              class="option-slider" 
+              bind:value={selectedPlacedEntity.modifiers.patrol_speed} 
+              on:change={saveCurrentRoom} 
+            />
+          </div>
+
+          <div class="option-group">
+            <div class="option-label">
+              <span>Damage:</span>
+              <span>{selectedPlacedEntity.modifiers.damage_value ?? 10}</span>
+            </div>
+            <input 
+              type="range" 
+              min="0" 
+              max="100" 
+              step="5" 
+              class="option-slider" 
+              bind:value={selectedPlacedEntity.modifiers.damage_value} 
+              on:change={saveCurrentRoom} 
+            />
+          </div>
+
+          <div class="option-group">
+            <span class="option-label-text">Monster AI Behavior:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.behavior_type} 
+              on:change={saveCurrentRoom}
+            >
+              <option value="patrol">🚶 Walk back & forth</option>
+              <option value="chase">🏃 Chase the player</option>
+              <option value="jump">🦘 Hop & Jump around</option>
+              <option value="fly">🦇 Fly like a bat</option>
+            </select>
+          </div>
+
+          <div class="option-group flex-row">
+            <span class="option-label-text">Is it a Boss? 👑</span>
+            <input 
+              type="checkbox" 
+              class="option-toggle" 
+              bind:checked={selectedPlacedEntity.modifiers.boss_mode} 
+              on:change={() => {
+                if (selectedPlacedEntity.modifiers.boss_mode) {
+                  selectedPlacedEntity.modifiers.scale_multiplier = 1.8;
+                } else {
+                  selectedPlacedEntity.modifiers.scale_multiplier = 1.0;
+                }
+                saveCurrentRoom();
+              }} 
+            />
+          </div>
+        {:else if selectedPlacedEntity.category === 'collectibles' || selectedPlacedEntity.type === 'collectible'}
+          <div class="option-group">
+            <div class="option-label">
+              <span>Score Value:</span>
+              <span>{selectedPlacedEntity.modifiers.score_value ?? 10}</span>
+            </div>
+            <input 
+              type="range" 
+              min="0" 
+              max="500" 
+              step="10" 
+              class="option-slider" 
+              bind:value={selectedPlacedEntity.modifiers.score_value} 
+              on:change={saveCurrentRoom} 
+            />
+          </div>
+
+          <div class="option-group">
+            <div class="option-label">
+              <span>Healing Power:</span>
+              <span>{selectedPlacedEntity.modifiers.heal_value ?? 0}</span>
+            </div>
+            <input 
+              type="range" 
+              min="0" 
+              max="100" 
+              step="5" 
+              class="option-slider" 
+              bind:value={selectedPlacedEntity.modifiers.heal_value} 
+              on:change={saveCurrentRoom} 
+            />
+          </div>
+
+          <div class="option-group">
+            <span class="option-label-text">Give Hero Special Power:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.powerup_type} 
+              on:change={saveCurrentRoom}
+            >
+              <option value="">❌ None</option>
+              <option value="speed">🧪 Speed Boost Potion</option>
+              <option value="shield">🛡️ Shield Bubble</option>
+              <option value="double_jump">👟 Double Jump Shoes</option>
+            </select>
+          </div>
+        {:else if selectedPlacedEntity.category === 'portals' || selectedPlacedEntity.type === 'portal'}
+          <div class="option-group">
+            <span class="option-label-text">Select Link Room:</span>
+            <select 
+              class="option-select" 
+              bind:value={selectedPlacedEntity.modifiers.target_room} 
+              on:change={saveCurrentRoom}
+            >
+              {#each rooms as r}
+                <option value={r}>{r === activeRoomId ? `${r} (This Room)` : r}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+      </div>
+
+      <footer class="customizer-footer">
+        <button class="customizer-delete-btn" on:click={() => {
+          placed = eraseEntity(placed, selectedPlacedEntity.instance_id);
+          selectedPlacedEntity = null;
+          playUiSound('squeak');
+          saveCurrentRoom();
+        }}>🗑️ Throw Away Toy</button>
+      </footer>
     </div>
   {/if}
 </main>
@@ -1906,6 +2077,148 @@
     box-shadow: 0 5px 0 #b91c1c;
   }
   .play-control-btn.stop-btn:active {
+    box-shadow: 0 2px 0 #b91c1c;
+  }
+
+  /* Customizer Inspector Panel styling */
+  .customizer-panel {
+    position: fixed;
+    top: 96px;
+    right: 24px;
+    width: 320px;
+    background: rgba(30, 41, 59, 0.95);
+    backdrop-filter: blur(12px);
+    border: 5px solid #fbbf24;
+    border-radius: 28px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    z-index: 90;
+    color: white;
+    padding: 20px;
+    gap: 16px;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+  }
+
+  .customizer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .customizer-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 900;
+    color: #fbbf24;
+  }
+
+  .close-customizer-btn {
+    border: 0;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 1.5rem;
+    font-weight: 900;
+    cursor: pointer;
+  }
+
+  .toy-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #0f172a;
+    padding: 10px 16px;
+    border-radius: 16px;
+  }
+
+  .toy-icon {
+    font-size: 2rem;
+  }
+
+  .toy-name {
+    font-weight: 900;
+    font-size: 1.1rem;
+  }
+
+  .customizer-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .option-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .option-group.flex-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    background: #0f172a;
+    padding: 10px 16px;
+    border-radius: 16px;
+  }
+
+  .option-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #cbd5e1;
+  }
+
+  .option-slider {
+    width: 100%;
+    accent-color: #fbbf24;
+    cursor: pointer;
+  }
+
+  .option-label-text {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #cbd5e1;
+  }
+
+  .option-select {
+    width: 100%;
+    background: #0f172a;
+    color: white;
+    font-weight: 800;
+    padding: 10px;
+    border-radius: 12px;
+    border: 2px solid #334155;
+    cursor: pointer;
+  }
+
+  .option-toggle {
+    width: 24px;
+    height: 24px;
+    accent-color: #fbbf24;
+    cursor: pointer;
+  }
+
+  .customizer-footer {
+    margin-top: 8px;
+  }
+
+  .customizer-delete-btn {
+    width: 100%;
+    border: 0;
+    background: #ef4444;
+    color: white;
+    font-weight: 900;
+    padding: 14px;
+    border-radius: 18px;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #b91c1c;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+
+  .customizer-delete-btn:active {
+    transform: translateY(2px);
     box-shadow: 0 2px 0 #b91c1c;
   }
 </style>

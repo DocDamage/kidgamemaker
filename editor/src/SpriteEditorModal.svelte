@@ -36,6 +36,177 @@
   let brushSize = 1;
   let isBucket = false;
 
+  let activeTab: 'draw' | 'sound' = 'draw';
+  
+  // Synthesizer parameters
+  let sfxWaveType: 'sine' | 'square' | 'triangle' | 'sawtooth' | 'noise' = 'square';
+  let sfxStartFreq = 440;
+  let sfxEndFreq = 440;
+  let sfxDuration = 0.25;
+  let sfxSweep = 0; // custom sweep frequency change
+
+  // Sound preset configs
+  const presets = {
+    jump: { waveType: 'square' as const, startFreq: 150, endFreq: 800, duration: 0.15 },
+    laser: { waveType: 'sawtooth' as const, startFreq: 1200, endFreq: 100, duration: 0.2 },
+    chime: { waveType: 'sine' as const, startFreq: 600, endFreq: 1200, duration: 0.3 },
+    explosion: { waveType: 'noise' as const, startFreq: 400, endFreq: 50, duration: 0.4 },
+    hurt: { waveType: 'triangle' as const, startFreq: 180, endFreq: 60, duration: 0.18 }
+  };
+
+  function applyPreset(name: 'jump' | 'laser' | 'chime' | 'explosion' | 'hurt') {
+    const p = presets[name];
+    sfxWaveType = p.waveType;
+    sfxStartFreq = p.startFreq;
+    sfxEndFreq = p.endFreq;
+    sfxDuration = p.duration;
+    sfxSweep = p.endFreq - p.startFreq;
+    playSynthesizedPreview();
+  }
+
+  function playSynthesizedPreview() {
+    if (isMuted) return;
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+      
+      if (sfxWaveType === 'noise') {
+        const bufferSize = ctx.sampleRate * sfxDuration;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          const t = i / ctx.sampleRate;
+          const env = 1.0 - (t / sfxDuration);
+          data[i] = (Math.random() * 2 - 1) * env * 0.25;
+        }
+        const noiseNode = ctx.createBufferSource();
+        noiseNode.buffer = buffer;
+        noiseNode.connect(ctx.destination);
+        noiseNode.start(now);
+      } else {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = sfxWaveType;
+        
+        osc.frequency.setValueAtTime(sfxStartFreq, now);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(10, sfxEndFreq), now + sfxDuration);
+        
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + sfxDuration);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + sfxDuration);
+      }
+    } catch (_) {}
+  }
+
+  function buildWav(samples: Int16Array, sampleRate = 22050): ArrayBuffer {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+
+    for (let i = 0; i < samples.length; i++) {
+      view.setInt16(44 + i * 2, samples[i], true);
+    }
+
+    return buffer;
+  }
+
+  function writeString(view: DataView, offset: number, string: string) {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  }
+
+  function arrayBufferToBase64(buffer: ArrayBuffer): string {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  }
+
+  let isSavingAudio = false;
+  let audioStatus = '';
+
+  async function saveCustomAudio() {
+    if (!targetAssetId) {
+      audioStatus = 'Please draw and save a sprite first!';
+      return;
+    }
+    
+    isSavingAudio = true;
+    audioStatus = 'Creating sound file...';
+
+    try {
+      const sampleRate = 22050;
+      const totalSamples = Math.round(sfxDuration * sampleRate);
+      const samples = new Int16Array(totalSamples);
+      
+      let phase = 0;
+      for (let i = 0; i < totalSamples; i++) {
+        const t = i / sampleRate;
+        const ratio = t / sfxDuration;
+        const freq = sfxStartFreq + (sfxEndFreq - sfxStartFreq) * ratio;
+        phase += (2 * Math.PI * freq) / sampleRate;
+        
+        let val = 0;
+        if (sfxWaveType === 'sine') {
+          val = Math.sin(phase);
+        } else if (sfxWaveType === 'square') {
+          val = Math.sin(phase) >= 0 ? 1 : -1;
+        } else if (sfxWaveType === 'triangle') {
+          val = Math.abs((phase % (2 * Math.PI)) / Math.PI - 1) * 2 - 1;
+        } else if (sfxWaveType === 'sawtooth') {
+          val = (phase % (2 * Math.PI)) / Math.PI - 1;
+        } else if (sfxWaveType === 'noise') {
+          val = Math.random() * 2 - 1;
+        }
+        
+        const env = 1.0 - ratio;
+        const sampleVal = val * env * 0.3;
+        
+        samples[i] = Math.max(-32768, Math.min(32767, Math.round(sampleVal * 32767)));
+      }
+      
+      const buffer = buildWav(samples, sampleRate);
+      const base64Data = arrayBufferToBase64(buffer);
+      
+      audioStatus = 'Saving...';
+      const result = await invoke<string>('save_custom_audio', {
+        assetId: targetAssetId,
+        category,
+        base64Data
+      });
+      
+      audioStatus = 'Saved successfully! 🎉';
+      playDrawSound('chime');
+      setTimeout(() => { audioStatus = ''; }, 3000);
+    } catch (err: any) {
+      console.error(err);
+      audioStatus = `Failed to save: ${err}`;
+    } finally {
+      isSavingAudio = false;
+    }
+  }
+
   let pixels: string[][] = Array(GRID_SIZE)
     .fill(null)
     .map(() => Array(GRID_SIZE).fill('transparent'));
@@ -44,6 +215,7 @@
   $: if (isVisible && canvasElement) {
     initCanvas();
     loadExistingSprite();
+    activeTab = 'draw';
   }
 
   let audioCtx: AudioContext | null = null;
@@ -446,83 +618,153 @@
         <button class="close-btn" on:click={() => dispatch('close')}>✕ Done</button>
       </header>
 
-      {#if !targetAssetId}
-        <div class="category-panel">
-          <span class="category-label">Choose Type:</span>
-          <div class="category-options">
-            <button class:active={category === 'decorations'} on:click={() => { category = 'decorations'; triggerAutoSave(); }}>🧸 Toy</button>
-            <button class:active={category === 'terrain'} on:click={() => { category = 'terrain'; triggerAutoSave(); }}>🪨 Floor</button>
-            <button class:active={category === 'heroes'} on:click={() => { category = 'heroes'; triggerAutoSave(); }}>🦸 Hero</button>
-            <button class:active={category === 'enemies'} on:click={() => { category = 'enemies'; triggerAutoSave(); }}>👾 Monster</button>
-            <button class:active={category === 'collectibles'} on:click={() => { category = 'collectibles'; triggerAutoSave(); }}>🪙 Reward</button>
+      <div class="tabs-header">
+        <button class="tab-btn" class:active={activeTab === 'draw'} on:click={() => activeTab = 'draw'}>🖌️ Draw Toy</button>
+        <button class="tab-btn" class:active={activeTab === 'sound'} on:click={() => { activeTab = 'sound'; playDrawSound('chime'); }}>🎵 Toy Sound</button>
+      </div>
+
+      {#if activeTab === 'draw'}
+        {#if !targetAssetId}
+          <div class="category-panel">
+            <span class="category-label">Choose Type:</span>
+            <div class="category-options">
+              <button class:active={category === 'decorations'} on:click={() => { category = 'decorations'; triggerAutoSave(); }}>🧸 Toy</button>
+              <button class:active={category === 'terrain'} on:click={() => { category = 'terrain'; triggerAutoSave(); }}>🪨 Floor</button>
+              <button class:active={category === 'heroes'} on:click={() => { category = 'heroes'; triggerAutoSave(); }}>🦸 Hero</button>
+              <button class:active={category === 'enemies'} on:click={() => { category = 'enemies'; triggerAutoSave(); }}>👾 Monster</button>
+              <button class:active={category === 'collectibles'} on:click={() => { category = 'collectibles'; triggerAutoSave(); }}>🪙 Reward</button>
+            </div>
           </div>
+        {/if}
+
+        <div class="templates-panel">
+          <span class="panel-label">Templates:</span>
+          <div class="templates-buttons">
+            <button class="tpl-btn" on:click={() => applyTemplate('sword')}>⚔️ Sword</button>
+            <button class="tpl-btn" on:click={() => applyTemplate('monster')}>👾 Slime</button>
+            <button class="tpl-btn" on:click={() => applyTemplate('coin')}>🪙 Coin</button>
+            <button class="tpl-btn" on:click={() => applyTemplate('heart')}>❤️ Heart</button>
+            <button class="tpl-btn" on:click={() => applyTemplate('star')}>⭐️ Star</button>
+            <button class="tpl-btn" on:click={() => applyTemplate('key')}>🔑 Key</button>
+            <button class="tpl-btn" on:click={() => applyTemplate('crown')}>👑 Crown</button>
+          </div>
+        </div>
+
+        <div class="editor-workspace">
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <canvas
+            bind:this={canvasElement}
+            width="360"
+            height="360"
+            class="draw-canvas"
+            on:pointerdown={(e) => { isDrawing = true; handlePointer(e.clientX, e.clientY); }}
+            on:pointermove={(e) => { if (isDrawing) handlePointer(e.clientX, e.clientY); }}
+            on:pointerup={() => { if (isDrawing) { isDrawing = false; saveHistoryState(); triggerAutoSave(); } }}
+            on:pointerleave={() => { isDrawing = false; }}
+          ></canvas>
+
+          <div class="side-panel">
+            <div class="brush-selector">
+              <button class="brush-btn" class:active={brushSize === 1 && !isBucket && !isEraser} on:click={() => { brushSize = 1; isBucket = false; isEraser = false; }} title="Small Brush">🟢 1x</button>
+              <button class="brush-btn" class:active={brushSize === 2 && !isBucket && !isEraser} on:click={() => { brushSize = 2; isBucket = false; isEraser = false; }} title="Medium Brush">🟢 2x</button>
+              <button class="brush-btn" class:active={brushSize === 3 && !isBucket && !isEraser} on:click={() => { brushSize = 3; isBucket = false; isEraser = false; }} title="Big Brush">🟢 3x</button>
+            </div>
+
+            <div class="colors-grid">
+              {#each COLORS as color}
+                <button
+                  class="color-dot"
+                  style:background={color}
+                  class:selected={currentColor === color && !isEraser && !isBucket}
+                  on:click={() => { currentColor = color; isEraser = false; isBucket = false; }}
+                  aria-label="Color {color}"
+                ></button>
+              {/each}
+            </div>
+
+            <div class="tool-actions">
+              <button class="tool-btn undo-btn" disabled={historyIndex <= 0} on:click={handleUndo} title="Undo draw stroke">
+                ↺ Undo
+              </button>
+              <button class="tool-btn redo-btn" disabled={historyIndex >= history.length - 1} on:click={handleRedo} title="Redo draw stroke">
+                ↻ Redo
+              </button>
+              <button class="tool-btn eraser-btn" class:active={isEraser} on:click={() => { isEraser = true; isBucket = false; }}>
+                🧽 Eraser
+              </button>
+              <button class="tool-btn bucket-btn" class:active={isBucket} on:click={() => { isBucket = true; isEraser = false; }}>
+                🪣 Fill
+              </button>
+              <button class="tool-btn clear-btn" on:click={handleClear}>
+                🗑️ Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      {:else}
+        <div class="sound-studio-panel">
+          <div class="presets-section">
+            <span class="section-title">Presets 🎵</span>
+            <div class="presets-buttons">
+              <button class="preset-btn" on:click={() => applyPreset('jump')}>🦘 Jump</button>
+              <button class="preset-btn" on:click={() => applyPreset('laser')}>🔫 Laser</button>
+              <button class="preset-btn" on:click={() => applyPreset('chime')}>🪙 Chime</button>
+              <button class="preset-btn" on:click={() => applyPreset('explosion')}>💥 Boom</button>
+              <button class="preset-btn" on:click={() => applyPreset('hurt')}>🤕 Ouch</button>
+            </div>
+          </div>
+
+          <div class="synth-controls">
+            <span class="section-title">Sound Maker 🎛️</span>
+            
+            <div class="control-group">
+              <span class="control-label">Wave Type:</span>
+              <div class="wave-selectors">
+                <button class="wave-btn" class:active={sfxWaveType === 'square'} on:click={() => { sfxWaveType = 'square'; playSynthesizedPreview(); }}>Square 🔳</button>
+                <button class="wave-btn" class:active={sfxWaveType === 'sine'} on:click={() => { sfxWaveType = 'sine'; playSynthesizedPreview(); }}>Sine 〰️</button>
+                <button class="wave-btn" class:active={sfxWaveType === 'triangle'} on:click={() => { sfxWaveType = 'triangle'; playSynthesizedPreview(); }}>Triangle 🔺</button>
+                <button class="wave-btn" class:active={sfxWaveType === 'sawtooth'} on:click={() => { sfxWaveType = 'sawtooth'; playSynthesizedPreview(); }}>Saw 🪚</button>
+                <button class="wave-btn" class:active={sfxWaveType === 'noise'} on:click={() => { sfxWaveType = 'noise'; playSynthesizedPreview(); }}>Noise 💨</button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">
+                <span>Start Pitch:</span>
+                <span>{sfxStartFreq} Hz</span>
+              </div>
+              <input type="range" min="80" max="1800" step="10" class="control-slider" bind:value={sfxStartFreq} on:input={playSynthesizedPreview} />
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">
+                <span>End Pitch:</span>
+                <span>{sfxEndFreq} Hz</span>
+              </div>
+              <input type="range" min="80" max="1800" step="10" class="control-slider" bind:value={sfxEndFreq} on:input={playSynthesizedPreview} />
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">
+                <span>Duration:</span>
+                <span>{sfxDuration.toFixed(2)}s</span>
+              </div>
+              <input type="range" min="0.05" max="1.0" step="0.05" class="control-slider" bind:value={sfxDuration} on:input={playSynthesizedPreview} />
+            </div>
+          </div>
+
+          <div class="action-buttons">
+            <button class="action-btn play-btn" on:click={playSynthesizedPreview}>▶️ Listen</button>
+            <button class="action-btn save-btn" on:click={saveCustomAudio} disabled={isSavingAudio || !targetAssetId}>
+              {isSavingAudio ? 'Saving...' : '💾 Save Sound'}
+            </button>
+          </div>
+
+          {#if audioStatus}
+            <div class="audio-status">{audioStatus}</div>
+          {/if}
         </div>
       {/if}
-
-      <div class="templates-panel">
-        <span class="panel-label">Templates:</span>
-        <div class="templates-buttons">
-          <button class="tpl-btn" on:click={() => applyTemplate('sword')}>⚔️ Sword</button>
-          <button class="tpl-btn" on:click={() => applyTemplate('monster')}>👾 Slime</button>
-          <button class="tpl-btn" on:click={() => applyTemplate('coin')}>🪙 Coin</button>
-          <button class="tpl-btn" on:click={() => applyTemplate('heart')}>❤️ Heart</button>
-          <button class="tpl-btn" on:click={() => applyTemplate('star')}>⭐️ Star</button>
-          <button class="tpl-btn" on:click={() => applyTemplate('key')}>🔑 Key</button>
-          <button class="tpl-btn" on:click={() => applyTemplate('crown')}>👑 Crown</button>
-        </div>
-      </div>
-
-      <div class="editor-workspace">
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <canvas
-          bind:this={canvasElement}
-          width="360"
-          height="360"
-          class="draw-canvas"
-          on:pointerdown={(e) => { isDrawing = true; handlePointer(e.clientX, e.clientY); }}
-          on:pointermove={(e) => { if (isDrawing) handlePointer(e.clientX, e.clientY); }}
-          on:pointerup={() => { if (isDrawing) { isDrawing = false; saveHistoryState(); triggerAutoSave(); } }}
-          on:pointerleave={() => { isDrawing = false; }}
-        ></canvas>
-
-        <div class="side-panel">
-          <div class="brush-selector">
-            <button class="brush-btn" class:active={brushSize === 1 && !isBucket && !isEraser} on:click={() => { brushSize = 1; isBucket = false; isEraser = false; }} title="Small Brush">🟢 1x</button>
-            <button class="brush-btn" class:active={brushSize === 2 && !isBucket && !isEraser} on:click={() => { brushSize = 2; isBucket = false; isEraser = false; }} title="Medium Brush">🟢 2x</button>
-            <button class="brush-btn" class:active={brushSize === 3 && !isBucket && !isEraser} on:click={() => { brushSize = 3; isBucket = false; isEraser = false; }} title="Big Brush">🟢 3x</button>
-          </div>
-
-          <div class="colors-grid">
-            {#each COLORS as color}
-              <button
-                class="color-dot"
-                style:background={color}
-                class:selected={currentColor === color && !isEraser && !isBucket}
-                on:click={() => { currentColor = color; isEraser = false; isBucket = false; }}
-                aria-label="Color {color}"
-              ></button>
-            {/each}
-          </div>
-
-          <div class="tool-actions">
-            <button class="tool-btn undo-btn" disabled={historyIndex <= 0} on:click={handleUndo} title="Undo draw stroke">
-              ↺ Undo
-            </button>
-            <button class="tool-btn redo-btn" disabled={historyIndex >= history.length - 1} on:click={handleRedo} title="Redo draw stroke">
-              ↻ Redo
-            </button>
-            <button class="tool-btn eraser-btn" class:active={isEraser} on:click={() => { isEraser = true; isBucket = false; }}>
-              🧽 Eraser
-            </button>
-            <button class="tool-btn bucket-btn" class:active={isBucket} on:click={() => { isBucket = true; isEraser = false; }}>
-              🪣 Fill
-            </button>
-            <button class="tool-btn clear-btn" on:click={handleClear}>
-              🗑️ Clear
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 {/if}
@@ -785,5 +1027,179 @@
   .brush-btn.active {
     background: #fbbf24;
     color: #0f172a;
+  }
+
+  /* Tabs system */
+  .tabs-header {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    background: #0f172a;
+    padding: 6px;
+    border-radius: 16px;
+  }
+
+  .tab-btn {
+    flex: 1;
+    border: 0;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 1.05rem;
+    font-weight: 800;
+    padding: 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .tab-btn.active {
+    background: #fbbf24;
+    color: #0f172a;
+  }
+
+  /* Sound Studio Panel */
+  .sound-studio-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    background: #0f172a;
+    border: 4px solid #334155;
+    border-radius: 24px;
+    padding: 24px;
+    color: white;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .presets-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .section-title {
+    font-size: 1.1rem;
+    font-weight: 900;
+    color: #fbbf24;
+    margin-bottom: 4px;
+  }
+
+  .presets-buttons {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+
+  .preset-btn {
+    border: 0;
+    background: #1e293b;
+    color: white;
+    font-weight: 800;
+    padding: 12px;
+    border-radius: 14px;
+    cursor: pointer;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.2);
+    transition: background 0.2s, transform 0.1s;
+    font-size: 0.9rem;
+  }
+
+  .preset-btn:hover {
+    background: #334155;
+  }
+
+  .preset-btn:active {
+    transform: translateY(2px);
+  }
+
+  .synth-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: #1e293b;
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .control-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: #94a3b8;
+  }
+
+  .control-slider {
+    width: 100%;
+    accent-color: #fbbf24;
+    cursor: pointer;
+  }
+
+  .wave-selectors {
+    display: flex;
+    gap: 6px;
+    background: #0f172a;
+    padding: 4px;
+    border-radius: 10px;
+  }
+
+  .wave-btn {
+    flex: 1;
+    border: 0;
+    background: transparent;
+    color: #94a3b8;
+    font-weight: 800;
+    font-size: 0.8rem;
+    padding: 6px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .wave-btn.active {
+    background: #fbbf24;
+    color: #0f172a;
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 16px;
+  }
+
+  .action-btn {
+    flex: 1;
+    border: 0;
+    padding: 16px;
+    border-radius: 18px;
+    font-size: 1.1rem;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 0 5px 0 rgba(0,0,0,0.25);
+    transition: transform 0.1s;
+  }
+
+  .action-btn:active {
+    transform: translateY(3px);
+  }
+
+  .play-btn {
+    background: #10b981;
+    color: white;
+  }
+
+  .save-btn {
+    background: #fbbf24;
+    color: #0f172a;
+  }
+
+  .audio-status {
+    text-align: center;
+    font-weight: 800;
+    color: #fbbf24;
+    min-height: 24px;
   }
 </style>

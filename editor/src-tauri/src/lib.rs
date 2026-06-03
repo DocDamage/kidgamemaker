@@ -23,6 +23,7 @@ pub fn run() {
             commands::export_game,
             commands::save_child_sprite,
             commands::load_child_sprite,
+            commands::save_custom_audio,
             commands::build_web_runner
         ])
         .run(tauri::generate_context!())

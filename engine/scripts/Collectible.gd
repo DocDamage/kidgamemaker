@@ -7,6 +7,7 @@ signal collected(payload: Dictionary)
 @export var score_value: int = 0
 @export var heal_value: int = 0
 @export var asset_id: String = ""
+@export var powerup_type: String = ""
 
 var _collected := false
 
@@ -30,7 +31,11 @@ func _on_body_entered(body: Node) -> void:
 		body.heal(heal_value)
 	elif heal_value > 0 and "current_health" in body and "max_health" in body:
 		body.current_health = min(body.current_health + heal_value, body.max_health)
-		print("Player healed by %d  HP. HP now: %d/%d" % [heal_value, body.current_health, body.max_health])
+		print("Player healed by %d HP. HP now: %d/%d" % [heal_value, body.current_health, body.max_health])
+
+	# ── Apply power-up status effect ──
+	if powerup_type != "" and body.has_method("apply_powerup"):
+		body.apply_powerup(powerup_type)
 
 	# ── Notify Main (score board, HUD, etc.) ──
 	var payload := {
@@ -44,10 +49,10 @@ func _on_body_entered(body: Node) -> void:
 	var main := get_tree().get_root().get_node_or_null("Main")
 	if main != null and main.has_method("on_collectible_picked_up"):
 		main.on_collectible_picked_up(payload)
-	if main != null and main.has_method("play_sfx"):
-		main.play_sfx("coin")
+	if main != null and main.has_method("play_custom_sfx"):
+		main.play_custom_sfx(asset_id, "coin")
 
-	print("Collected '%s'  score+%d  heal+%d" % [asset_id, score_value, heal_value])
+	print("Collected '%s' score+%d heal+%d powerup=%s" % [asset_id, score_value, heal_value, powerup_type])
 
 	# ── Pop-and-fade tween ──
 	_play_collect_tween()

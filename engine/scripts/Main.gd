@@ -322,6 +322,7 @@ func _make_player(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
 		body.set("movement_speed", float(attrs.get("movement_speed", 220)))
 		body.set("jump_force", float(attrs.get("jump_force", -460)))
 		body.set("gravity_scale", float(attrs.get("gravity_scale", 1.0)))
+		body.set("asset_id", str(data.get("asset_id", "")))
 
 	return body
 
@@ -347,9 +348,19 @@ func _make_enemy(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
 		body.set("patrol_speed", float(attrs.get("movement_speed", 70)))
 		body.set("gravity_scale", float(attrs.get("gravity_scale", 1.0)))
 		body.set("damage_value", int(attrs.get("damage_value", 10)))
-		# Boss mode: max_health > 100 signals a boss
 		var max_hp := int(attrs.get("max_health", 20))
 		body.set("boss_mode", max_hp > 100)
+
+		# Override baseline with instance modifiers
+		var modifiers: Dictionary = data.get("modifiers", {})
+		if modifiers.has("patrol_speed"):
+			body.set("patrol_speed", float(modifiers.get("patrol_speed")))
+		if modifiers.has("damage_value"):
+			body.set("damage_value", int(modifiers.get("damage_value")))
+		if modifiers.has("boss_mode"):
+			body.set("boss_mode", bool(modifiers.get("boss_mode")))
+		if modifiers.has("behavior_type"):
+			body.set("behavior_type", str(modifiers.get("behavior_type")))
 
 	return body
 
@@ -367,6 +378,15 @@ func _make_collectible(data: Dictionary, sidecar: Dictionary) -> Area2D:
 		area.set("score_value", int(gameplay.get("score_value", 0)))
 		area.set("heal_value", int(gameplay.get("heal_value", 0)))
 		area.set("asset_id", str(data.get("asset_id", "")))
+
+		# Override baseline with instance modifiers
+		var modifiers: Dictionary = data.get("modifiers", {})
+		if modifiers.has("score_value"):
+			area.set("score_value", int(modifiers.get("score_value")))
+		if modifiers.has("heal_value"):
+			area.set("heal_value", int(modifiers.get("heal_value")))
+		if modifiers.has("powerup_type"):
+			area.set("powerup_type", str(modifiers.get("powerup_type")))
 
 	return area
 
@@ -1087,6 +1107,50 @@ func play_sfx(type: String) -> void:
 		add_child(player)
 		player.play()
 		player.finished.connect(player.queue_free)
+
+
+func play_custom_sfx(asset_id: String, default_type: String = "") -> void:
+	if asset_id == "":
+		if default_type != "":
+			play_sfx(default_type)
+		return
+
+	if _sfx_cache.has(asset_id + "_custom"):
+		var stream = _sfx_cache[asset_id + "_custom"]
+		if stream != null:
+			var player := AudioStreamPlayer.new()
+			player.stream = stream
+			player.volume_db = -5.0
+			add_child(player)
+			player.play()
+			player.finished.connect(player.queue_free)
+			return
+
+	var sidecar = _load_sidecar(asset_id)
+	var audio_logic = sidecar.get("audio_logic", {})
+	var stream_file = str(audio_logic.get("stream_file", ""))
+	
+	if stream_file != "":
+		var sidecar_path = str(sidecar.get("sidecar_path", ""))
+		var resolved_audio_path = stream_file
+		if sidecar_path != "":
+			resolved_audio_path = sidecar_path.get_base_dir().path_join(stream_file)
+		else:
+			resolved_audio_path = ASSET_ROOT.path_join(stream_file)
+		
+		var stream = _load_wav_file(resolved_audio_path)
+		if stream != null:
+			_sfx_cache[asset_id + "_custom"] = stream
+			var player := AudioStreamPlayer.new()
+			player.stream = stream
+			player.volume_db = -5.0
+			add_child(player)
+			player.play()
+			player.finished.connect(player.queue_free)
+			return
+
+	if default_type != "":
+		play_sfx(default_type)
 
 
 func _load_wav_file(path: String) -> AudioStreamWav:

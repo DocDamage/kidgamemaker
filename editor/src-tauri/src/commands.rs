@@ -881,6 +881,58 @@ pub fn save_child_sprite(
 }
 
 #[tauri::command]
+pub fn save_custom_audio(
+    asset_id: String,
+    category: String,
+    base64_data: String,
+) -> Result<String, String> {
+    let repo_root = locate_repo_root()?;
+    let target_dir = repo_root
+        .join("engine")
+        .join("data")
+        .join("assets")
+        .join(&category)
+        .join(&asset_id);
+
+    fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+
+    let decoded_bytes = general_purpose::STANDARD
+        .decode(base64_data.trim())
+        .map_err(|e| e.to_string())?;
+
+    let wav_filename = format!("{}_custom.wav", asset_id);
+    let wav_path = target_dir.join(&wav_filename);
+    fs::write(&wav_path, &decoded_bytes).map_err(|e| e.to_string())?;
+
+    let sidecar_filename = format!("{}.json", asset_id);
+    let sidecar_path = target_dir.join(&sidecar_filename);
+
+    if sidecar_path.exists() {
+        let sidecar_content = fs::read_to_string(&sidecar_path).map_err(|e| e.to_string())?;
+        let mut sidecar_data: serde_json::Value = serde_json::from_str(&sidecar_content).map_err(|e| e.to_string())?;
+        
+        if let Some(obj) = sidecar_data.as_object_mut() {
+            obj.insert(
+                "audio_logic".to_string(),
+                serde_json::json!({
+                    "stream_file": wav_filename,
+                    "loop": false,
+                    "global_bgm": false
+                }),
+            );
+        }
+        
+        fs::write(
+            &sidecar_path,
+            serde_json::to_string_pretty(&sidecar_data).unwrap(),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(format!("Custom SFX for {} successfully saved.", asset_id))
+}
+
+#[tauri::command]
 pub fn build_web_runner() -> Result<String, String> {
     let repo_root = locate_repo_root()?;
     let engine_dir = repo_root.join("engine");
