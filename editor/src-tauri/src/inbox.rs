@@ -274,6 +274,46 @@ fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBuf, S
         }
     }
 
+    // 4. Key collectible gameplay logic
+    if template == "key_collectible" {
+        let key_color = if lower_id.contains("gold") || lower_id.contains("yellow") {
+            "gold"
+        } else if lower_id.contains("red") {
+            "red"
+        } else if lower_id.contains("blue") {
+            "blue"
+        } else if lower_id.contains("silver") || lower_id.contains("white") {
+            "silver"
+        } else {
+            "gold"
+        };
+        sidecar_value["gameplay_logic"] = serde_json::json!({
+            "on_pickup": "collect_key",
+            "score_value": 0,
+            "heal_value": 0,
+            "key_color": key_color
+        });
+    }
+
+    // 5. Locked door gameplay logic
+    if template == "locked_door" {
+        let key_color = if lower_id.contains("gold") || lower_id.contains("yellow") {
+            "gold"
+        } else if lower_id.contains("red") {
+            "red"
+        } else if lower_id.contains("blue") {
+            "blue"
+        } else if lower_id.contains("silver") || lower_id.contains("white") {
+            "silver"
+        } else {
+            "gold"
+        };
+        sidecar_value["gameplay_logic"] = serde_json::json!({
+            "requires_key": true,
+            "key_color": key_color
+        });
+    }
+
     let sidecar_content = serde_json::to_string_pretty(&sidecar_value).unwrap_or_default();
     let sidecar_path = dest_dir.join(format!("{}.json", asset_id));
     fs::write(&sidecar_path, sidecar_content).map_err(|err| err.to_string())?;
@@ -298,12 +338,16 @@ fn classify_asset(filename: &str) -> (&'static str, &'static str, &'static str, 
         ("heroes", "player", "gravity_snap", parallax)
     } else if lower.contains("enemy") || lower.contains("slime") || lower.contains("boss") || lower.contains("monster") || lower.contains("hazard") {
         ("enemies", "enemy", "gravity_snap", parallax)
+    } else if (lower.contains("lock") || lower.contains("locked")) && (lower.contains("door") || lower.contains("gate")) {
+        ("portals", "locked_door", "gravity_snap", parallax)
     } else if lower.contains("portal") || lower.contains("door") || lower.contains("gate") || lower.contains("warp") || lower.contains("exit") {
         ("portals", "portal", "gravity_snap", parallax)
     } else if lower.contains("checkpoint") || lower.contains("flag") || lower.contains("savepoint") {
         ("decorations", "checkpoint", "free_float", parallax)
     } else if lower.contains("floor") || lower.contains("tile") || lower.contains("block") || lower.contains("ground") || lower.contains("platform") || lower.contains("wall") || lower.contains("brick") || lower.contains("stone") {
         ("terrain", "terrain", "edge_to_edge", parallax)
+    } else if lower.contains("_key") || lower.starts_with("key_") || lower.ends_with("_key.png") || lower.ends_with("_key.wav") {
+        ("collectibles", "key_collectible", "free_float", parallax)
     } else if lower.contains("coin") || lower.contains("ruby") || lower.contains("gold") || lower.contains("gem") || lower.contains("collectible") || lower.contains("item") || lower.contains("heart") {
         ("collectibles", "collectible", "free_float", parallax)
     } else {

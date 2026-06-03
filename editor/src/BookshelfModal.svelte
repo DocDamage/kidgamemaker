@@ -4,6 +4,7 @@
   export let isVisible = false;
   export let rooms: string[] = [];
   export let activeRoomId: string = '';
+  export let getThumbnail: ((roomId: string) => string | null) = () => null;
 
   const dispatch = createEventDispatcher<{
     selectRoom: string;
@@ -11,13 +12,6 @@
     deleteRoom: string;
     close: void;
   }>();
-
-  const TIME_ICONS: Record<string, string> = {
-    day: '☀️',
-    morning: '🌅',
-    sunset: '🌇',
-    night: '🌙'
-  };
 
   function handleKey(e: KeyboardEvent) {
     if (e.key === 'Escape') dispatch('close');
@@ -59,13 +53,18 @@
       <div class="rooms-grid">
         {#each rooms as room}
           {@const isActive = room === activeRoomId}
+          {@const thumb = getThumbnail(room)}
           <div
             class="room-card"
             class:active={isActive}
             id="bookshelf-room-{room}"
           >
             <div class="room-thumb">
-              <span class="room-thumb-icon">{isActive ? '🖊️' : '🗺️'}</span>
+              {#if thumb}
+                <img src={thumb} alt="Room preview" class="thumb-img" />
+              {:else}
+                <span class="room-thumb-icon">{isActive ? '🖊️' : '🗺️'}</span>
+              {/if}
             </div>
 
             <div class="room-info">
@@ -249,11 +248,20 @@
   }
 
   .room-thumb {
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.35);
     border-radius: 14px;
-    height: 88px;
+    height: 90px;
     display: grid;
     place-items: center;
+    overflow: hidden;
+  }
+
+  .thumb-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 12px;
+    image-rendering: pixelated;
   }
 
   .room-thumb-icon {

@@ -96,6 +96,18 @@
         status += ' No saved game state found, starting fresh.';
       }
     }
+
+    // Auto-save every 60 seconds
+    setInterval(() => {
+      if (placed.length > 0) saveCurrentRoom();
+    }, 60_000);
+
+    // Refresh Toybox inventory every 5 seconds (picks up inbox-ingested assets)
+    setInterval(async () => {
+      try {
+        inventory = await invoke<AssetInventory>('get_asset_inventory');
+      } catch { /* silent */ }
+    }, 5_000);
   });
 
   async function loadRoomList() {
@@ -370,6 +382,7 @@
       const jsonString = JSON.stringify(payload);
       status = await invoke<string>('save_room', { roomId: activeRoomId, jsonString });
       await loadRoomList();
+      generateThumbnail(activeRoomId);
     } catch (error) {
       status = `Save failed: ${String(error)}`;
     }
@@ -400,11 +413,91 @@
       if (savedState && Array.isArray(savedState.entities)) {
         placed = savedState.entities;
         activeRoomId = roomId;
+        // Restore world settings from saved JSON
+        if (savedState.world_settings) {
+          worldSettings = {
+            time_of_day: savedState.world_settings.time_of_day ?? 'day',
+            weather: savedState.world_settings.weather ?? 'clear'
+          };
+        }
         status = `Loaded room: ${roomId}`;
       }
     } catch (error) {
       status = `Failed to load room ${roomId}: ${error}`;
     }
+  }
+
+  async function refreshInventory() {
+    try {
+      inventory = await invoke<AssetInventory>('get_asset_inventory');
+      status = 'Toybox refreshed.';
+    } catch (error) {
+      status = `Refresh failed: ${error}`;
+    }
+  }
+
+  // ── Thumbnail generation using a hidden <canvas> ──────────────────────────
+  const CATEGORY_COLORS: Record<string, string> = {
+    heroes: '#60a5fa',
+    terrain: '#6b7280',
+    enemies: '#f87171',
+    collectibles: '#fbbf24',
+    portals: '#a78bfa',
+    decorations: '#34d399'
+  };
+
+  function generateThumbnail(roomId: string) {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 160;
+      canvas.height = 90;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Background
+      ctx.fillStyle = worldSettings.time_of_day === 'night' ? '#0f172a'
+        : worldSettings.time_of_day === 'sunset' ? '#7c2d12'
+        : worldSettings.time_of_day === 'morning' ? '#164e63'
+        : '#1e3a5f';
+      ctx.fillRect(0, 0, 160, 90);
+
+      if (placed.length === 0) {
+        localStorage.setItem(`thumb_${roomId}`, canvas.toDataURL());
+        return;
+      }
+
+      // Compute world bounds from placed entities
+      const xs = placed.map(e => e.position.x);
+      const ys = placed.map(e => e.position.y);
+      const minX = Math.min(...xs) - 32;
+      const minY = Math.min(...ys) - 32;
+      const rangeX = Math.max(...xs) - minX + 64;
+      const rangeY = Math.max(...ys) - minY + 64;
+
+      const scaleX = 160 / rangeX;
+      const scaleY = 90 / rangeY;
+      const scale = Math.min(scaleX, scaleY);
+
+      for (const e of placed) {
+        const px = (e.position.x - minX) * scale;
+        const py = (e.position.y - minY) * scale;
+        ctx.fillStyle = CATEGORY_COLORS[e.category] ?? '#94a3b8';
+        if (e.category === 'terrain') {
+          ctx.fillRect(px - 6, py - 2, 12, 4);
+        } else {
+          ctx.beginPath();
+          ctx.arc(px, py, e.category === 'heroes' ? 5 : 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      localStorage.setItem(`thumb_${roomId}`, canvas.toDataURL());
+    } catch { /* non-critical */ }
+  }
+
+  function getThumbnail(roomId: string): string | null {
+    try { return localStorage.getItem(`thumb_${roomId}`); }
+    catch { return null; }
   }
 
   function createNewRoom() {
@@ -497,6 +590,7 @@
     <button id="btn-play" class="play" on:click={play}>▶ PLAY</button>
     <button id="btn-save" class="save" on:click={saveCurrentRoom}>💾 SAVE</button>
     <button id="btn-export" class="export" on:click={exportGame} style="background: #10b981; color: white;">📦 EXPORT</button>
+    <button id="btn-refresh-toybox" class="icon-btn refresh-btn" on:click={refreshInventory} title="Refresh Toybox from disk">🔄</button>
     <button class:active={!eraserMode} on:click={() => (eraserMode = false)} style="display: flex; align-items: center; gap: 8px;">
       <span>Stamp:</span>
       <span class="active-visual-container">
@@ -695,6 +789,7 @@
     isVisible={bookshelfOpen}
     {rooms}
     {activeRoomId}
+    {getThumbnail}
     on:selectRoom={(e) => { loadSelectedRoom(e.detail); bookshelfOpen = false; }}
     on:newRoom={() => { createNewRoom(); bookshelfOpen = false; }}
     on:deleteRoom={(e) => deleteRoom(e.detail)}
@@ -838,6 +933,17 @@
     padding: 6px 12px;
     border-radius: 12px;
   }
+
+  .refresh-btn {
+    background: #92400e;
+    color: #fde68a;
+    font-size: 1rem;
+  }
+
+  .refresh-btn:hover {
+    background: #b45309;
+  }
+
 
   .quick-ribbon {
     overflow-x: auto;

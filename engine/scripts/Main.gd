@@ -26,6 +26,7 @@ var target_spawn_portal_id: String = ""
 var found_spawn_portal_pos: Variant = null
 var current_weather: String = "clear"
 var score: int = 0
+var keys_collected: Dictionary = {}  # key_color -> count
 
 
 func _ready() -> void:
@@ -200,10 +201,14 @@ func spawn_entity(data: Dictionary) -> Node2D:
 			node = _make_enemy(data, sidecar)
 		"collectible":
 			node = _make_collectible(data, sidecar)
+		"key_collectible":
+			node = _make_key_collectible(data, sidecar)
 		"checkpoint":
 			node = _make_checkpoint(data, sidecar)
 		"portal":
 			node = _make_portal(data, sidecar)
+		"locked_door":
+			node = _make_locked_door(data, sidecar)
 		_:
 			node = _make_decoration(data, sidecar)
 
@@ -236,6 +241,12 @@ func spawn_entity(data: Dictionary) -> Node2D:
 			)
 			if str(data.get("instance_id", "")) == target_spawn_portal_id:
 				found_spawn_portal_pos = node.global_position
+	elif runtime_template == "locked_door":
+		if node is Area2D:
+			node.body_entered.connect(func(body):
+				if body == active_player:
+					_on_locked_door_entered(node, data)
+			)
 
 	_apply_lighting_if_needed(node, sidecar)
 	_apply_audio_if_needed(node, sidecar)
@@ -282,6 +293,10 @@ func _make_enemy(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
 		var attrs: Dictionary = sidecar.get("baseline_attributes", {})
 		body.set("patrol_speed", float(attrs.get("movement_speed", 70)))
 		body.set("gravity_scale", float(attrs.get("gravity_scale", 1.0)))
+		body.set("damage_value", int(attrs.get("damage_value", 10)))
+		# Boss mode: max_health > 100 signals a boss
+		var max_hp := int(attrs.get("max_health", 20))
+		body.set("boss_mode", max_hp > 100)
 
 	return body
 
@@ -303,6 +318,25 @@ func _make_collectible(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	return area
 
 
+func _make_key_collectible(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(20, 20), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color(1.0, 0.85, 0.0, 0.95))
+
+	var script := load(COLLECTIBLE_SCRIPT)
+	if script != null:
+		area.set_script(script)
+		var gameplay: Dictionary = sidecar.get("gameplay_logic", {})
+		area.set("score_value", 0)
+		area.set("heal_value", 0)
+		area.set("asset_id", str(data.get("asset_id", "")))
+		# Store key_color as metadata so on_collectible_picked_up can read it
+		area.set_meta("key_color", str(gameplay.get("key_color", "gold")))
+
+	return area
+
+
 func _make_checkpoint(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	var area := Area2D.new()
 	var size := _collision_size(sidecar, Vector2(40, 56), data)
@@ -316,6 +350,19 @@ func _make_portal(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	var size := _collision_size(sidecar, Vector2(48, 64), data)
 	_add_box_collision(area, size)
 	_add_visuals(area, sidecar, size, Color(0.65, 0.45, 0.2, 0.8))
+	return area
+
+
+func _make_locked_door(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 64), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color(0.8, 0.15, 0.15, 0.9))
+
+	var gameplay: Dictionary = sidecar.get("gameplay_logic", {})
+	area.set_meta("requires_key", bool(gameplay.get("requires_key", true)))
+	area.set_meta("key_color", str(gameplay.get("key_color", "gold")))
+
 	return area
 
 
@@ -558,6 +605,37 @@ func _on_portal_entered(_portal_node: Node2D, portal_data: Dictionary) -> void:
 		call_deferred("transition_to_room", target_room, target_portal)
 
 
+func _on_locked_door_entered(door_node: Node2D, door_data: Dictionary) -> void:
+	var key_color := str(door_node.get_meta("key_color", "gold"))
+	var count: int = keys_collected.get(key_color, 0)
+
+	if count <= 0:
+		print("Locked door requires a '%s' key!" % key_color)
+		# Flash door red to signal locked
+		var tween := create_tween()
+		tween.tween_property(door_node, "modulate", Color(2.0, 0.2, 0.2), 0.08)
+		tween.tween_property(door_node, "modulate", Color(1, 1, 1), 0.2)
+		return
+
+	# Consume the key and unlock
+	keys_collected[key_color] = count - 1
+	print("Unlocked door with '%s' key! Remaining: %d" % [key_color, keys_collected[key_color]])
+
+	# Flash open
+	var tween := create_tween()
+	tween.tween_property(door_node, "modulate", Color(0.3, 2.0, 0.3), 0.1)
+	tween.tween_property(door_node, "scale", Vector2(0, 1), 0.25).set_ease(Tween.EASE_IN)
+	tween.tween_callback(door_node.queue_free)
+
+	# Optionally transition if the door has a target_room modifier
+	var modifiers: Dictionary = door_data.get("modifiers", {}) if door_data.has("modifiers") else {}
+	var target_room := str(modifiers.get("target_room", ""))
+	var target_portal := str(modifiers.get("target_portal", ""))
+	if target_room != "":
+		call_deferred("transition_to_room", target_room, target_portal)
+
+
+
 func transition_to_room(target_room_name: String, target_portal_id: String) -> void:
 	print("Transitioning to room: ", target_room_name, " spawning at portal: ", target_portal_id)
 	
@@ -588,7 +666,20 @@ func clear_spawned_entities() -> void:
 
 func on_collectible_picked_up(payload: Dictionary) -> void:
 	score += int(payload.get("score_value", 0))
-	print("Score: ", score, "  (+", payload.get("score_value", 0), ")")
+	if int(payload.get("score_value", 0)) > 0:
+		print("Score: ", score, "  (+", payload.get("score_value", 0), ")")
+
+	# Key pickup — find the node that emitted it to read key_color
+	var asset_id_val := str(payload.get("asset_id", ""))
+	if asset_id_val.contains("key"):
+		var key_color := "gold"
+		# Try to find node by asset_id to get stored key_color metadata
+		for node in spawned_entities:
+			if is_instance_valid(node) and node.has_meta("key_color"):
+				key_color = str(node.get_meta("key_color"))
+				break
+		keys_collected[key_color] = keys_collected.get(key_color, 0) + 1
+		print("Key collected! %s keys of color '%s'" % [keys_collected[key_color], key_color])
 
 
 func _configure_camera_limits() -> void:

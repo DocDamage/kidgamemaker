@@ -33,8 +33,16 @@
       "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
     },
     {
+      "instance_id": "floor_003",
+      "asset_id": "stone_floor",
+      "category": "terrain",
+      "type": "terrain",
+      "position": { "x": 620, "y": 390 },
+      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+    },
+    {
       "instance_id": "enemy_001",
-      "asset_id": "slime_animation_enemy",
+      "asset_id": "slime_patrol",
       "category": "enemies",
       "type": "enemy",
       "position": { "x": 470, "y": 335 },
@@ -45,15 +53,15 @@
       "asset_id": "gold_ruby",
       "category": "collectibles",
       "type": "collectible",
-      "position": { "x": 625, "y": 305 },
+      "position": { "x": 625, "y": 345 },
       "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
     },
     {
-      "instance_id": "sign_001",
-      "asset_id": "neon_sign",
-      "category": "decorations",
-      "type": "decoration",
-      "position": { "x": 760, "y": 250 },
+      "instance_id": "heart_001",
+      "asset_id": "heart_pickup",
+      "category": "collectibles",
+      "type": "collectible",
+      "position": { "x": 200, "y": 345 },
       "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
     }
   ]

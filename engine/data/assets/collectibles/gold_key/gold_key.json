@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "asset_id": "gold_key",
+  "asset_name": "Gold Key",
+  "category": "collectibles",
+  "runtime_template": "key_collectible",
+  "visual": "🔑",
+  "visual_tags": ["key", "unlock", "gold"],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [20, 20]
+  },
+  "gameplay_logic": {
+    "on_pickup": "collect_key",
+    "score_value": 0,
+    "heal_value": 0,
+    "key_color": "gold"
+  }
+}
