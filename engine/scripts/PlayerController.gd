@@ -220,6 +220,20 @@ var spindash_charge: float = 0.0
 var is_spindash_rolling: bool = false
 var spindash_roll_timer: float = 0.0
 
+# New Advanced Gameplay Mechanics variables
+var _was_in_water: bool = false
+var is_rail_grinding: bool = false
+var is_looping: bool = false
+var loop_center: Vector2 = Vector2.ZERO
+var loop_radius: float = 64.0
+var loop_angle: float = 0.0
+var loop_direction: float = 1.0
+var loop_accumulated_angle: float = 0.0
+var emeralds_collected: int = 0
+var is_golden_flight: bool = false
+var golden_flight_timer: float = 0.0
+
+
 # Speed Booster & Shinespark
 var run_timer: float = 0.0
 var speed_booster_active: bool = false
@@ -471,6 +485,43 @@ func _physics_process(delta: float) -> void:
 	if PlayerClearPipe.process_travel(self):
 		return
 
+	# ─── LOOP-DE-LOOP AUTOPILOT OVERRIDE ───
+	if not is_looping:
+		for i in get_slide_collision_count():
+			var col = get_slide_collision(i)
+			var collider = col.get_collider()
+			if collider != null and (collider.name.to_lower().contains("loop") or collider.has_meta("loop_de_loop")):
+				if abs(velocity.x) > 150.0:
+					is_looping = true
+					loop_center = collider.global_position
+					loop_radius = 64.0
+					var entry_vec = global_position - loop_center
+					loop_angle = entry_vec.angle()
+					loop_direction = 1.0 if velocity.x > 0.0 else -1.0
+					loop_accumulated_angle = 0.0
+					if main != null and main.has_method("play_sfx"):
+						main.play_sfx("coin")
+					break
+
+	if is_looping:
+		var angular_velocity = (active_speed * 2.0) / loop_radius
+		var angle_step = angular_velocity * delta
+		loop_angle += loop_direction * angle_step
+		loop_accumulated_angle += angle_step
+		
+		global_position = loop_center + Vector2(cos(loop_angle), sin(loop_angle)) * loop_radius
+		velocity = Vector2(-sin(loop_angle), cos(loop_angle)) * loop_direction * active_speed * 2.0
+		
+		if loop_accumulated_angle >= TAU:
+			is_looping = false
+			velocity.x = loop_direction * active_speed * 2.5
+			velocity.y = -200.0
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("🚀 LOOP-DE-LOOP!", global_position, Color.GOLD)
+		move_and_slide()
+		queue_redraw()
+		return
+
 	# ─── SQUID WALL SWIM OVERRIDE ───
 	if is_squid_form and is_on_wall():
 		var touching_painted_wall := false
@@ -665,7 +716,9 @@ func _physics_process(delta: float) -> void:
 
 	# Determine final active speed
 	var active_speed := movement_speed
-	if is_star_mode:
+	if is_golden_flight:
+		active_speed = movement_speed * 2.0
+	elif is_star_mode:
 		active_speed = movement_speed * 1.6
 	elif is_squid_form:
 		active_speed = movement_speed * 1.8
@@ -887,7 +940,9 @@ func _physics_process(delta: float) -> void:
 
 	# Water buoyancy, jetpack thrust, glider cape glide, or standard gravity
 	if not is_dashing and not is_ground_pounding:
-		if is_creative or is_star_mode:
+		if is_rail_grinding:
+			velocity.y = 0.0
+		elif is_creative or is_star_mode or is_golden_flight:
 			var v_input := 0.0
 			if is_up_pressed():
 				v_input = -1.0
@@ -897,8 +952,12 @@ func _physics_process(delta: float) -> void:
 			if is_jump_pressed():
 				velocity.y = -active_speed if not gravity_inverted else active_speed
 		elif inside_water:
-			velocity.y += gravity * (1.0 - water_buoyancy) * delta
-			velocity.y = clamp(velocity.y, -220.0, 180.0)
+			var v_input := 0.0
+			if is_up_pressed() or is_jump_pressed():
+				v_input = -1.0
+			elif is_down_pressed():
+				v_input = 1.0
+			velocity.y = move_toward(velocity.y, v_input * active_speed * 0.8, gravity * 0.5 * delta)
 		elif has_jetpack and jetpack_fuel > 0.0 and is_jump_pressed():
 			velocity.y = -260.0 if not gravity_inverted else 260.0
 			jetpack_fuel -= delta * 35.0
@@ -1007,6 +1066,51 @@ func _physics_process(delta: float) -> void:
 						global_position.x += nudge
 						cleared = true
 						break
+
+	# Mermaid morph visual toggle
+	if inside_water != _was_in_water:
+		_was_in_water = inside_water
+		PlayerVisualEffects.toggle_mermaid_visuals(self, inside_water)
+
+	# Golden flight mode timer updates
+	if is_golden_flight:
+		golden_flight_timer -= delta
+		if golden_flight_timer <= 0.0:
+			is_golden_flight = false
+			_invincible = false
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("Golden Flight Mode Expired! 🌟", global_position, Color.WHITE)
+
+	# Rail Grinding Logic
+	var on_rail := false
+	var rail_normal := Vector2.UP
+	for i in get_slide_collision_count():
+		var col = get_slide_collision(i)
+		var collider = col.get_collider()
+		if collider != null and (collider.name.to_lower().contains("rail") or collider.name.to_lower().contains("grind") or collider.has_meta("is_rail")):
+			on_rail = true
+			rail_normal = col.get_normal()
+			break
+	
+	if on_rail and not is_rail_grinding and velocity.y >= 0.0:
+		is_rail_grinding = true
+		if main != null and main.has_method("play_sfx"):
+			main.play_sfx("coin")
+			
+	if is_rail_grinding:
+		if not on_rail or is_jump_pressed():
+			is_rail_grinding = false
+			if is_jump_pressed():
+				velocity.y = jump_force * 1.1
+				if main != null and main.has_method("play_sfx"):
+					main.play_sfx("jump")
+		else:
+			var grind_dir = 1.0 if velocity.x >= 0.0 else -1.0
+			if velocity.x == 0.0:
+				grind_dir = facing_direction
+			velocity.x = grind_dir * active_speed * 1.4
+			velocity.y = 0.0
+			PlayerVisualEffects.spawn_grind_sparks(self, delta)
 
 	move_and_slide()
 
@@ -1187,3 +1291,14 @@ func activate_star_mode() -> void:
 		main.play_sfx("coin")
 	if main != null and main.has_method("spawn_floating_text"):
 		main.spawn_floating_text("🌟 STAR MODE INVINCIBILITY! 🌟", global_position, Color.GOLD)
+
+
+func activate_golden_flight() -> void:
+	is_golden_flight = true
+	golden_flight_timer = 15.0
+	_invincible = true
+	var main = get_parent()
+	if main != null and main.has_method("play_sfx"):
+		main.play_sfx("coin")
+	if main != null and main.has_method("spawn_floating_text"):
+		main.spawn_floating_text("🌟 GOLDEN SUPER FLIGHT MODE! 🌟", global_position, Color.GOLD)

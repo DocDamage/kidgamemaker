@@ -78,21 +78,38 @@ func _complete_cooking() -> void:
 
 	if timer >= 2.5 and timer < 3.5:
 		_play("coin")
-		status_lbl.text = "SO TASTY! (+20 Max HP!)"
-		status_lbl.label_settings.font_color = Color.GOLD
-		var max_health := int(player.get("max_health")) + 20
-		player.set("max_health", max_health)
-		if player.has_method("heal"):
-			player.heal(max_health)
-		_float_text("SO TASTY! +20 Max HP", player, Color.GOLD)
+		
+		# Read customized recipe output
+		var cook_result := "food_steak"
+		if main_ref != null and "active_cooking_modifiers" in main_ref:
+			cook_result = str(main_ref.active_cooking_modifiers.get("cook_result", "food_steak"))
+
+		if cook_result == "food_kebab":
+			status_lbl.text = "SO TASTY! Speed Kebab (Speed Boost!)"
+			status_lbl.label_settings.font_color = Color.ORANGE
+			player.set("speed_boost_timer", 10.0)
+			_float_text("🔥 SPEED BOOST!", player, Color.ORANGE)
+		elif cook_result == "food_soup":
+			status_lbl.text = "SO TASTY! Super Soup (Giant Form!)"
+			status_lbl.label_settings.font_color = Color.YELLOW
+			player.set("giant_timer", 12.0)
+			player.set("is_giant", true)
+			player.scale = Vector2(2.0, 2.0)
+			_float_text("🍄 GIANT SIZE!", player, Color.YELLOW)
+		else: # "food_steak"
+			status_lbl.text = "SO TASTY! Healing Steak (+50 HP!)"
+			status_lbl.label_settings.font_color = Color.GOLD
+			if player.has_method("heal"):
+				player.heal(50)
+			_float_text("🍖 HEAL +50 HP", player, Color.GOLD)
 	else:
 		_play("hit")
 		if timer < 2.5:
-			status_lbl.text = "Raw steak! (No HP)"
+			status_lbl.text = "Raw food! (No effect)"
 			status_lbl.label_settings.font_color = Color.RED
 			_float_text("RAW! 0 HP", player, Color.RED)
 		else:
-			status_lbl.text = "Charcoal burnt! (No HP)"
+			status_lbl.text = "Charcoal burnt! (No effect)"
 			status_lbl.label_settings.font_color = Color.GRAY
 			_float_text("BURNT! 0 HP", player, Color.DARK_GRAY)
 

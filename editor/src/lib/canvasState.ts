@@ -3,7 +3,7 @@ export type Vec2 = {
   y: number;
 };
 
-export type EntityModifierValue = string | number | boolean | undefined;
+export type EntityModifierValue = string | number | boolean | string[] | undefined;
 
 export type EntityModifiers = {
   variant: string;

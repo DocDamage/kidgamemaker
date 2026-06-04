@@ -22,4 +22,4 @@ func _on_body_entered(body: Node) -> void:
 	cooldown = 1.0
 	var main: Node = get_tree().get_root().get_node_or_null("Main")
 	if main != null and main.has_method(action_method):
-		main.call_deferred(action_method)
+		main.call_deferred(action_method, self)

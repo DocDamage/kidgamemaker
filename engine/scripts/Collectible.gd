@@ -49,6 +49,14 @@ func _on_body_entered(body: Node) -> void:
 
 	_collected = true
 
+	# -- Check for Emerald/Ruby collections for Golden Flight Mode --
+	if asset_id == "gold_ruby" or asset_id == "star_piece" or asset_id.contains("emerald"):
+		if "emeralds_collected" in body:
+			body.emeralds_collected += 1
+			print("Emeralds collected: ", body.emeralds_collected)
+			if body.emeralds_collected >= 7 and not body.get("is_golden_flight"):
+				body.call("activate_golden_flight")
+
 	# ── Heal the player if this is a health pickup ──
 	if heal_value > 0 and body.has_method("heal"):
 		body.heal(heal_value)

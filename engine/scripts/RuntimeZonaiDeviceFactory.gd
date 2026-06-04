@@ -24,6 +24,12 @@ static func create(app, data: Dictionary, sidecar: Dictionary, type: String, spr
 		_configure_beam(body, mods, beam_script)
 	elif type == "zonai_battery":
 		_configure_battery(body, mods)
+	elif type == "zonai_steering_stick":
+		_configure_steering_stick(body, mods)
+	elif type == "zonai_stabilizer":
+		_configure_stabilizer(body, mods)
+	elif type == "zonai_flamethrower":
+		_configure_flamethrower(body, mods)
 
 	return body
 
@@ -111,6 +117,35 @@ static func _configure_beam(body: StaticBody2D, mods: Dictionary, beam_script: S
 static func _configure_battery(body: StaticBody2D, mods: Dictionary) -> void:
 	body.set("energy", float(mods.get("battery_capacity", 100.0)))
 	body.set("max_energy", float(mods.get("battery_capacity", 100.0)))
+
+
+static func _configure_steering_stick(body: StaticBody2D, _mods: Dictionary) -> void:
+	body.set_meta("is_steering_stick", true)
+	body.set("powered", true)
+
+
+static func _configure_stabilizer(body: StaticBody2D, _mods: Dictionary) -> void:
+	body.set_meta("is_stabilizer", true)
+	body.set("powered", true)
+
+
+static func _configure_flamethrower(body: StaticBody2D, mods: Dictionary) -> void:
+	var direction := str(mods.get("zonai_direction", "right"))
+	body.set("force_direction", direction_string_to_vector(direction))
+	body.set("powered", true)
+
+	var particles := CPUParticles2D.new()
+	particles.name = "FireParticles"
+	particles.amount = 20
+	particles.lifetime = 0.5
+	particles.direction = direction_string_to_vector(direction)
+	particles.spread = 25.0
+	particles.gravity = Vector2.ZERO
+	particles.initial_velocity_min = 120.0
+	particles.initial_velocity_max = 220.0
+	particles.color = Color(1.0, 0.4, 0.1)
+	particles.position = Vector2.ZERO
+	body.add_child(particles)
 
 
 static func direction_string_to_vector(dir: String) -> Vector2:

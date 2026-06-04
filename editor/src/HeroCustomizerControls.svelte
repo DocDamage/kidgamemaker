@@ -26,6 +26,21 @@
     entity.modifiers.physics_preset = id;
     dispatch('saveRoom');
   }
+
+  let startingItems: string[] = [];
+  $: startingItems = entity.modifiers.starting_items || [];
+
+  function toggleStartingItem(itemId: string) {
+    let items = [...startingItems];
+    const idx = items.indexOf(itemId);
+    if (idx >= 0) {
+      items.splice(idx, 1);
+    } else {
+      items.push(itemId);
+    }
+    entity.modifiers.starting_items = items;
+    dispatch('saveRoom');
+  }
 </script>
 
 {#if isHero}
@@ -78,6 +93,34 @@
       {/each}
     </div>
   </div>
+
+  <div class="option-group starting-items-group">
+    <span class="option-label-text">🎒 Starting Backpack Items:</span>
+    <div class="items-grid">
+      {#each [
+        { id: 'weapon_sword', emoji: '⚔️', name: 'Sword' },
+        { id: 'weapon_boomerang', emoji: '🪃', name: 'Boomerang' },
+        { id: 'weapon_bomb', emoji: '💣', name: 'Bomb' },
+        { id: 'weapon_paint_gun', emoji: '🔫', name: 'Paint Gun' },
+        { id: 'tool_hammer', emoji: '🔨', name: 'Hammer' },
+        { id: 'tool_lantern', emoji: '🏮', name: 'Lantern' },
+        { id: 'mat_metal_scrap', emoji: '🔩', name: 'Metal' },
+        { id: 'mat_fire_powder', emoji: '🌶️', name: 'Spice' },
+        { id: 'mat_green_herb', emoji: '🌿', name: 'Herb' },
+        { id: 'mat_sweet_honey', emoji: '🍯', name: 'Honey' }
+      ] as item}
+        {@const hasItem = startingItems.includes(item.id)}
+        <button
+          type="button"
+          class:active-option={hasItem}
+          style:--option-color={hasItem ? '#fbbf24' : '#475569'}
+          on:click={() => toggleStartingItem(item.id)}
+        >
+          {item.emoji} {item.name}
+        </button>
+      {/each}
+    </div>
+  </div>
 {/if}
 
 <style>
@@ -88,7 +131,8 @@
   }
 
   .hero-job-group,
-  .physics-preset-group {
+  .physics-preset-group,
+  .starting-items-group {
     margin-top: 16px;
   }
 
@@ -100,7 +144,8 @@
 
   .costume-grid,
   .class-grid,
-  .physics-grid {
+  .physics-grid,
+  .items-grid {
     display: grid;
     gap: 8px;
     margin-top: 8px;
@@ -111,7 +156,8 @@
   }
 
   .class-grid,
-  .physics-grid {
+  .physics-grid,
+  .items-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 

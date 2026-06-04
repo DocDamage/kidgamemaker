@@ -10,11 +10,34 @@
 
   $: isShopkeeper = entity.type === 'shopkeeper';
   $: isBbqSpit = entity.type === 'bbq_spit';
+  $: isCraftingBench = entity.type === 'crafting_bench';
   $: isGrappleRing = entity.type === 'grapple_ring';
   $: isBoomerang = entity.asset_id === 'weapon_boomerang';
   $: isBomb = entity.asset_id === 'weapon_bomb';
   $: isFocusAmulet = entity.asset_id === 'focus_amulet';
   $: isRunSurface = entity.type === 'wall_run_surface' || entity.type === 'ceiling_run_surface';
+
+  $: if (isShopkeeper) {
+    if (entity.modifiers.shop_item_1 === undefined) entity.modifiers.shop_item_1 = 'alchemy_potion_speed';
+    if (entity.modifiers.shop_price_1 === undefined) entity.modifiers.shop_price_1 = 10;
+    if (entity.modifiers.shop_item_2 === undefined) entity.modifiers.shop_item_2 = 'tool_hammer';
+    if (entity.modifiers.shop_price_2 === undefined) entity.modifiers.shop_price_2 = 15;
+    if (entity.modifiers.shop_item_3 === undefined) entity.modifiers.shop_item_3 = 'weapon_sword';
+    if (entity.modifiers.shop_price_3 === undefined) entity.modifiers.shop_price_3 = 20;
+  }
+
+  $: if (isBbqSpit) {
+    if (entity.modifiers.cook_difficulty === undefined) entity.modifiers.cook_difficulty = 'easy';
+    if (entity.modifiers.cook_result === undefined) entity.modifiers.cook_result = 'food_steak';
+  }
+
+  $: if (isCraftingBench) {
+    if (entity.modifiers.craft_result === undefined) entity.modifiers.craft_result = 'potion';
+    if (entity.modifiers.craft_material_1 === undefined) entity.modifiers.craft_material_1 = 'mat_metal_scrap';
+    if (entity.modifiers.craft_count_1 === undefined) entity.modifiers.craft_count_1 = 1;
+    if (entity.modifiers.craft_material_2 === undefined) entity.modifiers.craft_material_2 = '';
+    if (entity.modifiers.craft_count_2 === undefined) entity.modifiers.craft_count_2 = 1;
+  }
 
   function saveRoom() {
     dispatch('saveRoom');
@@ -76,6 +99,33 @@
       on:change={saveRoom}
     />
   </div>
+  <div class="option-group">
+    <span class="option-label-text">Shop Slot 3 Item:</span>
+    <select
+      class="option-select"
+      bind:value={entity.modifiers.shop_item_3}
+      on:change={saveRoom}
+    >
+      <option value="alchemy_potion_speed">Speed Potion 🧪</option>
+      <option value="alchemy_potion_jump">Jump Potion 🥤</option>
+      <option value="tool_hammer">Toy Hammer 🔨</option>
+      <option value="weapon_sword">Toy Sword ⚔️</option>
+      <option value="weapon_boomerang">Boomerang 🪃</option>
+    </select>
+    <div class="option-label price-label">
+      <span>Slot 3 Price:</span>
+      <span>{entity.modifiers.shop_price_3 ?? 20} Coins</span>
+    </div>
+    <input
+      type="range"
+      min="2"
+      max="50"
+      step="1"
+      class="option-slider"
+      bind:value={entity.modifiers.shop_price_3}
+      on:change={saveRoom}
+    />
+  </div>
 {:else if isBbqSpit}
   <div class="option-group">
     <span class="option-label-text">Cooking Difficulty 🍖:</span>
@@ -88,6 +138,91 @@
       <option value="medium">🟡 Medium (Normal timing)</option>
       <option value="hard">🔴 Hard (Rapid color shifts)</option>
     </select>
+  </div>
+  <div class="option-group">
+    <span class="option-label-text">Cooking Result 🥩:</span>
+    <select
+      class="option-select"
+      bind:value={entity.modifiers.cook_result}
+      on:change={saveRoom}
+    >
+      <option value="food_steak">🍖 Healing Steak (+50 HP)</option>
+      <option value="food_kebab">🔥 Speed Kebab (Speed Boost!)</option>
+      <option value="food_soup">🍄 Super Soup (Giant Form!)</option>
+    </select>
+  </div>
+{:else if isCraftingBench}
+  <div class="option-group">
+    <span class="option-label-text">Crafted Item Result 🧪:</span>
+    <select
+      class="option-select"
+      bind:value={entity.modifiers.craft_result}
+      on:change={saveRoom}
+    >
+      <option value="potion">🧪 Magic Potion</option>
+      <option value="sword">⚔️ Toy Sword</option>
+      <option value="shield">🛡️ Wooden Shield</option>
+      <option value="weapon_boomerang">🪃 Boomerang</option>
+      <option value="weapon_bomb">💣 Bomb</option>
+      <option value="weapon_paint_gun">🔫 Paint Gun</option>
+    </select>
+  </div>
+  <div class="option-group">
+    <span class="option-label-text">Input Material 1 🔩:</span>
+    <select
+      class="option-select"
+      bind:value={entity.modifiers.craft_material_1}
+      on:change={saveRoom}
+    >
+      <option value="mat_metal_scrap">🔩 Metal Scrap</option>
+      <option value="mat_fire_powder">🌶️ Fire Powder</option>
+      <option value="mat_green_herb">🌿 Green Herb</option>
+      <option value="mat_sweet_honey">🍯 Sweet Honey</option>
+      <option value="sword">⚔️ Toy Sword</option>
+    </select>
+    <div class="option-label">
+      <span>Count 1:</span>
+      <span>{entity.modifiers.craft_count_1 ?? 1}</span>
+    </div>
+    <input
+      type="range"
+      min="1"
+      max="5"
+      step="1"
+      class="option-slider"
+      bind:value={entity.modifiers.craft_count_1}
+      on:change={saveRoom}
+    />
+  </div>
+  <div class="option-group">
+    <span class="option-label-text">Input Material 2 (Optional) 🍯:</span>
+    <select
+      class="option-select"
+      bind:value={entity.modifiers.craft_material_2}
+      on:change={saveRoom}
+    >
+      <option value="">❌ None</option>
+      <option value="mat_metal_scrap">🔩 Metal Scrap</option>
+      <option value="mat_fire_powder">🌶️ Fire Powder</option>
+      <option value="mat_green_herb">🌿 Green Herb</option>
+      <option value="mat_sweet_honey">🍯 Sweet Honey</option>
+      <option value="sword">⚔️ Toy Sword</option>
+    </select>
+    {#if entity.modifiers.craft_material_2}
+      <div class="option-label">
+        <span>Count 2:</span>
+        <span>{entity.modifiers.craft_count_2 ?? 1}</span>
+      </div>
+      <input
+        type="range"
+        min="1"
+        max="5"
+        step="1"
+        class="option-slider"
+        bind:value={entity.modifiers.craft_count_2}
+        on:change={saveRoom}
+      />
+    {/if}
   </div>
 {:else if isGrappleRing}
   <div class="option-group">

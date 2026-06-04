@@ -99,6 +99,12 @@ static func _create_node(
 			return app._make_zonai_device(data, sidecar, "zonai_beam")
 		"zonai_battery":
 			return app._make_zonai_device(data, sidecar, "zonai_battery")
+		"zonai_steering_stick":
+			return app._make_zonai_device(data, sidecar, "zonai_steering_stick")
+		"zonai_stabilizer":
+			return app._make_zonai_device(data, sidecar, "zonai_stabilizer")
+		"zonai_flamethrower":
+			return app._make_zonai_device(data, sidecar, "zonai_flamethrower")
 		"companion_pikmin":
 			return app._make_pikmin(data, sidecar)
 		"companion_ghost":
@@ -152,6 +158,9 @@ static func _prepare_node(
 	node.set_meta("asset_id", asset_id)
 
 	var modifiers: Dictionary = data.get("modifiers", {})
+	node.set_meta("modifiers", modifiers)
+	for key in modifiers:
+		node.set_meta(key, modifiers[key])
 	var scale_multiplier := float(modifiers.get("scale_multiplier", 1.0))
 	node.scale = Vector2(scale_multiplier, scale_multiplier)
 
@@ -178,6 +187,15 @@ static func _register_node(
 			app.active_player_2 = node
 			node.set("player_index", 2)
 			node.modulate = Color(0.5, 0.8, 1.0, 1.0)
+		
+		# Pre-populate starting backpack items if configured in modifiers
+		var modifiers: Dictionary = data.get("modifiers", {})
+		if modifiers.has("starting_items"):
+			var items = modifiers.get("starting_items")
+			if typeof(items) == TYPE_ARRAY:
+				for item in items:
+					if node.has_method("add_to_backpack"):
+						node.add_to_backpack(str(item))
 		
 		# Attach visual progression tracker
 		if app.has_method("_attach_visual_progression"):

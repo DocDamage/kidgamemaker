@@ -22,7 +22,7 @@ static func _collect_power_state(contraption: Node) -> Dictionary:
 			if asset_id == "zonai_battery":
 				total_energy += child.get("energy")
 				batteries.append(child)
-			elif asset_id in ["zonai_fan", "zonai_rocket", "zonai_beam"]:
+			elif asset_id in ["zonai_fan", "zonai_rocket", "zonai_beam", "zonai_flamethrower", "zonai_stabilizer"]:
 				if asset_id == "zonai_rocket":
 					if child.get("active"):
 						active_consumers.append(child)
@@ -65,6 +65,10 @@ static func _consumer_drain_rate(active_consumers: Array, delta: float) -> float
 			drain_rate += 50.0 * delta
 		elif asset_id == "zonai_beam":
 			drain_rate += 15.0 * delta
+		elif asset_id == "zonai_flamethrower":
+			drain_rate += 20.0 * delta
+		elif asset_id == "zonai_stabilizer":
+			drain_rate += 5.0 * delta
 	return drain_rate
 
 
@@ -91,10 +95,63 @@ static func _power_down_consumer(child: Node) -> void:
 
 static func _apply_forces(contraption: RigidBody2D, delta: float) -> void:
 	for child in contraption.get_children():
-		if not child.has_meta("asset_id"):
-			continue
+		var asset_id = ""
+		if child.has_meta("asset_id"):
+			asset_id = child.get_meta("asset_id")
+		
+		# 1. Stabilizer check (keeps contraption upright)
+		if child.has_meta("is_stabilizer") and child.get("powered"):
+			var restore_torque = -contraption.rotation * 50000.0 - contraption.angular_velocity * 10000.0
+			contraption.apply_torque(restore_torque)
 
-		var asset_id = child.get_meta("asset_id")
+		# 2. Steering Stick check
+		if child.has_meta("is_steering_stick") and child.get("powered"):
+			var main = contraption.get_parent()
+			if main != null and main.has_method("get"):
+				var player = main.get("active_player")
+				if player != null and is_instance_valid(player):
+					var dist = child.global_position.distance_to(player.global_position)
+					if dist < 45.0:
+						player.global_position = child.global_position
+						player.velocity = Vector2.ZERO
+						
+						var thrust := 0.0
+						var torque := 0.0
+						if player.has_method("is_up_pressed") and player.is_up_pressed():
+							thrust = 1000.0
+						elif player.has_method("is_down_pressed") and player.is_down_pressed():
+							thrust = -600.0
+						
+						if player.has_method("is_left_pressed") and player.is_left_pressed():
+							torque = -15000.0
+						elif player.has_method("is_right_pressed") and player.is_right_pressed():
+							torque = 15000.0
+							
+						if thrust != 0.0:
+							var force_dir = Vector2.RIGHT.rotated(contraption.rotation)
+							contraption.apply_central_force(force_dir * thrust)
+						if torque != 0.0:
+							contraption.apply_torque(torque)
+
+		# 3. Flamethrower check
+		if asset_id == "zonai_flamethrower" and child.get("powered"):
+			var fire = child.get_node_or_null("FireParticles")
+			if fire and not fire.emitting:
+				fire.emitting = true
+				
+			var main = contraption.get_parent()
+			if main != null and main.has_method("get"):
+				var entities = main.get("spawned_entities")
+				if typeof(entities) == TYPE_ARRAY:
+					var dir = child.get("force_direction").rotated(contraption.rotation)
+					for entity in entities:
+						if is_instance_valid(entity) and entity != contraption and entity.has_method("take_damage"):
+							var dist = child.global_position.distance_to(entity.global_position)
+							if dist < 90.0:
+								var to_entity = (entity.global_position - child.global_position).normalized()
+								if dir.dot(to_entity) > 0.65:
+									entity.take_damage(2)
+
 		if asset_id == "zonai_fan" and child.get("powered"):
 			_apply_directional_force(contraption, child, "force_direction", "force_magnitude")
 		elif asset_id == "zonai_rocket" and child.get("powered") and child.get("active"):

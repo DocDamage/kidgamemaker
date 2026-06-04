@@ -237,10 +237,16 @@ static func _shop_items(shop_node: Node2D) -> Array:
 		var price2 := int(shop_node.get_meta("shop_price_2"))
 		var details1 := _describe_shop_item(item1, "Speed Potion 🧪", "Run fast!")
 		var details2 := _describe_shop_item(item2, "Toy Hammer 🔨", "Break blocks!")
-		return [
+		var items := [
 			{"id": item1, "name": details1.get("name", item1), "cost": price1, "desc": details1.get("desc", "")},
 			{"id": item2, "name": details2.get("name", item2), "cost": price2, "desc": details2.get("desc", "")}
 		]
+		if shop_node.has_meta("shop_item_3"):
+			var item3 := str(shop_node.get_meta("shop_item_3"))
+			var price3 := int(shop_node.get_meta("shop_price_3") if shop_node.has_meta("shop_price_3") else 20)
+			var details3 := _describe_shop_item(item3, "Toy Sword ⚔️", "Fight slimes!")
+			items.append({"id": item3, "name": details3.get("name", item3), "cost": price3, "desc": details3.get("desc", "")})
+		return items
 
 	return [
 		{"id": "alchemy_potion_speed", "name": "Speed Potion 🧪", "cost": 10, "desc": "Run super fast!"},

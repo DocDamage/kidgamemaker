@@ -14,6 +14,26 @@ var mat_label: Label = null
 
 func _ready() -> void:
 	main_ref = get_tree().get_root().get_node_or_null("Main")
+	if main_ref != null and "active_crafting_modifiers" in main_ref:
+		var mods = main_ref.active_crafting_modifiers
+		if mods.has("craft_result") and str(mods.get("craft_result")) != "":
+			var custom_recipe = {
+				"name": "Custom Recipe",
+				"result": str(mods.get("craft_result", "potion")),
+				"materials": {}
+			}
+			var mat1 = str(mods.get("craft_material_1", ""))
+			var count1 = int(mods.get("craft_count_1", 1))
+			if mat1 != "":
+				custom_recipe["materials"][mat1] = count1
+			var mat2 = str(mods.get("craft_material_2", ""))
+			var count2 = int(mods.get("craft_count_2", 1))
+			if mat2 != "":
+				custom_recipe["materials"][mat2] = count2
+			
+			custom_recipe["name"] = "Custom " + custom_recipe["result"].replace("weapon_", "").replace("tool_", "").replace("food_", "").replace("mat_", "").capitalize()
+			recipes.insert(0, custom_recipe)
+
 	for i in range(recipes.size()):
 		var label := Label.new()
 		label.size = Vector2(500, 40)

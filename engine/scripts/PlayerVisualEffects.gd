@@ -104,6 +104,41 @@ static func toggle_squid_visuals(player: Node, active: bool) -> void:
 			player.set_crouch_state(false)
 
 
+static func toggle_mermaid_visuals(player: Node, active: bool) -> void:
+	for child in player.get_children():
+		if child is Polygon2D or child is Sprite2D or child is AnimatedSprite2D:
+			if child.name != "MermaidVisual" and child.name != "SquidVisual":
+				child.visible = not active
+
+	var mermaid = player.get_node_or_null("MermaidVisual")
+	if active:
+		if mermaid == null:
+			mermaid = Label.new()
+			mermaid.name = "MermaidVisual"
+			mermaid.text = "🧜‍♀️"
+			mermaid.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			mermaid.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			var settings := LabelSettings.new()
+			settings.font_size = 32
+			mermaid.label_settings = settings
+			mermaid.size = Vector2(48, 48)
+			mermaid.position = -Vector2(24, 24)
+			player.add_child(mermaid)
+		mermaid.visible = true
+	else:
+		if mermaid != null:
+			mermaid.visible = false
+
+
+static func spawn_grind_sparks(player: Node2D, delta: float) -> void:
+	if randf() > delta * 15.0:
+		return
+	var main = player.get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.has_method("spawn_floating_text"):
+		var offset = Vector2(randf_range(-16.0, 16.0), 20.0)
+		main.spawn_floating_text("✨", player.global_position + offset, Color.YELLOW)
+
+
 static func draw_player_overlays(player: Node2D) -> void:
 	var main_node = player.get_tree().get_root().get_node_or_null("Main")
 	var health_style = main_node.get("health_style") if main_node != null else "hearts"

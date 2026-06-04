@@ -13,6 +13,7 @@
   export let canUndo = false;
   export let canRedo = false;
   export let parentsPanelOpen = false;
+  export let magicWandOpen = false;
 
   const dispatch = createEventDispatcher<{
     cycleTime: void;
@@ -21,6 +22,7 @@
     openBeatComposer: void;
     toggleMapView: void;
     toggleRulesEditor: void;
+    toggleMagicWand: void;
     selectStamp: void;
     editActiveAsset: void;
     toggleEraser: void;
@@ -55,6 +57,7 @@
     openBeatComposer: () => dispatch('openBeatComposer'),
     toggleMapView: () => dispatch('toggleMapView'),
     toggleRulesEditor: () => dispatch('toggleRulesEditor'),
+    toggleMagicWand: () => dispatch('toggleMagicWand'),
     selectStamp: () => dispatch('selectStamp'),
     editActiveAsset: () => dispatch('editActiveAsset'),
     toggleEraser: () => dispatch('toggleEraser'),
@@ -92,6 +95,9 @@
     </button>
     <button class="cycle-btn rules-btn" class:active={showRulesEditor} on:click={(event) => clickDispatch(event, 'toggleRulesEditor')} title="✨ Magic Rules Engine">
       ✨
+    </button>
+    <button class="cycle-btn magic-wand-btn" class:active={magicWandOpen} on:click={(event) => clickDispatch(event, 'toggleMagicWand')} title="🪄 Magic Wand Console">
+      🪄
     </button>
   </div>
 

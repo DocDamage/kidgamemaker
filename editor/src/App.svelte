@@ -81,10 +81,12 @@
     type WorldSettings
   } from './lib/canvasState';
   import EditorTopbar from './EditorTopbar.svelte';
+  import MagicWandConsole from './MagicWandConsole.svelte';
 
   let spriteEditorOpen = false;
   let editingAssetId = '';
   let editingCategory = 'decorations';
+  let magicWandOpen = false;
 
   // Kid friendly UI toggles
   let parentsPanelOpen = false;
@@ -786,12 +788,14 @@
     canUndo={levelHistoryIndex > 0}
     canRedo={levelHistoryIndex < levelHistory.length - 1}
     {parentsPanelOpen}
+    {magicWandOpen}
     on:cycleTime={cycleTime}
     on:cycleWeather={cycleWeather}
     on:toggleMute={toggleMute}
     on:openBeatComposer={openBeatComposer}
     on:toggleMapView={toggleMapView}
     on:toggleRulesEditor={toggleRulesEditor}
+    on:toggleMagicWand={() => magicWandOpen = !magicWandOpen}
     on:selectStamp={() => eraserMode = false}
     on:editActiveAsset={editActiveAsset}
     on:toggleEraser={() => eraserMode = !eraserMode}
@@ -1042,6 +1046,15 @@
         "></div>
       {/each}
     </div>
+  {/if}
+
+  {#if magicWandOpen}
+    <MagicWandConsole
+      bind:placed
+      bind:worldSettings
+      on:close={() => magicWandOpen = false}
+      on:saveRoom={saveCurrentRoom}
+    />
   {/if}
 </main>
 

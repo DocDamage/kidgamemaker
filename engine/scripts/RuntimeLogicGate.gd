@@ -8,7 +8,7 @@ var output_state: bool = false
 
 func _ready() -> void:
 	gate_type = str(get_meta("gate_type"))
-	_update_visuals()
+	_evaluate()
 
 
 func set_input(index: int, value: bool) -> void:

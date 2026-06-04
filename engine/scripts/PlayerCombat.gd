@@ -49,7 +49,8 @@ static func execute_melee_strike(player: CharacterBody2D, step: int) -> void:
 	for hit in hits:
 		var node = hit.get("collider")
 		if node != null and node != player and node.has_method("take_damage"):
-			node.take_damage(dmg)
+			var element = "fire" if step == 3 else ""
+			node.take_damage(dmg, element)
 			if "velocity" in node:
 				node.velocity += Vector2(facing_direction * kback, -100.0)
 

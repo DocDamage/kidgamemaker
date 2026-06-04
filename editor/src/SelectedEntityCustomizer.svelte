@@ -16,6 +16,7 @@
   import TriggerCustomizerControls from './TriggerCustomizerControls.svelte';
   import WaterCustomizerControls from './WaterCustomizerControls.svelte';
   import ZonaiCustomizerControls from './ZonaiCustomizerControls.svelte';
+  import LogicGateCustomizerControls from './LogicGateCustomizerControls.svelte';
   import type { PlacedEntity, ToyboxAsset } from './lib/canvasState';
 
   export let entity: PlacedEntity;
@@ -145,6 +146,8 @@
       <InteractiveItemCustomizerControls {entity} on:saveRoom={saveRoom} />
     {:else if entity.type === 'bbq_spit'}
       <InteractiveItemCustomizerControls {entity} on:saveRoom={saveRoom} />
+    {:else if entity.type === 'crafting_bench'}
+      <InteractiveItemCustomizerControls {entity} on:saveRoom={saveRoom} />
     {:else if entity.type === 'grapple_ring'}
       <InteractiveItemCustomizerControls {entity} on:saveRoom={saveRoom} />
     {:else if entity.asset_id === 'weapon_boomerang'}
@@ -155,6 +158,13 @@
       <InteractiveItemCustomizerControls {entity} on:saveRoom={saveRoom} />
     {:else if entity.type === 'wall_run_surface' || entity.type === 'ceiling_run_surface'}
       <InteractiveItemCustomizerControls {entity} on:saveRoom={saveRoom} />
+    {:else if entity.type === 'logic_and' || entity.type === 'logic_or' || entity.type === 'logic_not'}
+      <LogicGateCustomizerControls
+        {entity}
+        {placed}
+        {findAsset}
+        on:saveRoom={saveRoom}
+      />
     {/if}
   </div>
 

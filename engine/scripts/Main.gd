@@ -832,6 +832,19 @@ func notify_trigger(trigger_id: String) -> void:
 
 	print("notify_trigger called for: ", trigger_id, " type: ", trigger_type)
 	execute_rules(trigger_type, trigger_id)
+	_update_logic_gates_for_trigger(trigger_id, true)
+
+
+func _update_logic_gates_for_trigger(trigger_id: String, active: bool) -> void:
+	for entity in spawned_entities:
+		if is_instance_valid(entity) and entity.has_method("set_input") and entity.has_meta("modifiers"):
+			var mods = entity.get_meta("modifiers")
+			if mods.has("logic_inputs"):
+				var inputs = mods.get("logic_inputs")
+				if typeof(inputs) == TYPE_ARRAY:
+					var idx = inputs.find(trigger_id)
+					if idx != -1:
+						entity.set_input(idx + 1, active)
 
 
 func execute_rules(trigger_type: String, trigger_id: String = "") -> void:
@@ -1094,6 +1107,7 @@ func notify_pressure_plate(trigger_id: String, is_pressed: bool) -> void:
 	var trigger_type = "pressure_plate_on" if is_pressed else "pressure_plate_off"
 	print("notify_pressure_plate called for: ", trigger_id, " type: ", trigger_type)
 	execute_rules(trigger_type, trigger_id)
+	_update_logic_gates_for_trigger(trigger_id, is_pressed)
 
 
 func _make_gate(data: Dictionary, sidecar: Dictionary) -> AnimatableBody2D:
@@ -1278,10 +1292,16 @@ func toggle_backpack_ui() -> void:
 		backpack_ui = RUNTIME_PANEL_FACTORY_SCRIPT.create_backpack(self)
 
 
-func open_crafting_ui() -> void:
+var active_cooking_modifiers: Dictionary = {}
+var active_crafting_modifiers: Dictionary = {}
+
+func open_crafting_ui(station: Node = null) -> void:
 	if crafting_ui != null: return
 	get_tree().paused = true
-
+	if station != null and station.has_meta("modifiers"):
+		active_crafting_modifiers = station.get_meta("modifiers")
+	else:
+		active_crafting_modifiers = {}
 	crafting_ui = RUNTIME_PANEL_FACTORY_SCRIPT.create_crafting(self)
 
 
@@ -1292,10 +1312,13 @@ func close_crafting_ui() -> void:
 		get_tree().paused = false
 
 
-func open_cooking_ui() -> void:
+func open_cooking_ui(station: Node = null) -> void:
 	if cooking_ui != null: return
 	get_tree().paused = true
-
+	if station != null and station.has_meta("modifiers"):
+		active_cooking_modifiers = station.get_meta("modifiers")
+	else:
+		active_cooking_modifiers = {}
 	cooking_ui = RUNTIME_PANEL_FACTORY_SCRIPT.create_cooking(self)
 
 

@@ -44,6 +44,10 @@ var is_sleeping: bool = false
 var _sleep_zzz_particles: CPUParticles2D = null
 var current_phase: int = 1
 var phase_hp_thresholds: Array = []
+var tail_health: int = 60
+var horn_health: int = 60
+var tail_broken: bool = false
+var horn_broken: bool = false
 
 
 func _ready() -> void:
@@ -308,8 +312,51 @@ func _shoot_projectile() -> void:
 
 
 
-func take_damage(amount: int) -> void:
-	current_health -= amount
+func take_damage(amount: int, element: String = "") -> void:
+	var final_amount := amount
+	var weakness = str(get_meta("weakness_element")).to_lower() if has_meta("weakness_element") else ""
+	
+	var is_weak_hit := false
+	if weakness != "":
+		if element.to_lower() == weakness:
+			is_weak_hit = true
+		elif weakness == "fire" and is_burning:
+			is_weak_hit = true
+		elif weakness == "ice" and is_frozen:
+			is_weak_hit = true
+		elif weakness == "water" and water_type != "normal" and inside_water:
+			is_weak_hit = true
+			
+	if is_weak_hit:
+		final_amount *= 3
+		var main = get_tree().get_root().get_node_or_null("Main")
+		if main != null and main.has_method("spawn_floating_text"):
+			main.spawn_floating_text("🎯 WEAKNESS HIT! 3x DAMAGE! 🎯", global_position, Color.GOLD)
+
+	# Boss Part Breaking logic
+	if boss_mode:
+		if not tail_broken:
+			tail_health -= final_amount
+			if tail_health <= 0:
+				tail_broken = true
+				patrol_speed *= 0.6 # Slow down boss because tail is broken!
+				var main = get_tree().get_root().get_node_or_null("Main")
+				if main != null and main.has_method("spawn_floating_text"):
+					main.spawn_floating_text("💥 BOSS TAIL BROKEN (Speed Reduced!)", global_position + Vector2(0, -60), Color.ORANGE)
+				if main != null and main.has_method("play_sfx"):
+					main.play_sfx("hit")
+		elif not horn_broken:
+			horn_health -= final_amount
+			if horn_health <= 0:
+				horn_broken = true
+				shoot_projectiles = false # Stop shooting because horn is broken!
+				var main = get_tree().get_root().get_node_or_null("Main")
+				if main != null and main.has_method("spawn_floating_text"):
+					main.spawn_floating_text("💥 BOSS HORN BROKEN (Projectiles Disabled!)", global_position + Vector2(0, -60), Color.RED)
+				if main != null and main.has_method("play_sfx"):
+					main.play_sfx("hit")
+
+	current_health -= final_amount
 	knockback_timer = 0.25
 
 	var main = get_tree().get_root().get_node_or_null("Main")

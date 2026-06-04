@@ -17,4 +17,4 @@ func _on_body_entered(body: Node) -> void:
 		cooldown = 1.0
 		var main := get_tree().get_root().get_node_or_null("Main")
 		if main != null and main.has_method("open_shop_ui"):
-			main.call_deferred("open_shop_ui")
+			main.call_deferred("open_shop_ui", self)
