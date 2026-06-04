@@ -105,6 +105,8 @@ export type ToyboxAsset = {
 
 export type AssetInventory = Record<string, ToyboxAsset[]>;
 
+export type AgeMode = 'mellow' | 'growing' | 'creator';
+
 export type WorldSettings = {
   time_of_day: 'day' | 'morning' | 'sunset' | 'night';
   weather: 'clear' | 'rain' | 'snow';
@@ -124,6 +126,12 @@ export type WorldSettings = {
   story_title?: string;
   story_intro_text?: string;
   custom_bgm_sequence?: number[][];
+  /** Three-age accessibility mode. Controls grid snap, game speed, and fail behaviour. */
+  age_mode?: AgeMode;
+  /** Snap grid size in pixels — set automatically by age_mode selector */
+  snap_size?: number;
+  /** Game speed multiplier written into world_settings so Godot can read it */
+  game_speed_multiplier?: number;
 };
 
 export type PhaseAFeatureContract = {
@@ -229,6 +237,44 @@ export function makeInstanceId(prefix = 'entity'): string {
   const safePrefix = prefix.replace(/[^a-zA-Z0-9_]/g, '_');
   const randomPart = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(16).slice(2);
   return `${safePrefix}_${randomPart}`;
+}
+
+
+/** Returns the WorldSettings overrides for each age mode. */
+export function getAgeModeDefaults(mode: AgeMode): Partial<WorldSettings> {
+  switch (mode) {
+    case 'mellow':
+      return {
+        age_mode: 'mellow',
+        snap_size: 80,
+        game_speed_multiplier: 0.75,
+        difficulty: 'easy',
+        calm_mode: true,
+        level_balancer_enabled: true,
+        tutorial_whisperer_enabled: true
+      };
+    case 'growing':
+      return {
+        age_mode: 'growing',
+        snap_size: 64,
+        game_speed_multiplier: 0.9,
+        difficulty: 'normal',
+        calm_mode: false,
+        level_balancer_enabled: true,
+        tutorial_whisperer_enabled: true
+      };
+    case 'creator':
+    default:
+      return {
+        age_mode: 'creator',
+        snap_size: 32,
+        game_speed_multiplier: 1.0,
+        difficulty: 'normal',
+        calm_mode: false,
+        level_balancer_enabled: false,
+        tutorial_whisperer_enabled: false
+      };
+  }
 }
 
 export function snapPosition(point: Vec2, snapSize = 8, enabled = true): Vec2 {
@@ -391,7 +437,8 @@ export const fallbackInventory: AssetInventory = {
     { id: 'logic_and', name: 'Logic AND Gate 🛑', category: 'decorations', visual: '🛑', type: 'logic_and', snapping_type: 'free_float' },
     { id: 'logic_or', name: 'Logic OR Gate 🟢', category: 'decorations', visual: '🟢', type: 'logic_or', snapping_type: 'free_float' },
     { id: 'logic_not', name: 'Logic NOT Gate 🟡', category: 'decorations', visual: '🟡', type: 'logic_not', snapping_type: 'free_float' },
-    { id: 'anvil_upgrade', name: 'Weapon Anvil ⚒️', category: 'decorations', visual: '⚒️', type: 'anvil_upgrade', snapping_type: 'gravity_snap' }
+    { id: 'anvil_upgrade', name: 'Weapon Anvil ⚒️', category: 'decorations', visual: '⚒️', type: 'anvil_upgrade', snapping_type: 'gravity_snap' },
+    { id: 'compass_stamp', name: 'Magic Compass 🧭', category: 'decorations', visual: '🧭', type: 'compass', snapping_type: 'free_float' }
   ],
   particles: [
     { id: 'effects_fire', name: 'Fire Effect', category: 'particles', visual: '🔥', type: 'particles', snapping_type: 'free_float' },

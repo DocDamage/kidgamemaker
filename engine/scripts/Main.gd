@@ -66,6 +66,8 @@ const RUNTIME_ENTITY_SPAWNER_SCRIPT := preload("res://scripts/RuntimeEntitySpawn
 const RUNTIME_PARTICLE_FACTORY_SCRIPT := preload("res://scripts/RuntimeParticleFactory.gd")
 const RUNTIME_PROGRESSION_FLOW_SCRIPT := preload("res://scripts/RuntimeProgressionFlow.gd")
 const RUNTIME_COMBAT_TRAVERSAL_GLUE_SCRIPT := preload("res://scripts/RuntimeCombatTraversalGlue.gd")
+const RUNTIME_VISUAL_PROGRESSION_SCRIPT := preload("res://scripts/RuntimeVisualProgression.gd")
+const RUNTIME_COMPASS_SCRIPT := preload("res://scripts/RuntimeCompass.gd")
 
 const CATEGORY_SEARCH_ORDER := [
 	"heroes",
@@ -141,6 +143,11 @@ var movement_system_config: Dictionary = {}
 var combat_system_config: Dictionary = {}
 var rules_engine_config: Dictionary = {}
 var ai_assist_config: Dictionary = {}
+
+# Persistent whisperer state across deaths (death clusters, stuck timer, etc.)
+var _whisperer_state: Dictionary = {}
+# Current time-scale target for struggle slow — lerped toward 1.0 on recovery
+var _struggle_time_scale_target: float = 1.0
 
 
 func _ready() -> void:
@@ -382,6 +389,9 @@ func load_level_from_string(json_string: String) -> void:
 	last_hint_position = Vector2(-99999, -99999)
 	hint_cooldown = 0.0
 	enemy_speed_multiplier = 1.0
+	_whisperer_state = {}
+	_struggle_time_scale_target = 1.0
+	Engine.time_scale = 1.0
 	var json := JSON.new()
 	var error := json.parse(json_string)
 
@@ -678,18 +688,20 @@ func _note_player_failure(failure_position: Vector2) -> void:
 	if not tutorial_whisperer_enabled:
 		return
 
+	# Merge persistent whisperer state with the short-lived per-call fields
+	_whisperer_state["respawn_count"] = respawn_count
+	_whisperer_state["last_respawn_position"] = last_respawn_position
+	_whisperer_state["last_hint_position"] = last_hint_position
+	_whisperer_state["hint_cooldown"] = hint_cooldown
+
 	var result: Dictionary = RUNTIME_TUTORIAL_WHISPERER_SCRIPT.note_failure(
 		failure_position,
 		spawned_entities,
 		level_balance_report,
-		{
-			"respawn_count": respawn_count,
-			"last_respawn_position": last_respawn_position,
-			"last_hint_position": last_hint_position,
-			"hint_cooldown": hint_cooldown,
-		}
+		_whisperer_state
 	)
-	var state: Dictionary = result.get("state", {})
+	_whisperer_state = result.get("state", _whisperer_state)
+	var state: Dictionary = _whisperer_state
 	respawn_count = int(state.get("respawn_count", respawn_count))
 	last_respawn_position = state.get("last_respawn_position", last_respawn_position)
 	last_hint_position = state.get("last_hint_position", last_hint_position)
@@ -703,6 +715,18 @@ func _note_player_failure(failure_position: Vector2) -> void:
 			active_player.set("jump_buffer_duration", 0.22)
 			spawn_floating_text("🛠️ ASSIST ACTIVE: Slow Enemies & Easy Jumps!", failure_position + Vector2(0, -72), Color(0.4, 1.0, 0.4))
 			print("Dynamic Assist triggered: enemy_speed_multiplier=0.7, player assist duration=0.22")
+
+	# Time-scale slow for heavy struggling
+	if bool(result.get("trigger_time_slow", false)):
+		_struggle_time_scale_target = 0.88
+		print("Struggle time-slow engaged: target=0.88")
+
+	# Spawn invisible assist platforms at death hotspots
+	for hotspot_pos in result.get("spawn_invisible_platforms", []):
+		_spawn_invisible_assist_platform(hotspot_pos)
+
+	# Put nearby enemies to sleep after hotspot deaths
+	_check_enemy_sleep_trigger(failure_position)
 
 	var hint_text := str(result.get("hint", ""))
 	if hint_text == "":
@@ -899,6 +923,31 @@ func _process(delta: float) -> void:
 			var dist = active_player.global_position.distance_to(boss.global_position)
 			if dist < 350.0:
 				trigger_boss_intro(boss)
+
+	# Smoothly lerp Engine.time_scale toward the target (struggle slow or recovery)
+	if tutorial_whisperer_enabled:
+		var current_ts := Engine.time_scale
+		var ts_delta := delta * (1.0 / max(current_ts, 0.01))  # real-time delta
+		Engine.time_scale = move_toward(current_ts, _struggle_time_scale_target, ts_delta * 0.5)
+		# Gradually recover back to 1.0 when not struggling
+		if _struggle_time_scale_target < 1.0 and respawn_count <= 1:
+			_struggle_time_scale_target = move_toward(_struggle_time_scale_target, 1.0, delta * 0.05)
+
+	# Ghost helper: show path hint after 30s stuck in same spot
+	if tutorial_whisperer_enabled and active_player != null and is_instance_valid(active_player):
+		_whisperer_state["stuck_last_pos"] = _whisperer_state.get("stuck_last_pos", active_player.global_position)
+		var stuck_timer: float = float(_whisperer_state.get("stuck_timer", 0.0))
+		var cur_pos: Vector2 = active_player.global_position
+		var last_pos: Vector2 = _whisperer_state.get("stuck_last_pos", cur_pos)
+		if cur_pos.distance_to(last_pos) > 50.0:
+			_whisperer_state["stuck_last_pos"] = cur_pos
+			_whisperer_state["stuck_timer"] = 0.0
+		else:
+			stuck_timer += delta
+			_whisperer_state["stuck_timer"] = stuck_timer
+			if stuck_timer >= 30.0:
+				_whisperer_state["stuck_timer"] = 0.0
+				_spawn_stuck_ghost_helper(cur_pos)
 
 	_ensure_combat_traversal_glue()
 	combat_traversal_glue.update_effects(delta)
@@ -1102,6 +1151,12 @@ func _make_anvil(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	return RUNTIME_GAMEPLAY_OBJECT_FACTORY_SCRIPT.create_interaction_station(self, data, sidecar, Color(0.3, 0.3, 0.35), "⚒️ UPGRADE", "open_anvil_ui", RUNTIME_INTERACTION_STATION_SCRIPT)
 
 
+func _make_compass(_data: Dictionary, _sidecar: Dictionary) -> Node2D:
+	var node := Node2D.new()
+	node.set_script(RUNTIME_COMPASS_SCRIPT)
+	return node
+
+
 func _check_and_spawn_rising_hazard(settings: Dictionary) -> void:
 	RUNTIME_RISING_HAZARD_FACTORY_SCRIPT.spawn_from_settings(self, spawned_entities, death_y_threshold, settings, RUNTIME_RISING_HAZARD_SCRIPT)
 
@@ -1197,3 +1252,111 @@ func trigger_screen_shake(amplitude: float, duration: float) -> void:
 func trigger_hit_stop(duration: float) -> void:
 	_ensure_combat_traversal_glue()
 	combat_traversal_glue.trigger_hit_stop(duration)
+
+
+## _attach_visual_progression
+## Called from RuntimeEntitySpawner right after active_player is set.
+## Adds a RuntimeVisualProgression child node to the player.
+func _attach_visual_progression(player: Node2D) -> void:
+	# Remove any old progression node (e.g., on room reload)
+	var old := player.get_node_or_null("RuntimeVisualProgression")
+	if old != null and is_instance_valid(old):
+		old.queue_free()
+
+	var prog := RUNTIME_VISUAL_PROGRESSION_SCRIPT.new()
+	prog.name = "RuntimeVisualProgression"
+	player.add_child(prog)
+	print("Visual progression tracker attached to player.")
+
+
+## notify_enemy_defeated
+## Call when any enemy dies. Advances the player's visual progression tier.
+## SmartEnemy.die() calls check_victory_conditions() via call_deferred — we
+## intercept here through a direct call from SmartEnemy.die().
+func notify_enemy_defeated() -> void:
+	if active_player == null or not is_instance_valid(active_player):
+		return
+	var prog := active_player.get_node_or_null("RuntimeVisualProgression")
+	if prog != null and is_instance_valid(prog) and prog.has_method("on_enemy_defeated"):
+		prog.on_enemy_defeated()
+
+
+## _spawn_invisible_assist_platform
+## Creates a ghost-transparent StaticBody2D below a death hotspot.
+## The child thinks they "got lucky" — the platform is nearly invisible at 15% opacity.
+func _spawn_invisible_assist_platform(hotspot_pos: Vector2) -> void:
+	var tag := "AssistPlatform_%d_%d" % [int(hotspot_pos.x), int(hotspot_pos.y)]
+	if get_node_or_null(tag) != null:
+		return  # Already spawned for this hotspot
+
+	var body := StaticBody2D.new()
+	body.name = tag
+	body.collision_layer = 1
+	body.collision_mask = 0
+	# Place it 32px below the death point so it catches falls
+	body.global_position = hotspot_pos + Vector2(0, 32)
+
+	var shape := RectangleShape2D.new()
+	shape.size = Vector2(96, 12)
+	var col := CollisionShape2D.new()
+	col.shape = shape
+	body.add_child(col)
+
+	# Nearly invisible visual — white rectangle at 15% opacity
+	var rect := ColorRect.new()
+	rect.color = Color(1.0, 1.0, 0.9, 0.15)
+	rect.size = Vector2(96, 12)
+	rect.position = Vector2(-48, -6)
+	body.add_child(rect)
+
+	body.set_meta("is_assist_platform", true)
+	add_child(body)
+	spawned_entities.append(body)
+	print("Invisible assist platform spawned at ", hotspot_pos)
+
+
+## _check_enemy_sleep_trigger
+## After 3+ deaths near an enemy, put that enemy to sleep.
+func _check_enemy_sleep_trigger(failure_position: Vector2) -> void:
+	if respawn_count < 3:
+		return
+	for entity in spawned_entities:
+		if not is_instance_valid(entity):
+			continue
+		if not entity.has_method("put_to_sleep"):
+			continue
+		if entity.get("is_sleeping") == true:
+			continue
+		if entity.global_position.distance_to(failure_position) <= 180.0:
+			entity.put_to_sleep()
+			print("Enemy put to sleep near death hotspot: ", entity.name)
+
+
+## _spawn_stuck_ghost_helper
+## Shows a translucent firefly companion for 2 seconds when the child is stuck.
+func _spawn_stuck_ghost_helper(stuck_pos: Vector2) -> void:
+	# Don't stack helpers
+	var existing := get_node_or_null("StuckGhostHelper")
+	if existing != null and is_instance_valid(existing):
+		return
+
+	var label := Label.new()
+	label.name = "StuckGhostHelper"
+	label.text = "✨"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var ls := LabelSettings.new()
+	ls.font_size = 36
+	ls.outline_size = 2
+	ls.outline_color = Color.BLACK
+	label.label_settings = ls
+	label.modulate = Color(1.0, 1.0, 0.6, 0.85)
+	label.global_position = stuck_pos + Vector2(-18, -64)
+	add_child(label)
+
+	# Drift upward then fade out after 2s
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(label, "global_position:y", stuck_pos.y - 100.0, 2.0).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(label, "modulate:a", 0.0, 2.0).set_trans(Tween.TRANS_QUAD)
+	tween.chain().tween_callback(label.queue_free)
+	spawn_floating_text("Try going another way!", stuck_pos + Vector2(0, -80), Color(1.0, 0.9, 0.4))

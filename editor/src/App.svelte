@@ -69,7 +69,9 @@
   import {
     eraseEntity,
     fallbackInventory,
+    getAgeModeDefaults,
     toRoomPayload,
+    type AgeMode,
     type AssetInventory,
     type PlacedEntity,
     type ToyboxAsset,
@@ -177,6 +179,18 @@
 
   function setCalmMode(value: boolean) {
     calmMode = value;
+    saveCurrentRoom();
+  }
+
+  function applyAgeModeChange(patch: Partial<WorldSettings>) {
+    worldSettings = { ...worldSettings, ...patch };
+    if (patch.difficulty !== undefined) {
+      const dm = patch.difficulty as DifficultyMode;
+      if (difficultyModes.includes(dm)) difficultyMode = dm;
+    }
+    if (patch.calm_mode !== undefined) {
+      calmMode = patch.calm_mode;
+    }
     saveCurrentRoom();
   }
 
@@ -569,6 +583,7 @@
       {activeAsset}
       {difficultyMode}
       {calmMode}
+      {worldSettings}
       on:browseRooms={() => bookshelfOpen = true}
       on:activeRoomIdChange={(event) => activeRoomId = event.detail}
       on:loadRoom={(event) => loadSelectedRoom(event.detail)}
@@ -579,6 +594,7 @@
       on:refreshInventory={refreshInventory}
       on:difficultyChange={(event) => setDifficultyMode(event.detail)}
       on:calmModeChange={(event) => setCalmMode(event.detail)}
+      on:ageModeChange={(event) => applyAgeModeChange(event.detail)}
     />
   {/if}
 

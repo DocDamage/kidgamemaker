@@ -1,13 +1,15 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { ToyboxAsset } from './lib/canvasState';
+  import type { ToyboxAsset, WorldSettings } from './lib/canvasState';
   import type { DifficultyMode } from './lib/roomPersistence';
+  import AgeModeSelector from './AgeModeSelector.svelte';
 
   export let rooms: string[] = [];
   export let activeRoomId = '';
   export let activeAsset: ToyboxAsset;
   export let difficultyMode: DifficultyMode = 'normal';
   export let calmMode = false;
+  export let worldSettings: WorldSettings;
 
   const dispatch = createEventDispatcher<{
     browseRooms: void;
@@ -20,6 +22,7 @@
     refreshInventory: void;
     difficultyChange: string;
     calmModeChange: boolean;
+    ageModeChange: Partial<WorldSettings>;
   }>();
 
   function animateClick(event: MouseEvent) {
@@ -81,7 +84,15 @@
     </div>
 
     <div class="panel-section">
-      <h4>🛡️ Game Difficulty</h4>
+      <h4>🎮 Game Mode</h4>
+      <AgeModeSelector
+        {worldSettings}
+        onUpdate={(patch) => dispatch('ageModeChange', patch)}
+      />
+    </div>
+
+    <div class="panel-section">
+      <h4>🛡️ Fine-tune Difficulty</h4>
       <div class="panel-row">
         <select id="difficulty-selector" value={difficultyMode} on:change={(event) => dispatch('difficultyChange', event.currentTarget.value)}>
           <option value="easy">🌟 Easy Mode (50% damage, 200% HP)</option>

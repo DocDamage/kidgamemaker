@@ -1,0 +1,14 @@
+{
+  "asset_id": "compass_stamp",
+  "asset_name": "Magic Compass",
+  "category": "decorations",
+  "runtime_template": "compass",
+  "placement_logic": {
+    "parallax_bucket": "play_layer",
+    "snap_to_grid": false
+  },
+  "collision": {
+    "size": [48, 48]
+  },
+  "description": "An in-world compass that rotates to point toward the nearest goal, portal, or enemy. Place it in the level so the player can read it like a real object. No HUD — the arrow lives in the world."
+}

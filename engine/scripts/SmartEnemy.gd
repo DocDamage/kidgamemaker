@@ -38,6 +38,10 @@ var shock_timer: float = 0.0
 var latched_pikmin: Array = []
 var boss_hud_style: String = "retro"
 var boss_phases_count: int = 2
+
+# Sleeping state — set externally by RuntimeTutorialWhisperer after hotspot deaths
+var is_sleeping: bool = false
+var _sleep_zzz_particles: CPUParticles2D = null
 var current_phase: int = 1
 var phase_hp_thresholds: Array = []
 
@@ -119,6 +123,14 @@ func _on_damage_area_body_entered(body: Node) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Sleeping: the enemy dozes off — Zzz particles, 30% speed, no attacks
+	if is_sleeping:
+		velocity.x = move_toward(velocity.x, 0.0, 400.0 * delta)
+		if not is_on_floor():
+			velocity.y += gravity * gravity_scale * delta
+		move_and_slide()
+		return
+
 	if is_frozen:
 		freeze_timer -= delta
 		velocity = Vector2.ZERO
@@ -444,6 +456,10 @@ func die() -> void:
 	if main != null and main.has_method("check_victory_conditions"):
 		main.call_deferred("check_victory_conditions")
 
+	# Visual progression: advance player's tier when an enemy is defeated
+	if main != null and main.has_method("notify_enemy_defeated"):
+		main.call_deferred("notify_enemy_defeated")
+
 	# Transition to remains state
 	name = "Remains_" + name
 	set_meta("is_defeated_remains", true)
@@ -499,3 +515,37 @@ func set_burning(duration: float) -> void:
 func set_shocked(duration: float) -> void:
 	is_shocked = true
 	shock_timer = max(shock_timer, duration)
+
+
+## put_to_sleep — called by Main after detecting 3+ deaths near this enemy.
+## The enemy stays on-screen but stops attacking and slows dramatically.
+func put_to_sleep() -> void:
+	if is_sleeping:
+		return
+	is_sleeping = true
+	patrol_speed *= 0.3
+	shoot_projectiles = false
+	modulate = Color(0.7, 0.75, 1.0, 0.6)  # pale bluish tint
+
+	# Disable damage hitbox
+	if _damage_area != null and is_instance_valid(_damage_area):
+		_damage_area.monitoring = false
+
+	# Spawn Zzz particles above the enemy
+	_sleep_zzz_particles = CPUParticles2D.new()
+	_sleep_zzz_particles.name = "ZzzParticles"
+	_sleep_zzz_particles.amount = 4
+	_sleep_zzz_particles.lifetime = 1.8
+	_sleep_zzz_particles.direction = Vector2(0.3, -1.0)
+	_sleep_zzz_particles.gravity = Vector2(0, -40)
+	_sleep_zzz_particles.initial_velocity_min = 20.0
+	_sleep_zzz_particles.initial_velocity_max = 40.0
+	_sleep_zzz_particles.color = Color(0.7, 0.85, 1.0, 0.8)
+	_sleep_zzz_particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+	_sleep_zzz_particles.emission_sphere_radius = 6.0
+	_sleep_zzz_particles.position = Vector2(0, -40)
+	add_child(_sleep_zzz_particles)
+
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.has_method("spawn_floating_text"):
+		main.spawn_floating_text("💤 ZZZ...", global_position + Vector2(0, -50), Color(0.7, 0.85, 1.0))

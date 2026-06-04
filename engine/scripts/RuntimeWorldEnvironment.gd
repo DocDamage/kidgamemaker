@@ -26,7 +26,16 @@ static func apply_world_settings(parent: Node, settings: Dictionary) -> Dictiona
 	var difficulty := str(settings.get("difficulty", "normal"))
 	var calm_mode := bool(settings.get("calm_mode", false))
 	var autoscroll_enabled := bool(settings.get("camera_autoscroll", false))
-	print("World settings: time=", time_of_day, " weather=", weather, " difficulty=", difficulty, " calm=", calm_mode, " autoscroll=", autoscroll_enabled)
+	var age_mode := str(settings.get("age_mode", "growing"))
+	# game_speed_multiplier is set by the Three-Age mode selector in the editor.
+	# 1.0 = full speed (Creator), 0.9 = Growing, 0.75 = Mellow.
+	var game_speed_mult := clampf(float(settings.get("game_speed_multiplier", 1.0)), 0.5, 1.0)
+	print("World settings: time=", time_of_day, " weather=", weather, " difficulty=", difficulty,
+		" calm=", calm_mode, " autoscroll=", autoscroll_enabled, " age_mode=", age_mode,
+		" game_speed=", game_speed_mult)
+
+	# Apply age-mode speed immediately (Engine.time_scale was reset to 1.0 at level load)
+	Engine.time_scale = game_speed_mult
 
 	var modulate_node := CanvasModulate.new()
 	modulate_node.name = "CanvasModulateDayNight"
@@ -48,6 +57,8 @@ static func apply_world_settings(parent: Node, settings: Dictionary) -> Dictiona
 		"loss_rules": settings.get("loss_rules", {"lose_condition": "health_0", "action": "game_over"}),
 		"theme": str(settings.get("theme", "default")),
 		"bgm_sequence": settings.get("custom_bgm_sequence", []),
+		"age_mode": age_mode,
+		"game_speed_multiplier": game_speed_mult,
 		"spawned_nodes": [modulate_node]
 	}
 

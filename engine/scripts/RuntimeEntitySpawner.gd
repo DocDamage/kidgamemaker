@@ -133,6 +133,8 @@ static func _create_node(
 			return app._make_logic_gate(data, sidecar, "or")
 		"logic_not":
 			return app._make_logic_gate(data, sidecar, "not")
+		"compass":
+			return app._make_compass(data, sidecar)
 		_:
 			return app._make_decoration(data, sidecar)
 
@@ -169,6 +171,9 @@ static func _register_node(
 		app.spawn_point = node.global_position
 		app.active_player = node
 		app._attach_camera(node)
+		# Attach visual progression tracker
+		if app.has_method("_attach_visual_progression"):
+			app._attach_visual_progression(node)
 	elif runtime_template == "checkpoint":
 		if node is Area2D:
 			node.body_entered.connect(func(body):
