@@ -5,6 +5,7 @@
     eraseEntity,
     stampEntity,
     toRoomPayload,
+    updateWeaponAdjacencies,
     type PlacedEntity,
     type ToyboxAsset,
     type WorldSettings
@@ -50,6 +51,21 @@
   let dragOffset = { x: 0, y: 0 };
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let longPressTriggered = false;
+
+  let weaponLinks: Array<{p1: {x: number, y: number}, p2: {x: number, y: number}}> = [];
+  $: {
+    // Svelte reactive block to keep weaponLinks in sync and detect new links
+    const oldLinksCount = weaponLinks.length;
+    const res = updateWeaponAdjacencies(placed);
+    if (JSON.stringify(placed) !== JSON.stringify(res.updated)) {
+      placed = res.updated;
+    }
+    weaponLinks = res.newLinks;
+    if (weaponLinks.length > oldLinksCount) {
+      dispatch('playSound', 'chime'); // Combine sound!
+      // Sparkle could be added here if we had a sparkle component
+    }
+  }
 
   function getCanvasCoords(clientX: number, clientY: number, rect: DOMRect) {
     return toCanvasCoords(clientX, clientY, rect, offsetX, offsetY, zoom);
@@ -356,6 +372,11 @@
     style:transform-origin="0 0"
   >
     <div class="horizon"></div>
+    <svg style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 1;">
+      {#each weaponLinks as link}
+        <line x1={link.p1.x} y1={link.p1.y} x2={link.p2.x} y2={link.p2.y} stroke="#facc15" stroke-width="6" stroke-dasharray="10 10" stroke-linecap="round" class="weapon-link" />
+      {/each}
+    </svg>
     {#each placed as item (item.instance_id)}
       {@const asset = findAsset(item.asset_id)}
       <button
@@ -513,5 +534,14 @@
     cursor: grabbing !important;
     filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.7));
     animation: none !important;
+  }
+
+  .weapon-link {
+    animation: march 0.8s linear infinite;
+    filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.8));
+  }
+
+  @keyframes march {
+    to { stroke-dashoffset: -20; }
   }
 </style>

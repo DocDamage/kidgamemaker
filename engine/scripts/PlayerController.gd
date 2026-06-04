@@ -157,6 +157,10 @@ var collision_shape: CollisionShape2D = null
 # Weapons & Focus
 var has_boomerang: bool = false
 var has_bomb: bool = false
+var has_paint_gun: bool = false
+var boomerang_combo: String = ""
+var bomb_combo: String = ""
+var sword_combo: String = ""
 var has_focus_amulet: bool = false
 var focus_active: bool = false
 var focus_timer: float = 0.0
@@ -169,7 +173,6 @@ var pipe_previous_block: Node2D = null
 var pipe_direction: Vector2 = Vector2.ZERO
 
 # Paint Gun & Squid Form
-var has_paint_gun: bool = false
 var is_squid_form: bool = false
 
 # Phase 4 Economy, Companions & Star Mode
@@ -251,6 +254,21 @@ func heal(amount: int) -> void:
 
 func apply_powerup(type: String) -> void:
 	PlayerPowerups.apply(self, type)
+
+
+func apply_powerup_with_combo(type: String, combo: String) -> void:
+	PlayerPowerups.apply(self, type)
+	if combo != "":
+		match type:
+			"boomerang":
+				boomerang_combo = combo
+				print("Player acquired Combo Boomerang: %s" % combo)
+			"bomb":
+				bomb_combo = combo
+				print("Player acquired Combo Bomb: %s" % combo)
+			"sword":
+				sword_combo = combo
+				print("Player acquired Combo Sword: %s" % combo)
 
 
 func take_damage(amount: int) -> void:
@@ -967,13 +985,13 @@ func _draw() -> void:
 func _throw_boomerang() -> void:
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main == null: return
-	PlayerProjectileFactory.throw_boomerang(self, main)
+	PlayerProjectileFactory.throw_boomerang(self, main, boomerang_combo)
 
 
 func _throw_bomb() -> void:
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main == null: return
-	PlayerProjectileFactory.throw_bomb(self, main)
+	PlayerProjectileFactory.throw_bomb(self, main, bomb_combo)
 
 
 func _fire_paint_projectile() -> void:

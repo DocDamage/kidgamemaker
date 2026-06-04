@@ -71,6 +71,7 @@ export type EntityModifiers = {
   wind_direction?: string;
   wind_force?: number;
   zonai_direction?: string;
+  combined_with?: string;
   [key: string]: EntityModifierValue;
 };
 
@@ -311,6 +312,46 @@ export function stampEntity(
 
 export function eraseEntity(current: PlacedEntity[], instanceId: string): PlacedEntity[] {
   return current.filter((item) => item.instance_id !== instanceId);
+}
+
+export function updateWeaponAdjacencies(current: PlacedEntity[]): { updated: PlacedEntity[], newLinks: Array<{p1: Vec2, p2: Vec2}> } {
+  const updated = structuredClone(current) as PlacedEntity[];
+  const newLinks: Array<{p1: Vec2, p2: Vec2}> = [];
+  
+  // Find all weapons
+  const weapons = updated.filter(e => e.asset_id.startsWith('weapon_') || e.asset_id === 'tool_hammer');
+  
+  // Clear old links
+  for (const w of weapons) {
+    if (w.modifiers.combined_with) {
+      delete w.modifiers.combined_with;
+    }
+  }
+
+  // Link weapons if they are within 64px
+  const linked = new Set<string>();
+  for (let i = 0; i < weapons.length; i++) {
+    for (let j = i + 1; j < weapons.length; j++) {
+      const w1 = weapons[i];
+      const w2 = weapons[j];
+      
+      if (linked.has(w1.instance_id) || linked.has(w2.instance_id)) continue;
+      
+      const dx = w1.position.x - w2.position.x;
+      const dy = w1.position.y - w2.position.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist <= 64) {
+        w1.modifiers.combined_with = w2.asset_id;
+        w2.modifiers.combined_with = w1.asset_id;
+        linked.add(w1.instance_id);
+        linked.add(w2.instance_id);
+        newLinks.push({ p1: w1.position, p2: w2.position });
+      }
+    }
+  }
+
+  return { updated, newLinks };
 }
 
 export function toRoomPayload(

@@ -117,25 +117,34 @@ static func fire_mage_magic_blast(player: CharacterBody2D, main: Node) -> void:
 	main.add_child(bullet)
 
 
-static func throw_boomerang(player: CharacterBody2D, main: Node) -> void:
+static func throw_boomerang(player: CharacterBody2D, main: Node, combo: String = "") -> void:
 	var facing := _facing(player)
 	_play_sfx(main, "jump")
-	_spawn_text(main, "🪃 BOOMERANG!", player.global_position, Color.YELLOW)
 
-	var boomerang := _create_circle_area("PlayerBoomerang", 8.0, Color.YELLOW, Vector2(16, 16))
+	var is_explosive = (combo == "weapon_bomb")
+	var text = "💥 EXPLOSIVE BOOMERANG!" if is_explosive else "🪃 BOOMERANG!"
+	var color = Color.ORANGE if is_explosive else Color.YELLOW
+	_spawn_text(main, text, player.global_position, color)
+
+	var boomerang := _create_circle_area("PlayerBoomerang", 8.0, color, Vector2(16, 16))
 	boomerang.set_script(PlayerBoomerangScript)
 	boomerang.set("player", player)
 	boomerang.set("start_pos", player.global_position)
 	boomerang.set("fly_direction", Vector2(facing, -0.2).normalized())
-	boomerang.set("damage_val", 15.0)
+	boomerang.set("damage_val", 25.0 if is_explosive else 15.0)
+	boomerang.set("is_explosive", is_explosive)
 	boomerang.global_position = player.global_position + Vector2(facing * 16.0, -10.0)
 	main.add_child(boomerang)
 
 
-static func throw_bomb(player: CharacterBody2D, main: Node) -> void:
+static func throw_bomb(player: CharacterBody2D, main: Node, combo: String = "") -> void:
 	var facing := _facing(player)
 	_play_sfx(main, "jump")
-	_spawn_text(main, "💣 BOMB THROWN!", player.global_position, Color.RED)
+	
+	var is_paint = (combo == "weapon_paint_gun")
+	var text = "🎨 PAINT BOMB!" if is_paint else "💣 BOMB THROWN!"
+	var spark_color = Color(0.2, 1.0, 0.2) if is_paint else Color.RED
+	_spawn_text(main, text, player.global_position, spark_color)
 
 	var bomb := CharacterBody2D.new()
 	bomb.name = "PlayerBomb"
@@ -149,7 +158,7 @@ static func throw_bomb(player: CharacterBody2D, main: Node) -> void:
 	bomb.add_child(visual)
 
 	var spark := ColorRect.new()
-	spark.color = Color.RED
+	spark.color = spark_color
 	spark.size = Vector2(4, 4)
 	spark.position = Vector2(0, -10)
 	bomb.add_child(spark)
@@ -162,8 +171,9 @@ static func throw_bomb(player: CharacterBody2D, main: Node) -> void:
 
 	bomb.set_script(PlayerBombScript)
 	bomb.set("player", player)
-	bomb.set("blast_radius", 80.0)
+	bomb.set("blast_radius", 100.0 if is_paint else 80.0)
 	bomb.set("fuse", 2.0)
+	bomb.set("is_paint_bomb", is_paint)
 	bomb.global_position = player.global_position + Vector2(facing * 16.0, -10.0)
 	main.add_child(bomb)
 

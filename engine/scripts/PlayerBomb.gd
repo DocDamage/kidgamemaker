@@ -4,6 +4,7 @@ var player: Node = null
 var fuse := 2.0
 var blast_radius := 80.0
 var gravity: float = 600.0
+var is_paint_bomb: bool = false
 
 
 func _ready() -> void:
@@ -55,5 +56,11 @@ func explode() -> void:
 				collider.velocity += dir * 350.0 * falloff
 		if collider.has_meta("is_destructible") and collider.get_meta("is_destructible") == true:
 			collider.call_deferred("shatter")
+			
+		if is_paint_bomb and (collider is StaticBody2D or collider.name.begins_with("StaticBody")):
+			for c in collider.get_children():
+				if c is ColorRect:
+					c.color = Color.GREEN
+			collider.set_meta("paint_color", "green")
 
 	queue_free()

@@ -97,6 +97,8 @@ static func _apply_collectible_modifiers(area: Area2D, raw_modifiers: Variant) -
 		area.set("powerup_type", str(modifiers.get("powerup_type")))
 	if modifiers.has("charge_jump_speed"):
 		area.set("charge_jump_speed", str(modifiers.get("charge_jump_speed")))
+	if modifiers.has("combined_with"):
+		area.set("combined_with", str(modifiers.get("combined_with")))
 
 
 static func create_key_collectible(app, data: Dictionary, sidecar: Dictionary, collectible_script_path: String) -> Area2D:

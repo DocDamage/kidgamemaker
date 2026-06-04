@@ -9,6 +9,7 @@ signal collected(payload: Dictionary)
 @export var asset_id: String = ""
 @export var powerup_type: String = ""
 @export var charge_jump_speed: String = "normal"
+@export var combined_with: String = ""
 
 var _collected := false
 
@@ -67,7 +68,10 @@ func _on_body_entered(body: Node) -> void:
 				_:
 					time_per_level = 0.8
 			body.set("charge_jump_time_per_level", time_per_level)
-		body.apply_powerup(powerup_type)
+		if body.has_method("apply_powerup_with_combo"):
+			body.apply_powerup_with_combo(powerup_type, combined_with)
+		else:
+			body.apply_powerup(powerup_type)
 
 	# ── Notify Main (score board, HUD, etc.) ──
 	var payload := {
