@@ -85,7 +85,7 @@ def enrich_source_learning_with_vision(
             if checkpoint_interval > 0 and completed % checkpoint_interval == 0:
                 index["vision_summary"] = _vision_summary(index, provider.name, errors)
                 output_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
-        except Exception as exc:
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
             errors.append({"group": str(group.get("group", "")), "error": f"{type(exc).__name__}: {exc}"})
 
     index["vision_summary"] = _vision_summary(index, provider.name, errors)

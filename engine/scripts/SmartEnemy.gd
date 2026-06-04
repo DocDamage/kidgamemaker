@@ -1,5 +1,7 @@
 extends CharacterBody2D
 
+const EnemyProjectileScript = preload("res://scripts/EnemyProjectile.gd")
+
 @export var patrol_speed: float = 70.0
 @export var gravity_scale: float = 1.0
 @export var ledge_probe_distance: float = 28.0
@@ -10,6 +12,8 @@ extends CharacterBody2D
 @export var shoot_projectiles: bool = false
 @export var projectile_speed: float = 250.0
 @export var projectile_interval: float = 1.5
+
+@export var projectile_type: String = "slime_spit"
 
 var direction: int = -1
 var gravity: float = ProjectSettings.get_setting("physics/2d/default_gravity")
@@ -39,6 +43,15 @@ var phase_hp_thresholds: Array = []
 
 
 func _ready() -> void:
+	if has_meta("asset_id"):
+		var a_id = str(get_meta("asset_id"))
+		if a_id == "cactus_hazard" or a_id == "spike_hazard":
+			projectile_type = "needle_shot"
+		elif a_id == "boss_dragon" or a_id == "boss_demon":
+			projectile_type = "fireball"
+		else:
+			projectile_type = "slime_spit"
+
 	floor_probe = RayCast2D.new()
 	floor_probe.enabled = true
 	add_child(floor_probe)
@@ -76,10 +89,24 @@ func _ready() -> void:
 	add_child(_damage_area)
 
 
+func _exit_tree() -> void:
+	if _damage_area != null:
+		if _damage_area.body_entered.is_connected(_on_damage_area_body_entered):
+			_damage_area.body_entered.disconnect(_on_damage_area_body_entered)
+		_damage_area = null
+	floor_probe = null
+	_stun_spinner = null
+	latched_pikmin.clear()
+
+
 func _on_damage_area_body_entered(body: Node) -> void:
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main != null and main.get("calm_mode") == true:
 		return # Enemies are friendly in Calm Mode!
+	if body == self:
+		return
+	if main != null and main.get("active_player") != null and body != main.get("active_player"):
+		return
 
 	if body.has_method("take_damage"):
 		if body is CharacterBody2D:
@@ -197,7 +224,7 @@ func _physics_process(delta: float) -> void:
 				var dir: float = collider.get_meta("conveyor_direction")
 				var spd: float = collider.get_meta("conveyor_speed")
 				conveyor_velocity.x = dir * spd
-	
+
 	velocity.x += conveyor_velocity.x
 
 	move_and_slide()
@@ -256,45 +283,32 @@ func _shoot_projectile() -> void:
 	bullet.collision_layer = 0
 	bullet.collision_mask = 1 # player
 
-	var bullet_script := GDScript.new()
-	bullet_script.source_code = "extends Area2D\nvar velocity := Vector2.ZERO\nfunc _physics_process(delta: float) -> void:\n\tglobal_position += velocity * delta\n"
-	bullet_script.reload()
-	bullet.set_script(bullet_script)
+	bullet.set_script(EnemyProjectileScript)
 
 	bullet.set("velocity", shoot_dir * projectile_speed)
+	bullet.set("damage_value", damage_value)
 	bullet.global_position = global_position
 
-	bullet.body_entered.connect(func(body):
-		var main_ref = get_tree().get_root().get_node_or_null("Main")
-		if main_ref != null and main_ref.get("calm_mode") == true:
-			bullet.queue_free()
-			return
-		if body.has_method("take_damage"):
-			body.take_damage(damage_value)
-		bullet.queue_free()
-	)
-
-	var timer = get_tree().create_timer(3.0)
-	timer.timeout.connect(func():
-		if is_instance_valid(bullet):
-			bullet.queue_free()
-	)
-
 	main.add_child(bullet)
-	
+
 
 
 func take_damage(amount: int) -> void:
 	current_health -= amount
 	knockback_timer = 0.25
-	
+
 	var main = get_tree().get_root().get_node_or_null("Main")
-	if main != null and main.has_method("spawn_floating_text"):
-		main.spawn_floating_text(str(-amount), global_position, Color.RED)
-	if main != null and main.has_method("play_custom_sfx"):
-		main.play_custom_sfx(str(get_meta("asset_id")) if has_meta("asset_id") else "slime_patrol", "hit")
-	elif main != null and main.has_method("play_sfx"):
-		main.play_sfx("hurt")
+	if main != null:
+		if main.has_method("spawn_floating_text"):
+			main.spawn_floating_text(str(-amount), global_position, Color.RED)
+		if main.has_method("play_custom_sfx"):
+			main.play_custom_sfx(str(get_meta("asset_id")) if has_meta("asset_id") else "slime_patrol", "hit")
+		elif main.has_method("play_sfx"):
+			main.play_sfx("hurt")
+		if main.has_method("trigger_screen_shake"):
+			main.trigger_screen_shake(4.0 if not boss_mode else 10.0, 0.15 if not boss_mode else 0.3)
+		if main.has_method("trigger_hit_stop"):
+			main.trigger_hit_stop(0.08 if not boss_mode else 0.2)
 
 	# Wobble Scale Animation using Tween
 	var base_scale = scale
@@ -313,7 +327,7 @@ func take_damage(amount: int) -> void:
 				next_phase = 3
 			elif current_health <= phase_hp_thresholds[0]:
 				next_phase = 2
-		
+
 		if next_phase > current_phase:
 			current_phase = next_phase
 			_trigger_phase_transition()
@@ -326,24 +340,24 @@ func take_damage(amount: int) -> void:
 func _trigger_phase_transition() -> void:
 	stun_timer = max(stun_timer, 1.2) # Invulnerability stun
 	knockback_timer = 0.25
-	
+
 	var text := "🔥 PHASE 2!"
 	if current_phase == 3:
 		text = "⚡ FINAL ENRAGED PHASE! ⚡"
-		
+
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main != null:
 		if main.has_method("play_sfx"): main.play_sfx("coin")
 		if main.has_method("spawn_floating_text"):
 			main.spawn_floating_text(text, global_position + Vector2(0, -40), Color.RED if current_phase == 3 else Color.ORANGE)
-			
+
 	# Wobble Scale Animation using Tween
 	var base_scale = scale
 	var tween = create_tween()
 	tween.tween_property(self, "scale", Vector2(base_scale.x * 1.6, base_scale.y * 0.5), 0.1)
 	tween.tween_property(self, "scale", Vector2(base_scale.x * 0.5, base_scale.y * 1.6), 0.1)
 	tween.tween_property(self, "scale", base_scale, 0.1)
-	
+
 	# Phase Stats boost:
 	if current_phase == 2:
 		patrol_speed *= 1.3
@@ -353,7 +367,7 @@ func _trigger_phase_transition() -> void:
 		patrol_speed *= 1.6
 		projectile_interval *= 0.5
 		modulate = Color(1.0, 0.3, 0.3) # red aura
-		
+
 		# Spawn Rage steam particles
 		var p := CPUParticles2D.new()
 		p.name = "RageParticles"
@@ -372,16 +386,16 @@ func _trigger_phase_transition() -> void:
 func stun(duration: float) -> void:
 	stun_timer = max(stun_timer, duration)
 	knockback_timer = 0.25 # Stun also stops normal movement
-	
+
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main != null and main.has_method("spawn_floating_text"):
 		main.spawn_floating_text("💫 STUNNED!", global_position + Vector2(0, -30), Color.YELLOW)
-	
+
 	if _stun_spinner == null:
 		_stun_spinner = Node2D.new()
 		_stun_spinner.name = "StunSpinner"
 		add_child(_stun_spinner)
-		
+
 		for i in range(3):
 			var star = Label.new()
 			star.text = "⭐"
@@ -392,7 +406,7 @@ func stun(duration: float) -> void:
 			var angle = i * (2.0 * PI / 3.0)
 			star.position = Vector2(cos(angle), sin(angle)) * 20.0 - Vector2(10, 10)
 			_stun_spinner.add_child(star)
-		
+
 		_stun_spinner.position = Vector2(0, -40)
 	else:
 		_stun_spinner.visible = true
@@ -407,7 +421,7 @@ func die() -> void:
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main != null and main.has_method("spawn_floating_text"):
 		main.spawn_floating_text("DEFEATED! 🏆", global_position, Color.GOLD)
-	
+
 	# Spawn a smoke puff particles block programmatically
 	if main != null:
 		var smoke_data = {
@@ -423,10 +437,41 @@ func die() -> void:
 				if is_instance_valid(p_node):
 					p_node.queue_free()
 			)
-	
-	queue_free()
+
 	if main != null and main.has_method("check_victory_conditions"):
 		main.call_deferred("check_victory_conditions")
+
+	# Transition to remains state
+	name = "Remains_" + name
+	set_meta("is_defeated_remains", true)
+	set_meta("projectile_type", projectile_type)
+
+	collision_layer = 0
+	collision_mask = 0
+	set_physics_process(false)
+	set_process(false)
+
+	if main != null:
+		var prompt := Label.new()
+		prompt.text = "🧬 COPY"
+		prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var p_settings := LabelSettings.new()
+		p_settings.font_size = 11
+		p_settings.font_color = Color.DEEP_SKY_BLUE
+		p_settings.outline_size = 2
+		p_settings.outline_color = Color.BLACK
+		prompt.label_settings = p_settings
+		prompt.size = Vector2(50, 15)
+		prompt.position = Vector2(-25, -45)
+		add_child(prompt)
+
+		var tween = create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(self, "modulate:a", 0.1, 1.5)
+		tween.tween_property(prompt, "position:y", -60.0, 1.5)
+		tween.chain().tween_callback(queue_free)
+	else:
+		get_tree().create_timer(1.5).timeout.connect(queue_free)
 
 
 func register_pikmin_latch(pikmin: Node2D) -> void:

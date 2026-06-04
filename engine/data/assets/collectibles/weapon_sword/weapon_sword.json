@@ -4,14 +4,17 @@
   "asset_name": "Toy Sword",
   "category": "collectibles",
   "runtime_template": "collectible",
-  "visual": "⚔️",
+  "visual": "weapon_sword.svg",
   "placement_logic": {
     "snapping_type": "free_float",
     "parallax_bucket": "play_layer"
   },
   "collision": {
     "shape": "rectangle",
-    "size": [24, 24]
+    "size": [
+      24,
+      24
+    ]
   },
   "gameplay_logic": {
     "score_value": 0,

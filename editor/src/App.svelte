@@ -1,21 +1,80 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
-  import ToyboxModal from './ToyboxModal.svelte';
-  import BookshelfModal from './BookshelfModal.svelte';
-  import SpriteEditorModal from './SpriteEditorModal.svelte';
+  import { onDestroy, onMount } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  import CanvasWorkspace from './CanvasWorkspace.svelte';
+  import EditorModals from './EditorModals.svelte';
+  import ParentsPanel from './ParentsPanel.svelte';
+  import EditorStatusBar from './EditorStatusBar.svelte';
+  import RoomMapView from './RoomMapView.svelte';
+  import RulesEditorView from './RulesEditorView.svelte';
+  import SelectedEntityCustomizer from './SelectedEntityCustomizer.svelte';
+  import ToyRibbon from './ToyRibbon.svelte';
+  import {
+    favoriteInventoryItems,
+    findInventoryAsset,
+    firstInventoryAsset,
+    quickInventoryItems
+  } from './lib/assetInventory';
+  import {
+    calculateLevelLengthLabel,
+    generateRoomThumbnail,
+    getCanvasCoords as toCanvasCoords,
+    getSnappedPosition as snapCanvasPosition,
+    getStoredThumbnail
+  } from './lib/canvasView';
+  import { playUiSound as playEditorUiSound } from './lib/editorAudio';
+  import {
+    createLevelHistory,
+    pushLevelHistory,
+    restoreLevelHistory,
+    type LevelHistoryState
+  } from './lib/editorHistory';
+  import {
+    DIFFICULTY_MODES,
+    createDefaultPlacedEntities,
+    createDefaultThemeDraft,
+    createDefaultWorldSettings
+  } from './lib/editorDefaults';
+  import { ensurePlacedEntityDefaults } from './lib/entityDefaults';
+  import { muteGameIframe, setGlobalGameLevel, setGlobalGameMuted } from './lib/playbackControls';
+  import { addRoomRule, deleteRoomRule } from './lib/roomRules';
+  import {
+    deleteSavedRoom,
+    getSavedCalmMode,
+    getSavedDifficulty,
+    hasTauriHost,
+    listSavedRooms,
+    loadAssetInventory,
+    loadLegacyGameState,
+    loadSavedRoom,
+    normalizeLoadedWorldSettings,
+    saveEditorRoom,
+    saveRoomPayload,
+    type DifficultyMode
+  } from './lib/roomPersistence';
+  import {
+    buildNamedThemeRoomId,
+    buildThemeRoomId,
+    buildThemeStarterEntities,
+    buildThemeWorldSettings,
+    buildSurpriseRoom,
+    randomRoomAdjective,
+    randomRoomNoun,
+    remixPlacedRoom,
+    type ThemeName
+  } from './lib/themeRooms';
   import {
     eraseEntity,
     fallbackInventory,
     snapPosition,
     stampEntity,
     toRoomPayload,
-    makeInstanceId,
     type AssetInventory,
     type PlacedEntity,
     type ToyboxAsset,
     type WorldSettings
   } from './lib/canvasState';
+  import EditorTopbar from './EditorTopbar.svelte';
 
   let spriteEditorOpen = false;
   let editingAssetId = '';
@@ -25,7 +84,6 @@
   let parentsPanelOpen = false;
   let themeSelectorOpen = false;
   let playModalOpen = false;
-  let isGamePaused = false;
   let isMuted = false;
   let selectedPlacedEntity: PlacedEntity | null = null;
 
@@ -51,413 +109,83 @@
   }
 
   let beatComposerOpen = false;
-  let previewingBgm = false;
-  let currentPreviewStep = 0;
-  let previewIntervalId: any = null;
-  let customBgmSequence = [
-    [0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0]
-  ];
 
   function selectEntity(item: PlacedEntity) {
-    if (!item.modifiers) {
-      item.modifiers = { variant: 'default', scale_multiplier: 1.0 };
-    }
-    if (item.type === 'jelly' && item.modifiers.bounce_force === undefined) {
-      item.modifiers.bounce_force = 500;
-    }
-    if (item.type === 'speed_pad') {
-      if (item.modifiers.boost_direction === undefined) item.modifiers.boost_direction = 1;
-      if (item.modifiers.boost_force === undefined) item.modifiers.boost_force = 550;
-    }
-    if (item.type === 'speech_sign' && item.modifiers.speech_text === undefined) {
-      item.modifiers.speech_text = "Hello adventurer! 🧙‍♂️";
-    }
-    if (item.type === 'water_block') {
-      if (item.modifiers.water_flavor === undefined) item.modifiers.water_flavor = "normal";
-      if (item.modifiers.water_buoyancy === undefined) item.modifiers.water_buoyancy = 0.5;
-    }
-    if (item.type === 'pet' && item.modifiers.pet_power === undefined) {
-      item.modifiers.pet_power = "magnet";
-    }
-    if (item.type === 'crumbling_cloud') {
-      if (item.modifiers.crumble_delay === undefined) item.modifiers.crumble_delay = 0.5;
-      if (item.modifiers.respawn_time === undefined) item.modifiers.respawn_time = 3.0;
-    }
-    if (item.type === 'hazard' && item.modifiers.damage_value === undefined) {
-      item.modifiers.damage_value = 15;
-    }
-    if (item.type === 'key_collectible' && item.modifiers.key_color === undefined) {
-      item.modifiers.key_color = 'gold';
-    }
-    if (item.type === 'locked_door' && item.modifiers.key_color === undefined) {
-      item.modifiers.key_color = 'gold';
-    }
-    if (item.type === 'wind_zone') {
-      if (item.modifiers.wind_direction === undefined) item.modifiers.wind_direction = 'right';
-      if (item.modifiers.wind_force === undefined) item.modifiers.wind_force = 300.0;
-    }
-    if (item.type === 'zonai_fan') {
-      if (item.modifiers.zonai_direction === undefined) item.modifiers.zonai_direction = 'right';
-      if (item.modifiers.wind_force === undefined) item.modifiers.wind_force = 400.0;
-      if (item.modifiers.battery_drain === undefined) item.modifiers.battery_drain = 10.0;
-    }
-    if (item.type === 'zonai_rocket') {
-      if (item.modifiers.zonai_direction === undefined) item.modifiers.zonai_direction = 'up';
-      if (item.modifiers.thrust_force === undefined) item.modifiers.thrust_force = 800.0;
-      if (item.modifiers.duration === undefined) item.modifiers.duration = 2.5;
-    }
-    if (item.type === 'zonai_balloon') {
-      if (item.modifiers.lift_force === undefined) item.modifiers.lift_force = 250.0;
-    }
-    if (item.type === 'zonai_spring') {
-      if (item.modifiers.spring_force === undefined) item.modifiers.spring_force = 600.0;
-    }
-    if (item.type === 'zonai_beam') {
-      if (item.modifiers.zonai_direction === undefined) item.modifiers.zonai_direction = 'right';
-      if (item.modifiers.damage === undefined) item.modifiers.damage = 15.0;
-      if (item.modifiers.beam_range === undefined) item.modifiers.beam_range = 300.0;
-    }
-    if (item.type === 'zonai_battery') {
-      if (item.modifiers.battery_capacity === undefined) item.modifiers.battery_capacity = 100.0;
-    }
-    if (item.type === 'companion_pikmin') {
-      if (item.modifiers.pikmin_color === undefined) item.modifiers.pikmin_color = 'red';
-    }
-    if (item.type === 'companion_ghost') {
-      if (item.modifiers.drain_rate === undefined) item.modifiers.drain_rate = 10.0;
-    }
-    if (item.type === 'bbq_spit') {
-      if (item.modifiers.cook_difficulty === undefined) item.modifiers.cook_difficulty = 'medium';
-    }
+    ensurePlacedEntityDefaults(item);
     selectedPlacedEntity = item;
     playUiSound('chime');
   }
 
   function openBeatComposer() {
-    if (worldSettings.custom_bgm_sequence) {
-      customBgmSequence = JSON.parse(JSON.stringify(worldSettings.custom_bgm_sequence));
-    } else {
-      customBgmSequence = [
-        [1, 0, 0, 0, 1, 0, 0, 0],
-        [0, 0, 1, 0, 0, 0, 1, 0],
-        [1, 1, 1, 1, 1, 1, 1, 1],
-        [0, 0, 0, 0, 0, 0, 0, 0]
-      ];
-    }
     beatComposerOpen = true;
     playUiSound('chime');
   }
 
-  function saveBeatSequence() {
-    worldSettings.custom_bgm_sequence = customBgmSequence;
-    (worldSettings as any).theme = 'custom';
+  function saveBeatSequence(sequence: number[][]) {
+    worldSettings.custom_bgm_sequence = sequence;
+    worldSettings.theme = 'custom';
     saveCurrentRoom();
     playUiSound('chime');
-    closeBeatComposer();
-  }
-
-  function togglePreviewBgm() {
-    previewingBgm = !previewingBgm;
-    if (previewingBgm) {
-      currentPreviewStep = 0;
-      previewIntervalId = setInterval(tickPreviewBgm, 150);
-      playUiSound('pop');
-    } else {
-      if (previewIntervalId) {
-        clearInterval(previewIntervalId);
-        previewIntervalId = null;
-      }
-    }
-  }
-
-  function tickPreviewBgm() {
-    try {
-      const ctx = getAudioContext();
-      const now = ctx.currentTime;
-      
-      // Kick
-      if (customBgmSequence[0][currentPreviewStep]) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(150, now);
-        osc.frequency.exponentialRampToValueAtTime(45, now + 0.1);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.1);
-      }
-      
-      // Snare
-      if (customBgmSequence[1][currentPreviewStep]) {
-        const bufferSize = ctx.sampleRate * 0.12;
-        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-          data[i] = Math.random() * 2 - 1;
-        }
-        const noise = ctx.createBufferSource();
-        noise.buffer = buffer;
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'bandpass';
-        filter.frequency.setValueAtTime(1000, now);
-        filter.frequency.exponentialRampToValueAtTime(100, now + 0.12);
-        
-        const gain = ctx.createGain();
-        gain.gain.setValueAtTime(0.12, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-        
-        noise.connect(filter);
-        filter.connect(gain);
-        gain.connect(ctx.destination);
-        noise.start(now);
-        noise.stop(now + 0.12);
-      }
-      
-      // Hi-Hat
-      if (customBgmSequence[2][currentPreviewStep]) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(8000, now);
-        gain.gain.setValueAtTime(0.05, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.04);
-      }
-      
-      // Synth Bass
-      if (customBgmSequence[3][currentPreviewStep]) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sawtooth';
-        const notes = [130.81, 155.56, 196.00, 233.08, 261.63, 196.00, 155.56, 130.81];
-        const freq = notes[currentPreviewStep % notes.length];
-        
-        osc.frequency.setValueAtTime(freq, now);
-        gain.gain.setValueAtTime(0.07, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-        
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(400, now);
-        
-        osc.connect(filter);
-        filter.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.15);
-      }
-      
-      currentPreviewStep = (currentPreviewStep + 1) % 8;
-    } catch (_) {}
-  }
-
-  function toggleBeatCell(row: number, col: number) {
-    customBgmSequence[row][col] = customBgmSequence[row][col] ? 0 : 1;
-    try {
-      const ctx = getAudioContext();
-      const now = ctx.currentTime;
-      if (row === 0) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(150, now);
-        osc.frequency.exponentialRampToValueAtTime(45, now + 0.15);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.15);
-      } else if (row === 1) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(350, now);
-        gain.gain.setValueAtTime(0.12, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.12);
-      } else if (row === 2) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(6000, now);
-        gain.gain.setValueAtTime(0.06, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.05);
-      } else {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(130.81, now);
-        gain.gain.setValueAtTime(0.07, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.15);
-      }
-    } catch (_) {}
-  }
-
-  function closeBeatComposer() {
-    if (previewIntervalId) {
-      clearInterval(previewIntervalId);
-      previewIntervalId = null;
-    }
-    previewingBgm = false;
     beatComposerOpen = false;
   }
 
-  function addNewRule() {
-    if (!worldSettings.room_rules) {
-      worldSettings.room_rules = [];
+  onDestroy(() => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
     }
-    worldSettings.room_rules = [
-      ...worldSettings.room_rules,
-      { trigger_type: 'button_step', trigger_id: '', action_type: 'toggle_gate', action_id: '' }
-    ];
+  });
+
+  function addNewRule() {
+    worldSettings.room_rules = addRoomRule(worldSettings.room_rules);
     saveCurrentRoom();
     playUiSound('pop');
   }
 
   function deleteRule(idx: number) {
-    if (worldSettings.room_rules) {
-      worldSettings.room_rules = worldSettings.room_rules.filter((_, i) => i !== idx);
-      saveCurrentRoom();
-      playUiSound('squeak');
-    }
-  }
-
-
-
-  function togglePauseGame() {
-    const iframe = document.querySelector('.game-iframe') as HTMLIFrameElement;
-    if (iframe && iframe.contentWindow) {
-      isGamePaused = !isGamePaused;
-      try {
-        (iframe.contentWindow as any).godotPauseGame(isGamePaused);
-        status = isGamePaused ? "Game Paused ⏸" : "Game Resumed ▶";
-      } catch (e) {
-        console.error("Failed to pause game:", e);
-      }
-    }
-  }
-
-  function restartGame() {
-    const iframe = document.querySelector('.game-iframe') as HTMLIFrameElement;
-    if (iframe && iframe.contentWindow) {
-      isGamePaused = false;
-      try {
-        iframe.src = iframe.src;
-        status = "Game Restarted 🔄";
-        playUiSound('chime');
-      } catch (e) {
-        console.error("Failed to restart game:", e);
-      }
-    }
-  }
-
-  function closePlayModal() {
-    playModalOpen = false;
-    isGamePaused = false;
+    worldSettings.room_rules = deleteRoomRule(worldSettings.room_rules, idx);
+    saveCurrentRoom();
+    playUiSound('squeak');
   }
 
   function toggleMute() {
     isMuted = !isMuted;
-    (window as any).currentGameMuted = isMuted;
+    setGlobalGameMuted(isMuted);
 
-    const iframe = document.querySelector('.game-iframe') as HTMLIFrameElement;
-    if (iframe && iframe.contentWindow) {
-      try {
-        (iframe.contentWindow as any).godotMuteGame(isMuted);
-      } catch (e) {
-        console.error("Failed to mute game inside iframe:", e);
-      }
+    const result = muteGameIframe(isMuted);
+    if (!result.ok && result.error !== 'Game iframe is not available.') {
+      console.error("Failed to mute game inside iframe:", result.error);
     }
     if (!isMuted) {
       playUiSound('pop');
     }
   }
 
-  let audioCtx: AudioContext | null = null;
-  function getAudioContext() {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
-    return audioCtx;
-  }
-
   function playUiSound(type: 'pop' | 'squeak' | 'chime') {
     if (isMuted) return;
-    try {
-      const ctx = getAudioContext();
-      const now = ctx.currentTime;
-      if (type === 'pop') {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(150, now);
-        osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
-        gain.gain.setValueAtTime(0.12, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.1);
-      } else if (type === 'squeak') {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(800, now);
-        osc.frequency.exponentialRampToValueAtTime(120, now + 0.15);
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.15);
-      } else if (type === 'chime') {
-        const notes = [600, 900, 1200, 1500];
-        notes.forEach((freq, idx) => {
-          const time = now + idx * 0.04;
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, time);
-          gain.gain.setValueAtTime(0.06, time);
-          gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(time);
-          osc.stop(time + 0.1);
-        });
-      }
-    } catch (_) {}
+    playEditorUiSound(type);
   }
 
-  function animateClick(event: MouseEvent) {
-    const target = event.currentTarget as HTMLElement;
-    target.classList.remove('bounce-click');
-    void target.offsetWidth; // trigger reflow
-    target.classList.add('bounce-click');
+  function deleteSelectedEntity(instanceId: string) {
+    placed = eraseEntity(placed, instanceId);
+    selectedPlacedEntity = null;
+    playUiSound('squeak');
+    saveCurrentRoom();
+  }
+
+  function setDifficultyMode(value: string) {
+    if (!isDifficultyMode(value)) return;
+    difficultyMode = value;
+    saveCurrentRoom();
+  }
+
+  function setCalmMode(value: boolean) {
+    calmMode = value;
+    saveCurrentRoom();
+  }
+
+  function isDifficultyMode(value: string): value is DifficultyMode {
+    return difficultyModes.some((mode) => mode === value);
   }
 
   function cycleTime() {
@@ -496,33 +224,7 @@
   }
 
 
-  let placed: PlacedEntity[] = [
-    {
-      instance_id: 'hero_001',
-      asset_id: 'hero_knight',
-      category: 'heroes',
-      type: 'player',
-      position: { x: 128, y: 216 },
-      is_camera_target: true,
-      modifiers: { variant: 'default', scale_multiplier: 1.0 }
-    },
-    {
-      instance_id: 'floor_001',
-      asset_id: 'stone_floor',
-      category: 'terrain',
-      type: 'terrain',
-      position: { x: 320, y: 392 },
-      modifiers: { variant: 'default', scale_multiplier: 1.0 }
-    },
-    {
-      instance_id: 'enemy_001',
-      asset_id: 'slime_patrol',
-      category: 'enemies',
-      type: 'enemy',
-      position: { x: 520, y: 344 },
-      modifiers: { variant: 'default', scale_multiplier: 1.0 }
-    }
-  ];
+  let placed: PlacedEntity[] = createDefaultPlacedEntities();
 
   let inventory: AssetInventory = fallbackInventory;
   let activeAsset: ToyboxAsset = fallbackInventory.terrain[0];
@@ -534,46 +236,20 @@
 
   let status = 'Ready';
 
-  let worldSettings: WorldSettings = {
-    time_of_day: 'day',
-    weather: 'clear',
-    rising_hazard_type: '',
-    rising_hazard_speed: 20,
-    victory_rules: { win_condition: 'all_enemies', celebration: 'confetti' },
-    loss_rules: { lose_condition: 'health_0', action: 'game_over' },
-    room_rules: []
-  };
+  let worldSettings: WorldSettings = createDefaultWorldSettings();
 
   // --- Feature: Difficulty Modes & Calm Mode ---
-  let difficultyMode: 'easy' | 'normal' | 'creative' = 'normal';
+  let difficultyMode: DifficultyMode = 'normal';
   let calmMode = false;
+  const difficultyModes: DifficultyMode[] = DIFFICULTY_MODES;
 
   // --- Feature: Kid-friendly Room Naming ---
-  let selectedTheme: 'space' | 'candy' | 'jungle' | 'ice' | 'volcano' = 'space';
-  let selectedAdjective: string = 'Super';
-  let selectedNoun: string = 'World';
-  const adjectives = ['Super', 'Spooky', 'Bouncy', 'Magic', 'Secret', 'Happy', 'Mega', 'Rainbow', 'Cool'];
-  const nouns = {
-    space: ['Castle', 'Cave', 'Cloud', 'Station', 'Galaxy', 'Stars', 'Moon'],
-    candy: ['Land', 'Mountain', 'Hills', 'River', 'Forest', 'Castle', 'Kingdom'],
-    jungle: ['Island', 'Jungle', 'Valley', 'Treehouse', 'Temple', 'Ruins', 'Swamp'],
-    ice: ['Wonderland', 'Fortress', 'Glacier', 'Iceberg', 'Cave', 'Slide', 'Palace'],
-    volcano: ['Volcano', 'Pit', 'Core', 'Chamber', 'Forge', 'Peak', 'Lair']
-  };
-
-  function getThemeEmoji(theme: string): string {
-    if (theme === 'space') return '🚀';
-    if (theme === 'candy') return '🍭';
-    if (theme === 'jungle') return '🌴';
-    if (theme === 'ice') return '❄️';
-    if (theme === 'volcano') return '🌋';
-    return '🎮';
-  }
+  let themeDraft = createDefaultThemeDraft();
 
   // --- Feature: Drag-to-Reposition ---
   let draggingEntity: PlacedEntity | null = null;
   let dragOffset = { x: 0, y: 0 };
-  let longPressTimer: any = null;
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let longPressTriggered = false;
 
   // Multi-room state
@@ -592,81 +268,42 @@
   let hoverPos = { x: 0, y: 0 };
   let isHovering = false;
 
-  $: quickRibbon = Object.values(inventory).flat().slice(0, 8);
-  $: favoritesItems = Object.values(inventory).flat().filter(item => favorites.includes(item.id));
+  $: quickRibbon = quickInventoryItems(inventory);
+  $: favoritesItems = favoriteInventoryItems(inventory, favorites);
   $: if (favorites) {
     try {
       localStorage.setItem('toybox_favorites', JSON.stringify(favorites));
     } catch (_) {}
   }
 
-  $: levelLengthLabel = (() => {
-    const terrains = placed.filter(ent => ent.category === 'terrain' || ent.type === 'terrain');
-    if (terrains.length === 0) return '🎈 Empty Room';
-    let minX = Infinity;
-    let maxX = -Infinity;
-    for (const ent of terrains) {
-      if (ent.position.x < minX) minX = ent.position.x;
-      if (ent.position.x > maxX) maxX = ent.position.x;
-    }
-    const width = maxX - minX;
-    if (width < 800) {
-      return '🎈 Short Adventure';
-    } else if (width < 1800) {
-      return '🚀 Medium Adventure';
-    } else if (width < 3000) {
-      return '🏰 Long Quest';
-    } else {
-      return '👑 Epic Quest!';
-    }
-  })();
+  $: levelLengthLabel = calculateLevelLengthLabel(placed);
 
 
   // Level editor undo/redo history stack
-  let levelHistory: PlacedEntity[][] = [];
-  let levelHistoryIndex = -1;
+  let levelHistoryState: LevelHistoryState = { history: [], index: -1 };
+  $: levelHistory = levelHistoryState.history;
+  $: levelHistoryIndex = levelHistoryState.index;
 
   function saveLevelState() {
-    if (levelHistoryIndex < levelHistory.length - 1) {
-      levelHistory = levelHistory.slice(0, levelHistoryIndex + 1);
-    }
-    // Deep copy of placed entities
-    levelHistory.push(placed.map(ent => ({
-      ...ent,
-      position: { ...ent.position },
-      modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
-    })));
-    levelHistoryIndex = levelHistory.length - 1;
-    if (levelHistory.length > 50) {
-      levelHistory.shift();
-      levelHistoryIndex--;
-    }
+    levelHistoryState = pushLevelHistory(levelHistoryState, placed);
   }
 
   function undoLevel() {
-    if (levelHistoryIndex > 0) {
-      levelHistoryIndex--;
-      placed = levelHistory[levelHistoryIndex].map(ent => ({
-        ...ent,
-        position: { ...ent.position },
-        modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
-      }));
-      saveCurrentRoom();
-      playUiSound('squeak');
-    }
+    const restored = restoreLevelHistory(levelHistoryState, 'undo');
+    if (!restored) return;
+    levelHistoryState = restored.state;
+    placed = restored.placed;
+    saveCurrentRoom();
+    playUiSound('squeak');
   }
 
   function redoLevel() {
-    if (levelHistoryIndex < levelHistory.length - 1) {
-      levelHistoryIndex++;
-      placed = levelHistory[levelHistoryIndex].map(ent => ({
-        ...ent,
-        position: { ...ent.position },
-        modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
-      }));
-      saveCurrentRoom();
-      playUiSound('pop');
-    }
+    const restored = restoreLevelHistory(levelHistoryState, 'redo');
+    if (!restored) return;
+    levelHistoryState = restored.state;
+    placed = restored.placed;
+    saveCurrentRoom();
+    playUiSound('pop');
   }
 
   onMount(async () => {
@@ -677,13 +314,19 @@
       }
     } catch (_) {}
 
-    try {
-      inventory = await invoke<AssetInventory>('get_asset_inventory');
-      activeAsset = inventory.terrain?.[0] ?? Object.values(inventory).flat()[0] ?? activeAsset;
-      status = 'Loaded toybox assets.';
+    if (hasTauriHost()) {
+      try {
+        inventory = await loadAssetInventory();
+        activeAsset = firstInventoryAsset(inventory) ?? activeAsset;
+        status = 'Loaded toybox assets.';
 
-    } catch (error) {
-      status = `Using fallback toybox: ${error}`;
+      } catch (error) {
+        status = `Using fallback toybox: ${error}`;
+      }
+    } else {
+      inventory = fallbackInventory;
+      activeAsset = inventory.terrain?.[0] ?? activeAsset;
+      status = 'Browser preview mode: using fallback toybox.';
     }
 
     await loadRoomList();
@@ -692,7 +335,7 @@
       await loadSelectedRoom(activeRoomId);
     } else {
       try {
-        const savedState = await invoke<any>('load_game_state');
+        const savedState = await loadLegacyGameState();
         if (savedState && Array.isArray(savedState.entities)) {
           placed = savedState.entities;
           status += ' Restored saved game state.';
@@ -700,12 +343,7 @@
       } catch (error) {
         status += ' No saved game state found, starting fresh.';
       }
-      levelHistory = [placed.map(ent => ({
-        ...ent,
-        position: { ...ent.position },
-        modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
-      }))];
-      levelHistoryIndex = 0;
+      levelHistoryState = createLevelHistory(placed);
     }
 
     // Auto-save every 60 seconds
@@ -715,8 +353,9 @@
 
     // Refresh Toybox inventory every 5 seconds (picks up inbox-ingested assets)
     const refreshId = setInterval(async () => {
+      if (!hasTauriHost()) return;
       try {
-        inventory = await invoke<AssetInventory>('get_asset_inventory');
+        inventory = await loadAssetInventory();
       } catch { /* silent */ }
     }, 5_000);
 
@@ -729,84 +368,18 @@
 
   async function loadRoomList() {
     try {
-      rooms = await invoke<string[]>('list_rooms');
-      if (rooms.length === 0) {
-        rooms = [activeRoomId];
-      }
+      rooms = await listSavedRooms(activeRoomId);
     } catch (err) {
       console.error('Failed to list rooms:', err);
     }
   }
 
   function getCanvasCoords(clientX: number, clientY: number, rect: DOMRect) {
-    const screenX = clientX - rect.left;
-    const screenY = clientY - rect.top;
-    return {
-      x: (screenX - offsetX) / zoom,
-      y: (screenY - offsetY) / zoom
-    };
+    return toCanvasCoords(clientX, clientY, rect, offsetX, offsetY, zoom);
   }
 
   function getSnappedPosition(rawCoords: { x: number; y: number }, asset: ToyboxAsset): { x: number; y: number } {
-    if (!snapEnabled) return rawCoords;
-
-    const snapping = asset.snapping_type ?? (asset.category === 'terrain' ? 'edge_to_edge' : 'gravity_snap');
-
-    if (snapping === 'edge_to_edge') {
-      // Terrain edge-to-edge snapping to 32px grid
-      return {
-        x: Math.round(rawCoords.x / 32) * 32,
-        y: Math.round(rawCoords.y / 32) * 32
-      };
-    } else if (snapping === 'gravity_snap') {
-      // Gravity snap: snap X to 8px, snap Y to stand on top of terrain block below cursor
-      const snapX = Math.round(rawCoords.x / 8) * 8;
-      
-      let stampHeight = 32;
-      if (asset.category === 'heroes') stampHeight = 48;
-      if (asset.frames && asset.frames[0]) {
-        stampHeight = asset.frames[0].h;
-      }
-
-      // Scan placed terrain blocks to find the topmost terrain block below the cursor
-      let bestTopY: number | null = null;
-      for (const item of placed) {
-        if (item.category === 'terrain') {
-          // Default terrain width is 128 (64px half-width margin)
-          const left = item.position.x - 64;
-          const right = item.position.x + 64;
-          
-          if (snapX >= left && snapX <= right) {
-            const topEdge = item.position.y - 16; // Terrain half-height margin
-            // If the block top edge is below the cursor y position (with small buffer)
-            if (topEdge >= rawCoords.y - 16) {
-              if (bestTopY === null || topEdge < bestTopY) {
-                bestTopY = topEdge;
-              }
-            }
-          }
-        }
-      }
-
-      if (bestTopY !== null) {
-        return {
-          x: snapX,
-          y: bestTopY - stampHeight / 2
-        };
-      }
-
-      // Fallback: grid snap if no terrain block is directly below
-      return {
-        x: snapX,
-        y: Math.round(rawCoords.y / 8) * 8
-      };
-    }
-
-    // Default 8px snap
-    return {
-      x: Math.round(rawCoords.x / 8) * 8,
-      y: Math.round(rawCoords.y / 8) * 8
-    };
+    return snapCanvasPosition(rawCoords, asset, placed, snapEnabled);
   }
 
   function handleCanvasClick(event: MouseEvent) {
@@ -928,6 +501,26 @@
     }
   }
 
+  function handleCanvasLeave() {
+    isHovering = false;
+    isDrawing = false;
+    handleStampLongPressEnd();
+  }
+
+  function handlePlacedStampClick(item: PlacedEntity) {
+    if (longPressTriggered) {
+      longPressTriggered = false;
+      return;
+    }
+
+    if (eraserMode) {
+      placed = eraseEntity(placed, item.instance_id);
+      playUiSound('squeak');
+    } else {
+      selectEntity(item);
+    }
+  }
+
   async function handlePortalPlacement(position: { x: number; y: number }, asset: ToyboxAsset) {
     let targetRoomId = '';
     do {
@@ -983,19 +576,14 @@
         }
       };
 
-      const targetPayload = {
-        schema_version: 1,
-        project_id: 'demo_project',
-        room_id: targetRoomId,
-        world_settings: {
-          time_of_day: 'day',
-          weather: 'clear'
-        },
-        entities: [returnPortal, floorUnderPortal]
-      };
+      const targetPayload = toRoomPayload(
+        [returnPortal, floorUnderPortal],
+        createDefaultWorldSettings(),
+        'demo_project',
+        targetRoomId
+      );
 
-      const jsonString = JSON.stringify(targetPayload);
-      await invoke('save_room', { roomId: targetRoomId, jsonString });
+      await saveRoomPayload(targetRoomId, targetPayload);
       await loadRoomList();
       status = `Placed portal linking to auto-created room ${targetRoomId}!`;
     } catch (err) {
@@ -1004,14 +592,20 @@
   }
 
   async function saveCurrentRoom() {
+    if (!hasTauriHost()) {
+      status = `Browser preview mode: ${activeRoomId} is not persisted.`;
+      return;
+    }
+
     status = `Saving room ${activeRoomId}...`;
     try {
-      const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
-      // Inject difficulty and calm mode into world_settings for runner consumption
-      (payload.world_settings as any).difficulty = difficultyMode;
-      (payload.world_settings as any).calm_mode = calmMode;
-      const jsonString = JSON.stringify(payload);
-      status = await invoke<string>('save_room', { roomId: activeRoomId, jsonString });
+      status = await saveEditorRoom({
+        roomId: activeRoomId,
+        placed,
+        worldSettings,
+        difficultyMode,
+        calmMode
+      });
       await loadRoomList();
       generateThumbnail(activeRoomId);
     } catch (error) {
@@ -1022,7 +616,7 @@
   async function deleteRoom(roomId: string) {
     if (!confirm(`Delete room "${roomId}"? This cannot be undone.`)) return;
     try {
-      await invoke('delete_room', { roomId });
+      await deleteSavedRoom(roomId);
       await loadRoomList();
       if (activeRoomId === roomId) {
         activeRoomId = rooms[0] ?? 'test_chamber_01';
@@ -1038,48 +632,23 @@
   }
 
   async function loadSelectedRoom(roomId: string) {
+    if (!hasTauriHost()) {
+      activeRoomId = roomId;
+      status = `Browser preview mode: ${roomId} is not loaded from disk.`;
+      return;
+    }
+
     status = `Loading room ${roomId}...`;
     try {
-      const savedState = await invoke<any>('load_room', { roomId });
+      const savedState = await loadSavedRoom(roomId);
       if (savedState && Array.isArray(savedState.entities)) {
         placed = savedState.entities;
         activeRoomId = roomId;
-        // Restore world settings from saved JSON
-        if (savedState.world_settings) {
-          worldSettings = {
-            time_of_day: savedState.world_settings.time_of_day ?? 'day',
-            weather: savedState.world_settings.weather ?? 'clear',
-            rising_hazard_type: savedState.world_settings.rising_hazard_type ?? '',
-            rising_hazard_speed: savedState.world_settings.rising_hazard_speed ?? 20,
-            victory_rules: savedState.world_settings.victory_rules ?? { win_condition: 'all_enemies', celebration: 'confetti' },
-            loss_rules: savedState.world_settings.loss_rules ?? { lose_condition: 'health_0', action: 'game_over' },
-            room_rules: savedState.world_settings.room_rules ?? [],
-            custom_bgm_sequence: savedState.world_settings.custom_bgm_sequence ?? null
-          };
-          if (savedState.world_settings.theme) {
-            (worldSettings as any).theme = savedState.world_settings.theme;
-          }
-          // Restore difficulty and calm mode
-          difficultyMode = savedState.world_settings.difficulty ?? 'normal';
-          calmMode = savedState.world_settings.calm_mode ?? false;
-        } else {
-          worldSettings = {
-            time_of_day: 'day',
-            weather: 'clear',
-            rising_hazard_type: '',
-            rising_hazard_speed: 20,
-            victory_rules: { win_condition: 'all_enemies', celebration: 'confetti' },
-            loss_rules: { lose_condition: 'health_0', action: 'game_over' },
-            room_rules: []
-          };
-        }
+        worldSettings = normalizeLoadedWorldSettings(savedState.world_settings);
+        difficultyMode = getSavedDifficulty(savedState.world_settings);
+        calmMode = getSavedCalmMode(savedState.world_settings);
         status = `Loaded room: ${roomId}`;
-        levelHistory = [placed.map(ent => ({
-          ...ent,
-          position: { ...ent.position },
-          modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
-        }))];
-        levelHistoryIndex = 0;
+        levelHistoryState = createLevelHistory(placed);
       }
     } catch (error) {
       status = `Failed to load room ${roomId}: ${error}`;
@@ -1088,82 +657,27 @@
 
   async function refreshInventory() {
     try {
-      inventory = await invoke<AssetInventory>('get_asset_inventory');
+      inventory = await loadAssetInventory();
       status = 'Toybox refreshed.';
     } catch (error) {
       status = `Refresh failed: ${error}`;
     }
   }
 
-  // ── Thumbnail generation using a hidden <canvas> ──────────────────────────
-  const CATEGORY_COLORS: Record<string, string> = {
-    heroes: '#60a5fa',
-    terrain: '#6b7280',
-    enemies: '#f87171',
-    collectibles: '#fbbf24',
-    portals: '#a78bfa',
-    decorations: '#34d399',
-    particles: '#c084fc'
-  };
-
   function generateThumbnail(roomId: string) {
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = 160;
-      canvas.height = 90;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // Background
-      ctx.fillStyle = worldSettings.time_of_day === 'night' ? '#0f172a'
-        : worldSettings.time_of_day === 'sunset' ? '#7c2d12'
-        : worldSettings.time_of_day === 'morning' ? '#164e63'
-        : '#1e3a5f';
-      ctx.fillRect(0, 0, 160, 90);
-
-      if (placed.length === 0) {
-        localStorage.setItem(`thumb_${roomId}`, canvas.toDataURL());
-        return;
-      }
-
-      // Compute world bounds from placed entities
-      const xs = placed.map(e => e.position.x);
-      const ys = placed.map(e => e.position.y);
-      const minX = Math.min(...xs) - 32;
-      const minY = Math.min(...ys) - 32;
-      const rangeX = Math.max(...xs) - minX + 64;
-      const rangeY = Math.max(...ys) - minY + 64;
-
-      const scaleX = 160 / rangeX;
-      const scaleY = 90 / rangeY;
-      const scale = Math.min(scaleX, scaleY);
-
-      for (const e of placed) {
-        const px = (e.position.x - minX) * scale;
-        const py = (e.position.y - minY) * scale;
-        ctx.fillStyle = CATEGORY_COLORS[e.category] ?? '#94a3b8';
-        if (e.category === 'terrain') {
-          ctx.fillRect(px - 6, py - 2, 12, 4);
-        } else {
-          ctx.beginPath();
-          ctx.arc(px, py, e.category === 'heroes' ? 5 : 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-
-      localStorage.setItem(`thumb_${roomId}`, canvas.toDataURL());
-    } catch { /* non-critical */ }
+    generateRoomThumbnail(roomId, placed, worldSettings);
   }
 
   function getThumbnail(roomId: string): string | null {
-    try { return localStorage.getItem(`thumb_${roomId}`); }
-    catch { return null; }
+    return getStoredThumbnail(roomId);
   }
 
   function createNewRoom() {
-    selectedTheme = 'space';
-    selectedAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
-    selectedNoun = nouns['space'][Math.floor(Math.random() * nouns['space'].length)];
+    themeDraft = {
+      theme: 'space',
+      adjective: randomRoomAdjective(),
+      noun: randomRoomNoun('space')
+    };
     openThemeSelector();
   }
 
@@ -1171,81 +685,19 @@
     themeSelectorOpen = true;
   }
 
-  async function applyNameAndTheme() {
-    const rawName = `${selectedAdjective} ${selectedNoun}`;
-    const sanitized = rawName.toLowerCase().replace(/[^a-z0-9]/g, "_");
-    const customId = `${selectedTheme}_${sanitized}_${Math.floor(Math.random() * 900 + 100)}`;
-    await applyTheme(selectedTheme, customId);
+  async function applyNameAndTheme(theme: ThemeName, adjective: string, noun: string) {
+    const customId = buildNamedThemeRoomId(theme, adjective, noun);
+    await applyTheme(theme, customId);
   }
 
-  async function applyTheme(themeName: 'space' | 'candy' | 'jungle' | 'ice' | 'volcano', customRoomId?: string) {
+  async function applyTheme(themeName: ThemeName, customRoomId?: string) {
     themeSelectorOpen = false;
-    const newId = customRoomId || `${themeName}_room_${Math.floor(Math.random() * 900 + 100)}`;
+    const newId = customRoomId || buildThemeRoomId(themeName);
     activeRoomId = newId;
 
-    const baseSettings = {
-      rising_hazard_type: '' as const,
-      rising_hazard_speed: 20,
-      victory_rules: { win_condition: 'all_enemies', celebration: 'confetti' },
-      loss_rules: { lose_condition: 'health_0', action: 'game_over' },
-      room_rules: []
-    };
-
-    if (themeName === 'space') {
-      worldSettings = { time_of_day: 'night', weather: 'clear', ...baseSettings };
-    } else if (themeName === 'candy') {
-      worldSettings = { time_of_day: 'sunset', weather: 'clear', ...baseSettings };
-    } else if (themeName === 'ice') {
-      worldSettings = { time_of_day: 'morning', weather: 'snow', ...baseSettings };
-    } else if (themeName === 'volcano') {
-      worldSettings = { time_of_day: 'sunset', weather: 'clear', ...baseSettings };
-    } else {
-      worldSettings = { time_of_day: 'day', weather: 'rain', ...baseSettings };
-    }
-    (worldSettings as any).theme = themeName;
-
-    const terrainAsset = findAsset('stone_floor') ?? { id: 'stone_floor', name: 'Stone Floor', category: 'terrain', type: 'terrain' };
-    const heroAsset = findAsset('hero_knight') ?? { id: 'hero_knight', name: 'Hero Knight', category: 'heroes', type: 'player' };
-    const rubyAsset = findAsset('gold_ruby') ?? { id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', type: 'collectible' };
-
-    const newPlaced: PlacedEntity[] = [
-      {
-        instance_id: makeInstanceId(heroAsset.id),
-        asset_id: heroAsset.id,
-        category: heroAsset.category,
-        type: heroAsset.type ?? heroAsset.category,
-        position: { x: 128, y: 300 },
-        is_camera_target: true,
-        modifiers: { variant: 'default', scale_multiplier: 1.0 }
-      },
-      {
-        instance_id: makeInstanceId(rubyAsset.id),
-        asset_id: rubyAsset.id,
-        category: rubyAsset.category,
-        type: rubyAsset.type ?? rubyAsset.category,
-        position: { x: 800, y: 330 },
-        modifiers: { variant: 'default', scale_multiplier: 1.0 }
-      }
-    ];
-
-    for (let i = 0; i < 7; i++) {
-      newPlaced.push({
-        instance_id: makeInstanceId(terrainAsset.id),
-        asset_id: terrainAsset.id,
-        category: terrainAsset.category,
-        type: terrainAsset.type ?? terrainAsset.category,
-        position: { x: 128 + i * 128, y: 392 },
-        modifiers: { variant: 'default', scale_multiplier: 1.0 }
-      });
-    }
-
-    placed = newPlaced;
-    levelHistory = [placed.map(ent => ({
-      ...ent,
-      position: { ...ent.position },
-      modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
-    }))];
-    levelHistoryIndex = 0;
+    worldSettings = buildThemeWorldSettings(themeName);
+    placed = buildThemeStarterEntities(findAsset);
+    levelHistoryState = createLevelHistory(placed);
 
     status = `Created new ${themeName} room: ${newId}`;
     playUiSound('chime');
@@ -1259,14 +711,13 @@
       await saveCurrentRoom();
 
       const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
-      (window as any).currentGameLevel = JSON.stringify(payload);
-      (window as any).currentGameMuted = isMuted;
+      setGlobalGameLevel(JSON.stringify(payload));
+      setGlobalGameMuted(isMuted);
 
       status = 'Preparing WebGL game...';
       try {
         await invoke('build_web_runner');
         playModalOpen = true;
-        isGamePaused = false;
         status = 'Loaded embedded play mode!';
         playUiSound('chime');
       } catch (err) {
@@ -1319,207 +770,27 @@
   }
 
   function findAsset(assetId: string): ToyboxAsset | undefined {
-    return Object.values(inventory).flat().find((asset) => asset.id === assetId);
-  }
-
-  function isEmoji(str: string | undefined): boolean {
-    if (!str) return true;
-    return !str.includes('.') && !str.includes('/') && !str.includes('\\');
-  }
-
-  function getAssetUrl(asset: ToyboxAsset): string {
-    if (!asset.visual || isEmoji(asset.visual)) return '';
-    if (!asset.sidecar_path) return asset.visual;
-    const lastSlash = Math.max(asset.sidecar_path.lastIndexOf('/'), asset.sidecar_path.lastIndexOf('\\'));
-    if (lastSlash === -1) return asset.visual;
-    const dir = asset.sidecar_path.substring(0, lastSlash + 1);
-    return convertFileSrc(dir + asset.visual);
+    return findInventoryAsset(inventory, assetId);
   }
 
   // ── Feature: 🎲 Surprise Me! Level Generator ──────────────────────────────
   async function surpriseMe() {
-    const themes: ('space' | 'candy' | 'jungle' | 'ice' | 'volcano')[] = ['space', 'candy', 'jungle', 'ice', 'volcano'];
-    const themeName = themes[Math.floor(Math.random() * themes.length)];
-    const newId = `surprise_${themeName}_${Math.floor(Math.random() * 900 + 100)}`;
-    activeRoomId = newId;
+    const generated = buildSurpriseRoom(findAsset, difficultyMode, calmMode);
+    activeRoomId = generated.roomId;
+    worldSettings = generated.worldSettings;
+    placed = generated.placed;
+    levelHistoryState = createLevelHistory(placed);
 
-    // Set world settings for the theme
-    const themeSettings: Record<string, any> = {
-      space: { time_of_day: 'night', weather: 'clear' },
-      candy: { time_of_day: 'sunset', weather: 'clear' },
-      jungle: { time_of_day: 'day', weather: 'rain' },
-      ice: { time_of_day: 'morning', weather: 'snow' },
-      volcano: { time_of_day: 'sunset', weather: 'clear' }
-    };
-    worldSettings = {
-      ...themeSettings[themeName],
-      victory_rules: { win_condition: 'all_coins', celebration: 'confetti' },
-      loss_rules: { lose_condition: 'health_0', action: 'respawn' },
-      room_rules: []
-    };
-    (worldSettings as any).theme = themeName;
-    (worldSettings as any).difficulty = difficultyMode;
-    (worldSettings as any).calm_mode = calmMode;
-
-    const terrainAsset = findAsset('stone_floor') ?? { id: 'stone_floor', name: 'Stone Floor', category: 'terrain', type: 'terrain' };
-    const heroAsset = findAsset('hero_knight') ?? { id: 'hero_knight', name: 'Hero Knight', category: 'heroes', type: 'player' };
-    const rubyAsset = findAsset('gold_ruby') ?? { id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', type: 'collectible' };
-    const slimeAsset = findAsset('slime_patrol') ?? { id: 'slime_patrol', name: 'Slime', category: 'enemies', type: 'enemy' };
-    const portalAsset = findAsset('exit_portal');
-
-    const newPlaced: PlacedEntity[] = [];
-
-    // Hero at start
-    newPlaced.push({
-      instance_id: makeInstanceId(heroAsset.id),
-      asset_id: heroAsset.id,
-      category: heroAsset.category,
-      type: heroAsset.type ?? heroAsset.category,
-      position: { x: 128, y: 300 },
-      is_camera_target: true,
-      modifiers: { variant: 'default', scale_multiplier: 1.0 }
-    });
-
-    // Procedural terrain generation — platform chain
-    let curX = 0;
-    let curY = 392;
-    const platformCount = 8 + Math.floor(Math.random() * 6); // 8-13 platforms
-    const platformPositions: { x: number; y: number }[] = [];
-
-    for (let i = 0; i < platformCount; i++) {
-      newPlaced.push({
-        instance_id: makeInstanceId(terrainAsset.id),
-        asset_id: terrainAsset.id,
-        category: terrainAsset.category,
-        type: terrainAsset.type ?? terrainAsset.category,
-        position: { x: curX, y: curY },
-        modifiers: { variant: 'default', scale_multiplier: 1.0 }
-      });
-      platformPositions.push({ x: curX, y: curY });
-
-      // Next platform: move right, maybe move up/down
-      curX += 128 + Math.floor(Math.random() * 64);
-      const verticalShift = Math.floor(Math.random() * 5) - 2; // -2 to +2
-      curY += verticalShift * 32;
-      curY = Math.max(200, Math.min(500, curY)); // clamp Y range
-    }
-
-    // Place collectibles on random platforms
-    const collectibleCount = 5 + Math.floor(Math.random() * 6);
-    for (let i = 0; i < collectibleCount; i++) {
-      const plat = platformPositions[Math.floor(Math.random() * platformPositions.length)];
-      const offsetXRnd = (Math.random() - 0.5) * 80;
-      newPlaced.push({
-        instance_id: makeInstanceId(rubyAsset.id),
-        asset_id: rubyAsset.id,
-        category: rubyAsset.category,
-        type: rubyAsset.type ?? rubyAsset.category,
-        position: { x: plat.x + offsetXRnd, y: plat.y - 60 - Math.random() * 40 },
-        modifiers: { variant: 'default', scale_multiplier: 1.0, score_value: 10 }
-      });
-    }
-
-    // Place enemies — more towards the end
-    if (slimeAsset) {
-      const enemyCount = 2 + Math.floor(Math.random() * 4);
-      for (let i = 0; i < enemyCount; i++) {
-        const platIdx = Math.floor(platformPositions.length * 0.3 + Math.random() * platformPositions.length * 0.7);
-        const plat = platformPositions[Math.min(platIdx, platformPositions.length - 1)];
-        const behaviors: string[] = ['patrol', 'chase', 'jump'];
-        newPlaced.push({
-          instance_id: makeInstanceId(slimeAsset.id),
-          asset_id: slimeAsset.id,
-          category: slimeAsset.category,
-          type: slimeAsset.type ?? slimeAsset.category,
-          position: { x: plat.x + 40, y: plat.y - 48 },
-          modifiers: {
-            variant: 'default',
-            scale_multiplier: 1.0,
-            behavior_type: behaviors[Math.floor(Math.random() * behaviors.length)],
-            patrol_speed: 50 + Math.floor(Math.random() * 100)
-          }
-        });
-      }
-    }
-
-    // Exit portal at the end
-    if (portalAsset) {
-      const lastPlat = platformPositions[platformPositions.length - 1];
-      newPlaced.push({
-        instance_id: makeInstanceId(portalAsset.id),
-        asset_id: portalAsset.id,
-        category: portalAsset.category,
-        type: portalAsset.type ?? portalAsset.category,
-        position: { x: lastPlat.x, y: lastPlat.y - 48 },
-        modifiers: { variant: 'default', scale_multiplier: 1.0, target_room: '' }
-      });
-    }
-
-    placed = newPlaced;
-    levelHistory = [placed.map(ent => ({
-      ...ent,
-      position: { ...ent.position },
-      modifiers: ent.modifiers ? { ...ent.modifiers } : undefined
-    }))];
-    levelHistoryIndex = 0;
-
-    status = `🎲 Surprise! Created ${themeName} adventure with ${platformCount} platforms!`;
+    status = `🎲 Surprise! Created ${generated.theme} adventure with ${generated.platformCount} platforms!`;
     playUiSound('chime');
     await saveCurrentRoom();
   }
 
   async function remixCurrentRoom() {
     if (placed.length === 0) return;
-    const heroEntities = placed.filter(ent => ent.category === 'heroes' && ent.type === 'player');
-    const terrainEntities = placed.filter(ent => ent.category === 'terrain');
-    const enemyEntities = placed.filter(ent => ent.category === 'enemies');
-    const collectibleEntities = placed.filter(ent => ent.category === 'collectibles');
-    const otherEntities = placed.filter(ent => 
-      ent.category !== 'heroes' && 
-      ent.category !== 'terrain' && 
-      ent.category !== 'enemies' && 
-      ent.category !== 'collectibles'
-    );
-
-    const remixedTerrain = terrainEntities.map(ent => {
-      const shiftX = (Math.floor(Math.random() * 3) - 1) * 32;
-      const shiftY = (Math.floor(Math.random() * 3) - 1) * 32;
-      return {
-        ...ent,
-        position: {
-          x: Math.max(0, ent.position.x + shiftX),
-          y: Math.max(0, ent.position.y + shiftY)
-        }
-      };
-    });
-
-    const enemyPositions = enemyEntities.map(ent => ({ ...ent.position }));
-    const shuffledPositions = [...enemyPositions].sort(() => Math.random() - 0.5);
-    const remixedEnemies = enemyEntities.map((ent, idx) => ({
-      ...ent,
-      position: shuffledPositions[idx] || ent.position
-    }));
-
-    const collectiblePositions = collectibleEntities.map(ent => ({ ...ent.position }));
-    const shuffledCollectibles = [...collectiblePositions].sort(() => Math.random() - 0.5);
-    const remixedCollectibles = collectibleEntities.map((ent, idx) => ({
-      ...ent,
-      position: shuffledCollectibles[idx] || ent.position
-    }));
-
-    const times: ('day' | 'morning' | 'sunset' | 'night')[] = ['day', 'morning', 'sunset', 'night'];
-    const weathers: ('clear' | 'rain' | 'snow')[] = ['clear', 'rain', 'snow'];
-    worldSettings.time_of_day = times[Math.floor(Math.random() * times.length)];
-    worldSettings.weather = weathers[Math.floor(Math.random() * weathers.length)];
-    worldSettings = { ...worldSettings };
-
-    placed = [
-      ...heroEntities,
-      ...remixedTerrain,
-      ...remixedEnemies,
-      ...remixedCollectibles,
-      ...otherEntities
-    ];
+    const remixed = remixPlacedRoom(placed, worldSettings);
+    placed = remixed.placed;
+    worldSettings = remixed.worldSettings;
 
     saveLevelState();
     await saveCurrentRoom();
@@ -1579,1654 +850,164 @@
 </script>
 
 <main class="app-shell">
-  <header class="topbar">
-    <span class="logo">🧸 KidGameMaker</span>
-
-    <!-- World cycle settings -->
-    <div class="world-cycle-controls">
-      <button class="cycle-btn time-btn" on:click={(e) => { animateClick(e); cycleTime(); }} title="Change Time of Day">
-        {#if worldSettings.time_of_day === 'day'}☀️{:else if worldSettings.time_of_day === 'morning'}🌅{:else if worldSettings.time_of_day === 'sunset'}🌇{:else}🌙{/if}
-      </button>
-      <button class="cycle-btn weather-btn" on:click={(e) => { animateClick(e); cycleWeather(); }} title="Change Weather">
-        {#if worldSettings.weather === 'clear'}🌤{:else if worldSettings.weather === 'rain'}🌧{:else}❄️{/if}
-      </button>
-      <button class="cycle-btn mute-btn" class:active={isMuted} on:click={(e) => { animateClick(e); toggleMute(); }} title="Toggle Sound">
-        {isMuted ? "🔇" : "🔊"}
-      </button>
-      <button class="cycle-btn composer-btn" on:click={(e) => { animateClick(e); openBeatComposer(); }} title="🎹 Compose Beat Loop">
-        🎹
-      </button>
-      <button class="cycle-btn map-btn" class:active={showMapView} on:click={(e) => { animateClick(e); toggleMapView(); }} title="🗺️ World Map Connector">
-        🗺️
-      </button>
-      <button class="cycle-btn rules-btn" class:active={showRulesEditor} on:click={(e) => { animateClick(e); toggleRulesEditor(); }} title="✨ Magic Rules Engine">
-        ✨
-      </button>
-    </div>
-
-    <!-- Active Stamp -->
-    <button class="stamp-select-btn" class:active={!eraserMode} on:click={(e) => { animateClick(e); eraserMode = false; }} style="display: flex; align-items: center; gap: 8px;">
-      <span class="active-visual-container">
-        {#if activeAsset.visual && !isEmoji(activeAsset.visual)}
-          {#if activeAsset.is_spritesheet && activeAsset.frames && activeAsset.frames[0]}
-            <img
-              src={getAssetUrl(activeAsset)}
-              alt={activeAsset.name}
-              style="
-                width: {activeAsset.frames[0].w}px;
-                height: {activeAsset.frames[0].h}px;
-                object-fit: none;
-                object-position: -{activeAsset.frames[0].x}px -{activeAsset.frames[0].y}px;
-                transform: scale({Math.min(1.5, 24 / Math.max(activeAsset.frames[0].w, activeAsset.frames[0].h))});
-                transform-origin: center;
-                display: block;
-              "
-            />
-          {:else}
-            <img
-              src={getAssetUrl(activeAsset)}
-              alt={activeAsset.name}
-              style="max-width: 24px; max-height: 24px; object-fit: contain; display: block;"
-            />
-          {/if}
-        {:else}
-          <span>{activeAsset.visual ?? '🎮'}</span>
-        {/if}
-      </span>
-      <span class="btn-text">{activeAsset.name}</span>
-    </button>
-    
-    {#if activeAsset}
-      <button class="edit-toy-btn" on:click={(e) => { animateClick(e); editActiveAsset(); }} title="Paint/Edit this toy">🎨 Edit</button>
-    {/if}
-
-    <button class="eraser-btn-top" class:active={eraserMode} on:click={(e) => { animateClick(e); eraserMode = !eraserMode; }} title="Eraser">🧽 Eraser</button>
-    <button class="snap-btn-top" class:active={snapEnabled} on:click={(e) => { animateClick(e); snapEnabled = !snapEnabled; }} title="Snap to Grid">🧲 Snap</button>
-    <button class="undo-btn-top" disabled={levelHistoryIndex <= 0} on:click={(e) => { animateClick(e); undoLevel(); }} title="Undo last action">↺ Undo</button>
-    <button class="redo-btn-top" disabled={levelHistoryIndex >= levelHistory.length - 1} on:click={(e) => { animateClick(e); redoLevel(); }} title="Redo action">↻ Redo</button>
-    <button class="toybox-btn-top" on:click={(e) => { animateClick(e); toyboxOpen = true; }} title="Toybox">🧰 Toybox</button>
-    <button class="draw-toy-btn-top" on:click={(e) => { animateClick(e); openCustomAssetCanvas(); }} title="Draw Toy">🎨 Draw</button>
-    <button class="surprise-btn-top" on:click={(e) => { animateClick(e); surpriseMe(); }} title="Generate a random level!">🎲 Surprise Me!</button>
-    <button class="remix-btn-top" on:click={(e) => { animateClick(e); remixCurrentRoom(); }} title="Shuffles the items in the room!">🔀 Remix!</button>
-
-    <!-- Play Button (Big, green) -->
-    <button id="btn-play" class="play-btn-top" on:click={(e) => { animateClick(e); play(); }} title="Play!">▶ PLAY</button>
-
-    <!-- Parents panel toggle -->
-    <button class="parents-toggle-btn" class:active={parentsPanelOpen} on:click={(e) => { animateClick(e); parentsPanelOpen = !parentsPanelOpen; }} title="Parents / Developers Settings">⚙️ Parents</button>
-  </header>
+  <EditorTopbar
+    {worldSettings}
+    {activeAsset}
+    {isMuted}
+    {showMapView}
+    {showRulesEditor}
+    {eraserMode}
+    {snapEnabled}
+    canUndo={levelHistoryIndex > 0}
+    canRedo={levelHistoryIndex < levelHistory.length - 1}
+    {parentsPanelOpen}
+    on:cycleTime={cycleTime}
+    on:cycleWeather={cycleWeather}
+    on:toggleMute={toggleMute}
+    on:openBeatComposer={openBeatComposer}
+    on:toggleMapView={toggleMapView}
+    on:toggleRulesEditor={toggleRulesEditor}
+    on:selectStamp={() => eraserMode = false}
+    on:editActiveAsset={editActiveAsset}
+    on:toggleEraser={() => eraserMode = !eraserMode}
+    on:toggleSnap={() => snapEnabled = !snapEnabled}
+    on:undo={undoLevel}
+    on:redo={redoLevel}
+    on:openToybox={() => toyboxOpen = true}
+    on:drawToy={openCustomAssetCanvas}
+    on:surprise={surpriseMe}
+    on:remix={remixCurrentRoom}
+    on:play={play}
+    on:toggleParents={() => parentsPanelOpen = !parentsPanelOpen}
+  />
 
   {#if parentsPanelOpen}
-    <div class="parents-panel-container">
-      <div class="parents-panel-header">
-        <h3>⚙️ Parents & Developers Settings</h3>
-      </div>
-      <div class="parents-panel-body">
-        <div class="panel-section">
-          <h4>Room Manager</h4>
-          <div class="panel-row">
-            <button class="bookshelf-btn" on:click={(e) => { animateClick(e); bookshelfOpen = true; }}>📚 Browse Rooms</button>
-            <select id="room-selector" value={activeRoomId} on:change={(e) => loadSelectedRoom(e.currentTarget.value)}>
-              {#each rooms as room}
-                <option value={room}>{room}</option>
-              {/each}
-            </select>
-            <input id="room-name-input" type="text" bind:value={activeRoomId} placeholder="Room ID" title="Change Room Name" />
-            <button id="btn-new-room" class="icon-btn" on:click={(e) => { animateClick(e); createNewRoom(); }} title="New Room">➕ New</button>
-          </div>
-        </div>
-
-        <div class="panel-section">
-          <h4>Actions</h4>
-          <div class="panel-row">
-            <button id="btn-save" class="save" on:click={(e) => { animateClick(e); saveCurrentRoom(); }}>💾 SAVE</button>
-            <button id="btn-export" class="export" on:click={(e) => { animateClick(e); exportGame(); }} style="background: #10b981; color: white;">📦 EXPORT</button>
-            <button id="btn-share" class="share" on:click={(e) => { animateClick(e); shareGame(); }} style="background: #a855f7; color: white;">✨ SHARE TOYBOX (.ktoy)</button>
-            <button id="btn-refresh-toybox" class="icon-btn refresh-btn" on:click={(e) => { animateClick(e); refreshInventory(); }} title="Refresh Toybox from disk">🔄 RELOAD</button>
-          </div>
-        </div>
-
-        <div class="panel-section">
-          <h4>Active Toy Specs</h4>
-          <div class="panel-row spec-labels">
-            <span><strong>ID:</strong> {activeAsset.id}</span>
-            <span><strong>Category:</strong> {activeAsset.category}</span>
-            <span><strong>Snap Type:</strong> {activeAsset.snapping_type || 'default'}</span>
-          </div>
-        </div>
-
-        <div class="panel-section">
-          <h4>🛡️ Game Difficulty</h4>
-          <div class="panel-row">
-            <select id="difficulty-selector" value={difficultyMode} on:change={(e) => { difficultyMode = e.currentTarget.value as any; saveCurrentRoom(); }}>
-              <option value="easy">🌟 Easy Mode (50% damage, 200% HP)</option>
-              <option value="normal">⚔️ Normal Mode</option>
-              <option value="creative">🌈 Creative Mode (Invincible!)</option>
-            </select>
-          </div>
-          <div class="panel-row" style="gap: 12px; margin-top: 8px;">
-            <label style="display: flex; align-items: center; gap: 8px; color: #e2e8f0; font-weight: 700; cursor: pointer;">
-              <input type="checkbox" bind:checked={calmMode} on:change={saveCurrentRoom} style="width: 20px; height: 20px; accent-color: #10b981; cursor: pointer;" />
-              🌼 Calm Mode (Friendly enemies, no game over)
-            </label>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ParentsPanel
+      {rooms}
+      {activeRoomId}
+      {activeAsset}
+      {difficultyMode}
+      {calmMode}
+      on:browseRooms={() => bookshelfOpen = true}
+      on:activeRoomIdChange={(event) => activeRoomId = event.detail}
+      on:loadRoom={(event) => loadSelectedRoom(event.detail)}
+      on:createNewRoom={createNewRoom}
+      on:saveRoom={saveCurrentRoom}
+      on:exportGame={exportGame}
+      on:shareGame={shareGame}
+      on:refreshInventory={refreshInventory}
+      on:difficultyChange={(event) => setDifficultyMode(event.detail)}
+      on:calmModeChange={(event) => setCalmMode(event.detail)}
+    />
   {/if}
 
   {#if showMapView}
-    <div class="map-view-container" style="flex: 1; padding: 30px; background: #0f172a; overflow-y: auto; display: flex; flex-direction: column; align-items: center; min-height: calc(100vh - 70px);">
-      <h2 style="color: white; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">🗺️ Connect-the-Rooms Map 🏰</h2>
-      <p style="color: #94a3b8; margin-bottom: 24px; text-align: center; max-width: 600px;">
-        Visual room portal connections. Link portal destinations directly by selecting target rooms from the cards.
-      </p>
-      
-      <div class="rooms-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; width: 100%; max-width: 1200px;">
-        {#each rooms as r}
-          {@const roomPortals = placed.filter(ent => ent.category === 'portals' || ent.type === 'portal')}
-          <div class="room-node-card" style="background: #1e293b; border: 2px solid {r === activeRoomId ? '#6366f1' : '#334155'}; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <h3 style="color: white; margin: 0; font-size: 1.1rem;">🚪 {r}</h3>
-              {#if r === activeRoomId}
-                <span style="background: #6366f1; color: white; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: bold;">EDITING</span>
-              {/if}
-            </div>
-
-            <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 8px; font-size: 0.85rem; color: #cbd5e1; display: flex; flex-direction: column; gap: 6px;">
-              <span style="font-weight: bold; color: #94a3b8;">Portal Links in room:</span>
-              {#if r === activeRoomId}
-                {#if roomPortals.length === 0}
-                  <span style="font-style: italic; color: #64748b;">No portals stamped in this room yet.</span>
-                {:else}
-                  {#each roomPortals as portal}
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(0,0,0,0.2); padding: 6px; border-radius: 6px;">
-                      <span>🌀 {portal.instance_id.slice(0, 8)}...</span>
-                      <select 
-                        style="background: #0f172a; color: white; border: 1px solid #475569; border-radius: 4px; padding: 2px 4px; font-size: 0.8rem;"
-                        bind:value={portal.modifiers.target_room}
-                        on:change={saveCurrentRoom}
-                      >
-                        <option value="">(Select Target Room)</option>
-                        {#each rooms as dest}
-                          {#if dest !== r}
-                            <option value={dest}>➡️ {dest}</option>
-                          {/if}
-                        {/each}
-                      </select>
-                    </div>
-                  {/each}
-                {/if}
-              {:else}
-                <span style="font-style: italic; color: #64748b; font-size: 0.75rem;">Switch room to configure portal connections.</span>
-              {/if}
-            </div>
-
-            <button 
-              style="margin-top: 8px; padding: 6px; border-radius: 6px; border: none; font-weight: bold; background: {r === activeRoomId ? '#475569' : '#334155'}; color: white; cursor: pointer; font-size: 0.85rem;"
-              disabled={r === activeRoomId}
-              on:click={() => { loadSelectedRoom(r); }}
-            >
-              📂 Jump into Room
-            </button>
-          </div>
-        {/each}
-      </div>
-    </div>
+    <RoomMapView
+      {rooms}
+      {activeRoomId}
+      {placed}
+      on:loadRoom={(event) => loadSelectedRoom(event.detail)}
+      on:saveRoom={saveCurrentRoom}
+    />
   {:else if showRulesEditor}
-    <div class="rules-view-container" style="flex: 1; padding: 30px; background: #0f172a; overflow-y: auto; display: flex; flex-direction: column; align-items: center; min-height: calc(100vh - 70px);">
-      <h2 style="color: white; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">✨ Magic Rules Engine ⚙️</h2>
-      <p style="color: #94a3b8; margin-bottom: 24px; text-align: center; max-width: 600px;">
-        Create rules without code! Tell the game what should happen when you flip a lever, collect gems, or step on buttons.
-      </p>
-
-      <div style="width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 16px; margin-bottom: 30px;">
-        <!-- Victory & Loss Global Rules Card -->
-        <div class="global-rules-card" style="background: #1e293b; border: 3px solid #fbbf24; border-radius: 16px; padding: 20px; color: white; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.35);">
-          <h3 style="color: #fbbf24; margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1.25rem;">🏆 Victory & Loss Rules</h3>
-          
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
-            <!-- Victory Rules Column -->
-            <div style="display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.15); padding: 12px; border-radius: 10px;">
-              <span style="font-weight: 900; color: #10b981;">🥇 VICTORY RULE</span>
-              {#if worldSettings.victory_rules}
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                  <span style="font-size: 0.85rem; color: #94a3b8;">Win Condition:</span>
-                  <select 
-                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 8px; font-size: 0.9rem;"
-                    bind:value={worldSettings.victory_rules.win_condition}
-                    on:change={saveCurrentRoom}
-                  >
-                    <option value="all_enemies">👾 Defeat all Monsters</option>
-                    <option value="all_coins">💎 Collect all Rubies</option>
-                    <option value="portal">🌀 Reach the Exit Portal</option>
-                  </select>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                  <span style="font-size: 0.85rem; color: #94a3b8;">Celebration Effect:</span>
-                  <select 
-                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 8px; font-size: 0.9rem;"
-                    bind:value={worldSettings.victory_rules.celebration}
-                    on:change={saveCurrentRoom}
-                  >
-                    <option value="confetti">🎉 Rainbow Confetti</option>
-                    <option value="simple">🌟 Simple Victory Page</option>
-                  </select>
-                </div>
-              {/if}
-            </div>
-
-            <!-- Loss Rules Column -->
-            <div style="display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.15); padding: 12px; border-radius: 10px;">
-              <span style="font-weight: 900; color: #ef4444;">💀 GAME OVER RULE</span>
-              {#if worldSettings.loss_rules}
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                  <span style="font-size: 0.85rem; color: #94a3b8;">Lose Condition:</span>
-                  <select 
-                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 8px; font-size: 0.9rem;"
-                    bind:value={worldSettings.loss_rules.lose_condition}
-                    on:change={saveCurrentRoom}
-                  >
-                    <option value="health_0">💔 Health Falls to 0</option>
-                  </select>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                  <span style="font-size: 0.85rem; color: #94a3b8;">Action on Defeat:</span>
-                  <select 
-                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 8px; font-size: 0.9rem;"
-                    bind:value={worldSettings.loss_rules.action}
-                    on:change={saveCurrentRoom}
-                  >
-                    <option value="game_over">💀 Show Game Over Screen</option>
-                    <option value="respawn">🔄 Auto-Respawn Player</option>
-                  </select>
-                </div>
-              {/if}
-            </div>
-
-            <!-- Rising Hazard Column -->
-            <div style="display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.15); padding: 12px; border-radius: 10px;">
-              <span style="font-weight: 900; color: #f97316;">🌋 RISING DANGER</span>
-              <div style="display: flex; flex-direction: column; gap: 4px;">
-                <span style="font-size: 0.85rem; color: #94a3b8;">Hazard Type:</span>
-                <select 
-                  style="background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 8px; font-size: 0.9rem;"
-                  bind:value={worldSettings.rising_hazard_type}
-                  on:change={() => {
-                    if (worldSettings.rising_hazard_type && !worldSettings.rising_hazard_speed) {
-                      worldSettings.rising_hazard_speed = 20;
-                    }
-                    saveCurrentRoom();
-                  }}
-                >
-                  <option value="">🚫 No Danger</option>
-                  <option value="water">🌊 Rising Water (Drowns Slowly)</option>
-                  <option value="lava">🌋 Rising Lava (Burns Quickly)</option>
-                </select>
-              </div>
-              {#if worldSettings.rising_hazard_type}
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                  <span style="font-size: 0.85rem; color: #94a3b8;">Rising Speed:</span>
-                  <select 
-                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 8px; font-size: 0.9rem;"
-                    bind:value={worldSettings.rising_hazard_speed}
-                    on:change={saveCurrentRoom}
-                  >
-                    <option value={10}>🐌 Slow (10)</option>
-                    <option value={20}>🚶 Normal (20)</option>
-                    <option value={40}>🏃 Fast (40)</option>
-                    <option value={80}>⚡ Extreme (80)</option>
-                  </select>
-                </div>
-              {/if}
-            </div>
-          </div>
-        </div>
-
-        <button 
-          style="align-self: flex-end; padding: 8px 16px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; background: #10b981; color: white; font-size: 0.9rem;"
-          on:click={addNewRule}
-        >
-          ➕ Add New Rule
-        </button>
-
-        {#if !worldSettings.room_rules || worldSettings.room_rules.length === 0}
-          <div style="background: #1e293b; padding: 40px; border-radius: 12px; border: 2px dashed #475569; text-align: center; color: #94a3b8;">
-            <span style="font-size: 3rem; display: block; margin-bottom: 12px;">🧙‍♂️</span>
-            <h3>No Magic Rules Yet!</h3>
-            <p>Click "Add New Rule" to link buttons, levers, or coin targets to events.</p>
-          </div>
-        {:else}
-          <div style="display: flex; flex-direction: column; gap: 12px;">
-            {#each worldSettings.room_rules as rule, idx}
-              <div class="rule-card" style="background: #1e293b; border-radius: 10px; padding: 16px; display: flex; align-items: center; gap: 12px; border: 1px solid #334155; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
-                
-                <span style="font-weight: bold; color: #38bdf8;">IF</span>
-                <select 
-                  style="background: #0f172a; color: white; border: 1px solid #475569; padding: 6px; border-radius: 6px; font-size: 0.85rem;"
-                  bind:value={rule.trigger_type}
-                  on:change={() => { rule.trigger_id = ''; saveCurrentRoom(); }}
-                >
-                  <option value="button_step">🔘 Floor Button Stepped</option>
-                  <option value="lever_flip">🕹️ Wall Lever Flipped</option>
-                  <option value="target_hit">🎯 Target Practice Hit</option>
-                  <option value="pressure_plate_on">🟨 Pressure Plate Pressed</option>
-                  <option value="pressure_plate_off">🟨 Pressure Plate Released</option>
-                  <option value="coins_5">💎 Collected 5 Rubies</option>
-                  <option value="coins_10">💎 Collected 10 Rubies</option>
-                </select>
-
-                {#if rule.trigger_type === 'button_step' || rule.trigger_type === 'lever_flip' || rule.trigger_type === 'target_hit' || rule.trigger_type === 'pressure_plate_on' || rule.trigger_type === 'pressure_plate_off'}
-                  {@const targetTriggerAsset = rule.trigger_type === 'button_step' ? 'trigger_button' : rule.trigger_type === 'lever_flip' ? 'trigger_lever' : rule.trigger_type === 'target_hit' ? 'target_practice' : 'trigger_pressure_plate'}
-                  <select 
-                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 6px; border-radius: 6px; font-size: 0.85rem;"
-                    bind:value={rule.trigger_id}
-                    on:change={saveCurrentRoom}
-                  >
-                    <option value="">(Select Trigger Entity)</option>
-                    {#each placed.filter(ent => ent.asset_id === targetTriggerAsset) as ent}
-                      <option value={ent.instance_id}>
-                        {ent.instance_id.slice(0, 8)}... ({findAsset(ent.asset_id)?.name})
-                      </option>
-                    {/each}
-                  </select>
-                {/if}
-
-                <span style="font-weight: bold; color: #a78bfa;">➡️ THEN</span>
-                <select 
-                  style="background: #0f172a; color: white; border: 1px solid #475569; padding: 6px; border-radius: 6px; font-size: 0.85rem;"
-                  bind:value={rule.action_type}
-                  on:change={saveCurrentRoom}
-                >
-                  <option value="toggle_gate">🚪 Open/Close Switch Gate</option>
-                  <option value="spawn_sparkles">✨ Spawn Magic Sparkles</option>
-                  <option value="heal_player">💖 Heal Player 20 HP</option>
-                  <option value="play_sfx_chime">🔔 Play Chime Sound</option>
-                </select>
-
-                {#if rule.action_type === 'toggle_gate'}
-                  <select 
-                    style="background: #0f172a; color: white; border: 1px solid #475569; padding: 6px; border-radius: 6px; font-size: 0.85rem;"
-                    bind:value={rule.action_id}
-                    on:change={saveCurrentRoom}
-                  >
-                    <option value="">(Select Gate)</option>
-                    {#each placed.filter(ent => ent.type === 'gate') as ent}
-                      <option value={ent.instance_id}>
-                        {ent.instance_id.slice(0, 8)}... ({findAsset(ent.asset_id)?.name})
-                      </option>
-                    {/each}
-                  </select>
-                {/if}
-
-                <button 
-                  style="margin-left: auto; padding: 6px 12px; border-radius: 6px; border: none; background: #ef4444; color: white; cursor: pointer; font-size: 0.85rem; font-weight: bold;"
-                  on:click={() => deleteRule(idx)}
-                >
-                  🗑️ Delete
-                </button>
-              </div>
-            {/each}
-          </div>
-        {/if}
-      </div>
-    </div>
+    <RulesEditorView
+      {worldSettings}
+      {placed}
+      {findAsset}
+      on:addRule={addNewRule}
+      on:deleteRule={(event) => deleteRule(event.detail)}
+      on:saveRoom={saveCurrentRoom}
+    />
   {:else}
-    {#if favoritesItems.length > 0}
-      <section class="favorites-ribbon" aria-label="Favorites ribbon">
-        <span class="ribbon-label">⭐ Favorites:</span>
-        {#each favoritesItems as asset}
-          <button
-            class="ribbon-btn fav-ribbon-btn"
-            class:active={activeAsset.id === asset.id && !eraserMode}
-            on:click={(e) => { animateClick(e); selectAsset(asset); }}
-            title={asset.name}
-          >
-            <span class="ribbon-visual-container">
-              {#if asset.visual && !isEmoji(asset.visual)}
-                {#if asset.is_spritesheet && asset.frames && asset.frames[0]}
-                  <img
-                    src={getAssetUrl(asset)}
-                    alt={asset.name}
-                    style="
-                      width: {asset.frames[0].w}px;
-                      height: {asset.frames[0].h}px;
-                      object-fit: none;
-                      object-position: -{asset.frames[0].x}px -{asset.frames[0].y}px;
-                      transform: scale({Math.min(1.5, 48 / Math.max(asset.frames[0].w, asset.frames[0].h))});
-                      transform-origin: center;
-                      display: block;
-                    "
-                  />
-                {:else}
-                  <img
-                    src={getAssetUrl(asset)}
-                    alt={asset.name}
-                    style="max-width: 48px; max-height: 48px; object-fit: contain; display: block;"
-                  />
-                {/if}
-              {:else}
-                <span>{asset.visual ?? '🎮'}</span>
-              {/if}
-            </span>
-            <small>{asset.name}</small>
-          </button>
-        {/each}
-      </section>
-    {/if}
-    <section class="quick-ribbon" aria-label="Quick toybox ribbon">
+    <ToyRibbon
+      favorites={favoritesItems}
+      quickItems={quickRibbon}
+      {activeAsset}
+      {eraserMode}
+      on:select={(event) => selectAsset(event.detail)}
+    />
 
-      {#each quickRibbon as asset}
-      <button
-        class="ribbon-btn"
-        class:active={activeAsset.id === asset.id && !eraserMode}
-        on:click={(e) => { animateClick(e); selectAsset(asset); }}
-        title={asset.name}
-      >
-        <span class="ribbon-visual-container">
-          {#if asset.visual && !isEmoji(asset.visual)}
-            {#if asset.is_spritesheet && asset.frames && asset.frames[0]}
-              <img
-                src={getAssetUrl(asset)}
-                alt={asset.name}
-                style="
-                  width: {asset.frames[0].w}px;
-                  height: {asset.frames[0].h}px;
-                  object-fit: none;
-                  object-position: -{asset.frames[0].x}px -{asset.frames[0].y}px;
-                  transform: scale({Math.min(1.5, 48 / Math.max(asset.frames[0].w, asset.frames[0].h))});
-                  transform-origin: center;
-                  display: block;
-                "
-              />
-            {:else}
-              <img
-                src={getAssetUrl(asset)}
-                alt={asset.name}
-                style="max-width: 48px; max-height: 48px; object-fit: contain; display: block;"
-              />
-            {/if}
-          {:else}
-            <span>{asset.visual ?? '🎮'}</span>
-          {/if}
-        </span>
-        <small>{asset.name}</small>
-      </button>
-    {/each}
-  </section>
-
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div 
-    class="canvas theme-{(worldSettings as any).theme || 'default'}" 
-    on:mousedown={startDrawing}
-    on:mousemove={(e) => { handleMouseMove(e); handleDragMove(e); }}
-    on:mouseup={(e) => { stopDrawing(e); handleStampLongPressEnd(); }}
-    on:mouseleave={() => { isHovering = false; isDrawing = false; handleStampLongPressEnd(); }}
-    on:wheel={handleWheel}
-    on:contextmenu|preventDefault
-    on:mousedown|stopPropagation={handleMouseDown}
-    on:mouseup|stopPropagation={handleMouseUp}
-    aria-label="Game canvas"
-  >
-    <div 
-      class="canvas-inner" 
-      style:transform={`translate(${offsetX}px, ${offsetY}px) scale(${zoom})`}
-      style:transform-origin="0 0"
-    >
-      <div class="horizon"></div>
-      {#each placed as item (item.instance_id)}
-        {@const asset = findAsset(item.asset_id)}
-        <button
-          class="stamp {item.category}"
-          class:stamp-dragging={draggingEntity?.instance_id === item.instance_id}
-          style:left={`${item.position.x}px`}
-          style:top={`${item.position.y}px`}
-          title={`${item.asset_id} ${item.instance_id}${item.modifiers.target_room ? ` (Leads to ${item.modifiers.target_room})` : ''}`}
-          on:click|stopPropagation={() => {
-            if (longPressTriggered) { longPressTriggered = false; return; }
-            if (eraserMode) {
-              placed = eraseEntity(placed, item.instance_id);
-              playUiSound('squeak');
-            } else {
-              selectEntity(item);
-            }
-          }}
-          on:mousedown|stopPropagation={(e) => handleStampLongPressStart(e, item)}
-          on:mouseup|stopPropagation={() => handleStampLongPressEnd()}
-          style:border-radius={item.category === 'terrain' ? '14px' : '50%'}
-          style:width={item.category === 'terrain' ? '160px' : '56px'}
-          style:overflow="hidden"
-        >
-          <span class="stamp-visual-container">
-            {#if asset && asset.visual && !isEmoji(asset.visual)}
-              {#if asset.is_spritesheet && asset.frames && asset.frames[0]}
-                <img
-                  src={getAssetUrl(asset)}
-                  alt={asset.name}
-                  style="
-                    width: {asset.frames[0].w}px;
-                    height: {asset.frames[0].h}px;
-                    object-fit: none;
-                    object-position: -{asset.frames[0].x}px -{asset.frames[0].y}px;
-                    transform: scale({item.category === 'terrain' ? Math.min(2.0, 160 / asset.frames[0].w) : Math.min(1.5, 48 / Math.max(asset.frames[0].w, asset.frames[0].h))});
-                    transform-origin: center;
-                    display: block;
-                  "
-                />
-              {:else}
-                <img
-                  src={getAssetUrl(asset)}
-                  alt={asset.name}
-                  style="max-width: {item.category === 'terrain' ? '150px' : '48px'}; max-height: 48px; object-fit: contain; display: block;"
-                />
-              {/if}
-            {:else}
-              <span>{asset?.visual ?? '🎮'}</span>
-            {/if}
-          </span>
-        </button>
-      {/each}
-
-      {#if isHovering && !eraserMode}
-        <div 
-          class="hover-guide {activeAsset.category}"
-          style:left={`${hoverPos.x}px`}
-          style:top={`${hoverPos.y}px`}
-          style:border-radius={activeAsset.category === 'terrain' ? '14px' : '50%'}
-          style:width={activeAsset.category === 'terrain' ? '160px' : '56px'}
-          style:overflow="hidden"
-        >
-          <span class="stamp-visual-container">
-            {#if activeAsset.visual && !isEmoji(activeAsset.visual)}
-              {#if activeAsset.is_spritesheet && activeAsset.frames && activeAsset.frames[0]}
-                <img
-                  src={getAssetUrl(activeAsset)}
-                  alt={activeAsset.name}
-                  style="
-                    width: {activeAsset.frames[0].w}px;
-                    height: {activeAsset.frames[0].h}px;
-                    object-fit: none;
-                    object-position: -{activeAsset.frames[0].x}px -{activeAsset.frames[0].y}px;
-                    transform: scale({activeAsset.category === 'terrain' ? Math.min(2.0, 160 / activeAsset.frames[0].w) : Math.min(1.5, 48 / Math.max(activeAsset.frames[0].w, activeAsset.frames[0].h))});
-                    transform-origin: center;
-                    display: block;
-                  "
-                />
-              {:else}
-                <img
-                  src={getAssetUrl(activeAsset)}
-                  alt={activeAsset.name}
-                  style="max-width: {activeAsset.category === 'terrain' ? '150px' : '48px'}; max-height: 48px; object-fit: contain; display: block;"
-                />
-              {/if}
-            {:else}
-              <span>{activeAsset.visual ?? '🎮'}</span>
-            {/if}
-          </span>
-        </div>
-      {/if}
-    </div>
-  </div>
+    <CanvasWorkspace
+      {worldSettings}
+      {placed}
+      {activeAsset}
+      {eraserMode}
+      {offsetX}
+      {offsetY}
+      {zoom}
+      {isHovering}
+      {hoverPos}
+      {draggingEntity}
+      {findAsset}
+      {startDrawing}
+      {stopDrawing}
+      {handleMouseMove}
+      {handleDragMove}
+      {handleWheel}
+      {handleMouseDown}
+      {handleMouseUp}
+      {handleCanvasLeave}
+      {handleStampLongPressStart}
+      {handleStampLongPressEnd}
+      {handlePlacedStampClick}
+    />
   {/if}
 
-  <footer>
-    <code>{status}</code>
-    <span style="display: flex; align-items: center; gap: 12px;">
-      <span style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 0.85rem; color: #fbbf24;">{levelLengthLabel}</span>
-      <span>{placed.length} stamped objects | Zoom: {Math.round(zoom * 100)}%</span>
-    </span>
-  </footer>
-
-  <ToyboxModal
-    isVisible={toyboxOpen}
-    inventory={inventory}
-    isMuted={isMuted}
-    bind:favorites={favorites}
-    on:itemSelected={(event) => selectAsset(event.detail)}
-    on:close={() => (toyboxOpen = false)}
+  <EditorStatusBar
+    {status}
+    {levelLengthLabel}
+    objectCount={placed.length}
+    {zoom}
   />
 
-
-  <BookshelfModal
-    isVisible={bookshelfOpen}
+  <EditorModals
+    {toyboxOpen}
+    {bookshelfOpen}
+    {spriteEditorOpen}
+    {themeSelectorOpen}
+    {beatComposerOpen}
+    {playModalOpen}
+    {inventory}
+    {isMuted}
+    bind:favorites
     {rooms}
     {activeRoomId}
     {getThumbnail}
-    on:selectRoom={(e) => { loadSelectedRoom(e.detail); bookshelfOpen = false; }}
+    {editingAssetId}
+    {editingCategory}
+    {themeDraft}
+    customBgmSequence={worldSettings.custom_bgm_sequence}
+    on:selectToyboxItem={(event) => selectAsset(event.detail)}
+    on:closeToybox={() => toyboxOpen = false}
+    on:selectRoom={(event) => { loadSelectedRoom(event.detail); bookshelfOpen = false; }}
     on:newRoom={() => { createNewRoom(); bookshelfOpen = false; }}
-    on:deleteRoom={(e) => deleteRoom(e.detail)}
-    on:close={() => (bookshelfOpen = false)}
+    on:deleteRoom={(event) => deleteRoom(event.detail)}
+    on:closeBookshelf={() => bookshelfOpen = false}
+    on:closeSpriteEditor={() => spriteEditorOpen = false}
+    on:drawingSaved={handleDrawingSaved}
+    on:createThemeRoom={(event) => applyNameAndTheme(event.detail.theme, event.detail.adjective, event.detail.noun)}
+    on:closeThemeSelector={() => themeSelectorOpen = false}
+    on:previewBeat={() => playUiSound('pop')}
+    on:saveBeat={(event) => saveBeatSequence(event.detail)}
+    on:closeBeatComposer={() => beatComposerOpen = false}
+    on:closePlayModal={() => playModalOpen = false}
+    on:playStatus={(event) => status = event.detail}
+    on:toggleMute={toggleMute}
+    on:restartSound={() => playUiSound('chime')}
+    on:launchWindow={() => { playModalOpen = false; launchNativeWindow(); }}
   />
-
-  <SpriteEditorModal
-    isVisible={spriteEditorOpen}
-    targetAssetId={editingAssetId}
-    category={editingCategory}
-    isMuted={isMuted}
-    on:close={() => (spriteEditorOpen = false)}
-    on:saved={handleDrawingSaved}
-  />
-
-  {#if themeSelectorOpen}
-    <div class="backdrop" role="button" tabindex="-1" on:click={() => (themeSelectorOpen = false)}>
-      <div class="modal theme-modal" role="dialog" tabindex="0" on:click|stopPropagation style="max-width: 650px; padding: 30px; border-radius: 32px; background: #0f172a; border: 4px solid #334155;">
-        <h2 style="color: white; margin-bottom: 20px; font-size: 1.8rem; font-weight: 800; text-align: center;">🌟 Create & Name Your New Adventure! 🌟</h2>
-        
-        <!-- Preview Banner -->
-        <div style="background: #1e293b; padding: 14px 20px; border-radius: 20px; border: 3px solid #fbbf24; margin-bottom: 24px; font-size: 2rem; font-weight: 900; display: flex; align-items: center; justify-content: center; gap: 12px; color: #fbbf24; text-shadow: 0 2px 4px rgba(0,0,0,0.5); box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);">
-          <span>{getThemeEmoji(selectedTheme)}</span>
-          <span>{selectedAdjective}</span>
-          <span>{selectedNoun}</span>
-        </div>
-
-        <!-- 1. Choose Theme -->
-        <div style="margin-bottom: 20px;">
-          <h3 style="color: #94a3b8; font-size: 1.1rem; margin-bottom: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; text-align: center;">1. Choose Theme</h3>
-          <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-            {#each ['space', 'candy', 'jungle', 'ice', 'volcano'] as theme}
-              <button 
-                on:click={() => { selectedTheme = theme as any; selectedNoun = nouns[theme][Math.floor(Math.random() * nouns[theme].length)]; }}
-                style="
-                  display: flex;
-                  flex-direction: column;
-                  align-items: center;
-                  justify-content: center;
-                  padding: 12px;
-                  width: 100px;
-                  border-radius: 20px;
-                  border: 3px solid {selectedTheme === theme ? '#fbbf24' : '#334155'};
-                  background: {selectedTheme === theme ? 'rgba(251, 191, 36, 0.15)' : '#1e293b'};
-                  color: white;
-                  cursor: pointer;
-                  transition: transform 0.15s, border-color 0.15s;
-                "
-                class="theme-card-mini"
-              >
-                <span style="font-size: 2.2rem; margin-bottom: 4px;">{getThemeEmoji(theme)}</span>
-                <span style="font-size: 0.9rem; font-weight: 700;">{theme.toUpperCase()}</span>
-              </button>
-            {/each}
-          </div>
-        </div>
-
-        <!-- 2. Choose Adjective -->
-        <div style="margin-bottom: 20px;">
-          <h3 style="color: #94a3b8; font-size: 1.1rem; margin-bottom: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; text-align: center;">2. Choose a Fun Word</h3>
-          <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 580px; margin: 0 auto;">
-            {#each adjectives as adj}
-              <button 
-                on:click={() => selectedAdjective = adj}
-                style="
-                  padding: 8px 16px;
-                  border-radius: 12px;
-                  border: none;
-                  font-weight: 800;
-                  cursor: pointer;
-                  font-size: 1rem;
-                  background: {selectedAdjective === adj ? '#fbbf24' : '#1e293b'};
-                  color: {selectedAdjective === adj ? '#0f172a' : '#94a3b8'};
-                  box-shadow: 0 4px 6px rgba(0,0,0,0.15);
-                  transition: all 0.1s;
-                "
-              >
-                {adj}
-              </button>
-            {/each}
-          </div>
-        </div>
-
-        <!-- 3. Choose Noun -->
-        <div style="margin-bottom: 30px;">
-          <h3 style="color: #94a3b8; font-size: 1.1rem; margin-bottom: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; text-align: center;">3. Choose a Place</h3>
-          <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 580px; margin: 0 auto;">
-            {#each nouns[selectedTheme] as noun}
-              <button 
-                on:click={() => selectedNoun = noun}
-                style="
-                  padding: 8px 16px;
-                  border-radius: 12px;
-                  border: none;
-                  font-weight: 800;
-                  cursor: pointer;
-                  font-size: 1rem;
-                  background: {selectedNoun === noun ? '#fbbf24' : '#1e293b'};
-                  color: {selectedNoun === noun ? '#0f172a' : '#94a3b8'};
-                  box-shadow: 0 4px 6px rgba(0,0,0,0.15);
-                  transition: all 0.1s;
-                "
-              >
-                {noun}
-              </button>
-            {/each}
-          </div>
-        </div>
-
-        <!-- Actions -->
-        <div style="display: flex; gap: 16px; justify-content: center;">
-          <button on:click={applyNameAndTheme} style="background: #10b981; color: white; padding: 12px 36px; border-radius: 18px; font-size: 1.3rem; font-weight: 900; border: none; cursor: pointer; box-shadow: 0 6px 12px rgba(16, 185, 129, 0.3);">
-            ✨ CREATE ROOM! 🚀
-          </button>
-          <button on:click={() => (themeSelectorOpen = false)} style="background: #ef4444; color: white; padding: 12px 24px; border-radius: 18px; font-size: 1.1rem; font-weight: 700; border: none; cursor: pointer;">
-            ✕ CANCEL
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  {#if beatComposerOpen}
-    <div class="backdrop" role="button" tabindex="-1" on:click={closeBeatComposer}>
-      <div class="modal composer-modal" role="dialog" tabindex="0" on:click|stopPropagation style="max-width: 500px; padding: 20px;">
-        <h2>🎹 Chiptune Beat Composer 🎹</h2>
-        <p style="font-size: 0.9rem; color: #94a3b8; text-align: center; margin-bottom: 16px;">
-          Click the boxes to compose your own chiptune loop! Hit play to listen.
-        </p>
-        
-        <div class="sequencer-grid" style="display: grid; gap: 8px; margin-bottom: 20px;">
-          {#each ['🥁 Kick', '🥁 Snare', '🔔 Hi-Hat', '🎵 Bass'] as instName, rIndex}
-            <div class="seq-row" style="display: grid; grid-template-columns: 80px repeat(8, 1fr); align-items: center; gap: 6px;">
-              <span style="font-size: 0.85rem; font-weight: bold; color: white; text-align: left;">{instName}</span>
-              {#each Array(8) as _, cIndex}
-                {@const isActive = customBgmSequence[rIndex][cIndex] === 1}
-                <button
-                  class="seq-cell"
-                  aria-label="Instrument {rIndex} Step {cIndex + 1}"
-                  style:background={isActive ? (rIndex === 0 ? '#ef4444' : rIndex === 1 ? '#3b82f6' : rIndex === 2 ? '#eab308' : '#a855f7') : '#334155'}
-                  style:border="2px solid {previewingBgm && currentPreviewStep === cIndex ? '#ffffff' : 'transparent'}"
-                  style="aspect-ratio: 1; border-radius: 6px; cursor: pointer; transition: transform 0.1s; width: 100%; border: 2px solid transparent;"
-                  on:click={() => toggleBeatCell(rIndex, cIndex)}
-                ></button>
-              {/each}
-            </div>
-          {/each}
-        </div>
-
-        <div style="display: flex; gap: 12px; justify-content: center; width: 100%;">
-          <button 
-            style="flex: 1; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; background: {previewingBgm ? '#ef4444' : '#10b981'}; color: white;"
-            on:click={togglePreviewBgm}
-          >
-            {previewingBgm ? '⏹️ STOP' : '▶️ PLAY PREVIEW'}
-          </button>
-          <button 
-            style="flex: 1; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; background: #6366f1; color: white;"
-            on:click={saveBeatSequence}
-          >
-            💾 SAVE BEAT
-          </button>
-          <button 
-            style="padding: 10px 16px; border-radius: 8px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; background: #475569; color: white;"
-            on:click={closeBeatComposer}
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-
-  {#if playModalOpen}
-    <div class="backdrop" role="button" tabindex="-1" on:click={closePlayModal}>
-      <div class="modal play-modal" role="dialog" tabindex="0" on:click|stopPropagation>
-        <header class="play-header">
-          <h2>🎮 Playing Game! 🎮</h2>
-          <div class="play-controls-overlay">
-            <button class="play-control-btn mute-btn-overlay" on:click={toggleMute} title="Toggle Sound" style="background: #374151; box-shadow: 0 5px 0 #1f2937;">
-              {isMuted ? "🔇" : "🔊"}
-            </button>
-            <button class="play-control-btn pause-btn" on:click={togglePauseGame} title={isGamePaused ? "Resume" : "Pause"}>
-              {isGamePaused ? "▶ Resume" : "⏸ Pause"}
-            </button>
-            <button class="play-control-btn restart-btn" on:click={restartGame} title="Restart level">
-              🔄 Restart
-            </button>
-            <button class="play-control-btn stop-btn" on:click={closePlayModal} title="Exit game">
-              🛑 Exit
-            </button>
-          </div>
-        </header>
-        <div class="game-container">
-          <iframe src="/game/index.html" title="KidGameMaker Embedded Play View" class="game-iframe"></iframe>
-        </div>
-        <div class="play-options">
-          <button class="window-btn" on:click={() => { closePlayModal(); launchNativeWindow(); }}>📺 Run in Large Window</button>
-        </div>
-      </div>
-    </div>
-  {/if}
 
   {#if selectedPlacedEntity}
-    <div class="customizer-panel">
-      <header class="customizer-header">
-        <h3>Customize Toy 🎛️</h3>
-        <button class="close-customizer-btn" on:click={() => selectedPlacedEntity = null}>✕</button>
-      </header>
-
-      <div class="customizer-body">
-        <div class="toy-info">
-          <span class="toy-icon">{findAsset(selectedPlacedEntity.asset_id)?.visual ?? '🎮'}</span>
-          <span class="toy-name">{findAsset(selectedPlacedEntity.asset_id)?.name ?? selectedPlacedEntity.asset_id}</span>
-        </div>
-
-        <div class="option-group">
-          <div class="option-label">
-            <span>Toy Size:</span>
-            <span>{selectedPlacedEntity.modifiers.scale_multiplier.toFixed(1)}x</span>
-          </div>
-          <input 
-            type="range" 
-            min="0.5" 
-            max="3.0" 
-            step="0.1" 
-            class="option-slider" 
-            bind:value={selectedPlacedEntity.modifiers.scale_multiplier} 
-            on:change={saveCurrentRoom} 
-          />
-        </div>
-
-        {#if selectedPlacedEntity.category === 'heroes' && selectedPlacedEntity.type === 'player'}
-          <div class="option-group">
-            <span class="option-label-text">👕 Costume Wardrobe:</span>
-            <div class="costume-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px;">
-              {#each [
-                { id: 'default', name: 'Default 🛡️', color: '#ffffff', tint: '' },
-                { id: 'fire', name: 'Fire 🔥', color: '#ef4444', tint: '#ff5555' },
-                { id: 'storm', name: 'Storm ⚡', color: '#eab308', tint: '#ffe040' },
-                { id: 'forest', name: 'Forest 🌱', color: '#22c55e', tint: '#55ff55' },
-                { id: 'void', name: 'Void 🔮', color: '#a855f7', tint: '#dd88ff' },
-                { id: 'frost', name: 'Frost ❄️', color: '#3b82f6', tint: '#66bbff' }
-              ] as costume}
-                <button
-                  type="button"
-                  style="
-                    background: {selectedPlacedEntity.modifiers.costume_id === costume.id ? costume.color : '#1e293b'};
-                    color: {selectedPlacedEntity.modifiers.costume_id === costume.id ? '#0f172a' : 'white'};
-                    border: 2px solid {costume.color};
-                    padding: 8px 4px;
-                    border-radius: 12px;
-                    font-size: 0.8rem;
-                    font-weight: bold;
-                    cursor: pointer;
-                    text-align: center;
-                    box-shadow: 0 3px 0 rgba(0,0,0,0.3);
-                  "
-                  on:click={() => {
-                    selectedPlacedEntity.modifiers.costume_id = costume.id;
-                    selectedPlacedEntity.modifiers.costume_tint = costume.tint;
-                    saveCurrentRoom();
-                  }}
-                >
-                  {costume.name}
-                </button>
-              {/each}
-            </div>
-          </div>
-
-          <div class="option-group" style="margin-top: 16px;">
-            <span class="option-label-text">🛡️ Hero Job / Class:</span>
-            <div class="class-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px;">
-              {#each [
-                { id: 'warrior', name: 'Warrior ⚔️', desc: 'Stronger melee & block', color: '#f87171' },
-                { id: 'mage', name: 'Mage 🔮', desc: 'Magic wands & fast mana', color: '#c084fc' },
-                { id: 'rogue', name: 'Rogue 💨', desc: 'Fast run & double dash', color: '#60a5fa' },
-                { id: 'archer', name: 'Archer 🏹', desc: 'Instant rapid fire arrows', color: '#4ade80' }
-              ] as job}
-                <button
-                  type="button"
-                  title={job.desc}
-                  style="
-                    background: {selectedPlacedEntity.modifiers.hero_class === job.id ? job.color : '#1e293b'};
-                    color: {selectedPlacedEntity.modifiers.hero_class === job.id ? '#0f172a' : 'white'};
-                    border: 2px solid {job.color};
-                    padding: 8px 4px;
-                    border-radius: 12px;
-                    font-size: 0.8rem;
-                    font-weight: bold;
-                    cursor: pointer;
-                    text-align: center;
-                    box-shadow: 0 3px 0 rgba(0,0,0,0.3);
-                  "
-                  on:click={() => {
-                    selectedPlacedEntity.modifiers.hero_class = job.id;
-                    saveCurrentRoom();
-                  }}
-                >
-                  {job.name}
-                </button>
-              {/each}
-            </div>
-          </div>
-        {/if}
-
-        {#if selectedPlacedEntity.category === 'terrain' || selectedPlacedEntity.type === 'terrain'}
-
-          <div class="option-group flex-row">
-            <span class="option-label-text">Is Moving Platform? 🚋</span>
-            <input 
-              type="checkbox" 
-              class="option-toggle" 
-              bind:checked={selectedPlacedEntity.modifiers.is_moving_platform} 
-              on:change={saveCurrentRoom} 
-            />
-          </div>
-
-          <div class="option-group flex-row">
-            <span class="option-label-text">Secret Passage? 🕵️‍♂️</span>
-            <input 
-              type="checkbox" 
-              class="option-toggle" 
-              bind:checked={selectedPlacedEntity.modifiers.is_illusion} 
-              on:change={saveCurrentRoom} 
-            />
-          </div>
-
-          {#if selectedPlacedEntity.modifiers.is_moving_platform}
-            <div class="option-group">
-              <span class="option-label-text">Movement Axis:</span>
-              <select 
-                class="option-select" 
-                bind:value={selectedPlacedEntity.modifiers.move_axis} 
-                on:change={saveCurrentRoom}
-              >
-                <option value="horizontal">↔️ Horizontal</option>
-                <option value="vertical">↕️ Vertical</option>
-              </select>
-            </div>
-
-            <div class="option-group">
-              <div class="option-label">
-                <span>Move Speed:</span>
-                <span>{selectedPlacedEntity.modifiers.move_speed ?? 100}</span>
-              </div>
-              <input 
-                type="range" 
-                min="20" 
-                max="200" 
-                step="10" 
-                class="option-slider" 
-                bind:value={selectedPlacedEntity.modifiers.move_speed} 
-                on:change={saveCurrentRoom} 
-              />
-            </div>
-
-            <div class="option-group">
-              <div class="option-label">
-                <span>Travel Distance:</span>
-                <span>{selectedPlacedEntity.modifiers.move_travel ?? 128}px</span>
-              </div>
-              <input 
-                type="range" 
-                min="32" 
-                max="512" 
-                step="16" 
-                class="option-slider" 
-                bind:value={selectedPlacedEntity.modifiers.move_travel} 
-                on:change={saveCurrentRoom} 
-              />
-            </div>
-          {/if}
-        {/if}
-
-        {#if selectedPlacedEntity.category === 'enemies' || selectedPlacedEntity.type === 'enemy'}
-          <div class="option-group">
-            <div class="option-label">
-              <span>Monster Speed:</span>
-              <span>{selectedPlacedEntity.modifiers.patrol_speed ?? 70}</span>
-            </div>
-            <input 
-              type="range" 
-              min="20" 
-              max="300" 
-              step="10" 
-              class="option-slider" 
-              bind:value={selectedPlacedEntity.modifiers.patrol_speed} 
-              on:change={saveCurrentRoom} 
-            />
-          </div>
-
-          <div class="option-group">
-            <div class="option-label">
-              <span>Damage:</span>
-              <span>{selectedPlacedEntity.modifiers.damage_value ?? 10}</span>
-            </div>
-            <input 
-              type="range" 
-              min="0" 
-              max="100" 
-              step="5" 
-              class="option-slider" 
-              bind:value={selectedPlacedEntity.modifiers.damage_value} 
-              on:change={saveCurrentRoom} 
-            />
-          </div>
-
-          <div class="option-group">
-            <span class="option-label-text">Monster AI Behavior:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.behavior_type} 
-              on:change={saveCurrentRoom}
-            >
-              <option value="patrol">🚶 Walk back & forth</option>
-              <option value="chase">🏃 Chase the player</option>
-              <option value="jump">🦘 Hop & Jump around</option>
-              <option value="fly">🦇 Fly like a bat</option>
-            </select>
-          </div>
-
-          <div class="option-group flex-row">
-            <span class="option-label-text">Shoots Projectiles? 🔫</span>
-            <input 
-              type="checkbox" 
-              class="option-toggle" 
-              bind:checked={selectedPlacedEntity.modifiers.shoot_projectiles} 
-              on:change={saveCurrentRoom} 
-            />
-          </div>
-
-          {#if selectedPlacedEntity.modifiers.shoot_projectiles}
-            <div class="option-group">
-              <div class="option-label">
-                <span>Shoot Speed:</span>
-                <span>{selectedPlacedEntity.modifiers.projectile_speed ?? 250}</span>
-              </div>
-              <input 
-                type="range" 
-                min="100" 
-                max="500" 
-                step="50" 
-                class="option-slider" 
-                bind:value={selectedPlacedEntity.modifiers.projectile_speed} 
-                on:change={saveCurrentRoom} 
-              />
-            </div>
-
-            <div class="option-group">
-              <div class="option-label">
-                <span>Shoot Delay:</span>
-                <span>{selectedPlacedEntity.modifiers.projectile_interval ?? 1.5}s</span>
-              </div>
-              <input 
-                type="range" 
-                min="0.5" 
-                max="4.0" 
-                step="0.5" 
-                class="option-slider" 
-                bind:value={selectedPlacedEntity.modifiers.projectile_interval} 
-                on:change={saveCurrentRoom} 
-              />
-            </div>
-          {/if}
-
-          <div class="option-group flex-row">
-            <span class="option-label-text">Is it a Boss? 👑</span>
-            <input 
-              type="checkbox" 
-              class="option-toggle" 
-              bind:checked={selectedPlacedEntity.modifiers.boss_mode} 
-              on:change={() => {
-                if (selectedPlacedEntity.modifiers.boss_mode) {
-                  selectedPlacedEntity.modifiers.scale_multiplier = 1.8;
-                  if (selectedPlacedEntity.modifiers.boss_hud_style === undefined) selectedPlacedEntity.modifiers.boss_hud_style = 'retro';
-                  if (selectedPlacedEntity.modifiers.boss_phases_count === undefined) selectedPlacedEntity.modifiers.boss_phases_count = 2;
-                } else {
-                  selectedPlacedEntity.modifiers.scale_multiplier = 1.0;
-                }
-                saveCurrentRoom();
-              }} 
-            />
-          </div>
-
-          {#if selectedPlacedEntity.modifiers.boss_mode}
-            <div class="option-group" style="margin-left: 12px; border-left: 3px solid #eab308; padding-left: 12px; margin-top: 8px;">
-              <span class="option-label-text" style="font-size: 0.85rem; color: #eab308;">👑 Boss Settings:</span>
-              
-              <div class="option-group" style="margin-top: 8px;">
-                <div class="option-label" style="font-size: 0.8rem; margin-bottom: 4px;">
-                  <span>HUD Health Bar Style:</span>
-                </div>
-                <select 
-                  class="option-select" 
-                  style="width: 100%; background: #1e293b; color: white; border: 1px solid #475569; border-radius: 8px; padding: 4px; font-size: 0.8rem;"
-                  bind:value={selectedPlacedEntity.modifiers.boss_hud_style}
-                  on:change={saveCurrentRoom}
-                >
-                  <option value="retro">👾 Retro Pixel</option>
-                  <option value="royal">👑 Royal Gold</option>
-                  <option value="spooky">💀 Spooky Skull</option>
-                </select>
-              </div>
-
-              <div class="option-group" style="margin-top: 8px;">
-                <div class="option-label" style="font-size: 0.8rem; margin-bottom: 4px;">
-                  <span>Boss Phases:</span>
-                  <span style="font-weight: bold; color: #eab308;">{selectedPlacedEntity.modifiers.boss_phases_count ?? 2} Phases</span>
-                </div>
-                <div style="display: flex; gap: 8px; margin-top: 4px;">
-                  {#each [1, 2, 3] as phase}
-                    <button
-                      type="button"
-                      style="
-                        flex: 1;
-                        background: {(selectedPlacedEntity.modifiers.boss_phases_count ?? 2) === phase ? '#eab308' : '#1e293b'};
-                        color: {(selectedPlacedEntity.modifiers.boss_phases_count ?? 2) === phase ? '#0f172a' : 'white'};
-                        border: 1px solid #eab308;
-                        padding: 4px;
-                        border-radius: 8px;
-                        font-size: 0.8rem;
-                        font-weight: bold;
-                        cursor: pointer;
-                        box-shadow: 0 2px 0 rgba(0,0,0,0.2);
-                      "
-                      on:click={() => {
-                        selectedPlacedEntity.modifiers.boss_phases_count = phase;
-                        saveCurrentRoom();
-                      }}
-                    >
-                      {phase}
-                    </button>
-                  {/each}
-                </div>
-              </div>
-            </div>
-          {/if}
-        {:else if selectedPlacedEntity.category === 'collectibles' || selectedPlacedEntity.type === 'collectible'}
-          <div class="option-group">
-            <div class="option-label">
-              <span>Score Value:</span>
-              <span>{selectedPlacedEntity.modifiers.score_value ?? 10}</span>
-            </div>
-            <input 
-              type="range" 
-              min="0" 
-              max="500" 
-              step="10" 
-              class="option-slider" 
-              bind:value={selectedPlacedEntity.modifiers.score_value} 
-              on:change={saveCurrentRoom} 
-            />
-          </div>
-
-          <div class="option-group">
-            <div class="option-label">
-              <span>Healing Power:</span>
-              <span>{selectedPlacedEntity.modifiers.heal_value ?? 0}</span>
-            </div>
-            <input 
-              type="range" 
-              min="0" 
-              max="100" 
-              step="5" 
-              class="option-slider" 
-              bind:value={selectedPlacedEntity.modifiers.heal_value} 
-              on:change={saveCurrentRoom} 
-            />
-          </div>
-
-          <div class="option-group">
-            <span class="option-label-text">Give Hero Special Power:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.powerup_type} 
-              on:change={saveCurrentRoom}
-            >
-              <option value="">❌ None</option>
-              <option value="speed">🧪 Speed Boost Potion</option>
-              <option value="shield">🛡️ Shield Bubble</option>
-              <option value="double_jump">👟 Double Jump Shoes</option>
-              <option value="glider">🪂 Glider Cape</option>
-              <option value="jetpack">🚀 Jetpack Thruster</option>
-              <option value="giant">🍄 Giant Growth Potion</option>
-              <option value="gravity">🔮 Gravity Inversion Potion</option>
-            </select>
-          </div>
-        {:else if selectedPlacedEntity.type === 'key_collectible'}
-          <div class="option-group">
-            <span class="option-label-text">Key Color:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.key_color} 
-              on:change={saveCurrentRoom}
-            >
-              <option value="gold">🟡 Gold Key</option>
-              <option value="red">🔴 Red Key</option>
-              <option value="blue">🔵 Blue Key</option>
-            </select>
-          </div>
-        {:else if selectedPlacedEntity.type === 'locked_door'}
-          <div class="option-group">
-            <span class="option-label-text">Required Key Color:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.key_color} 
-              on:change={saveCurrentRoom}
-            >
-              <option value="gold">🟡 Gold Key</option>
-              <option value="red">🔴 Red Key</option>
-              <option value="blue">🔵 Blue Key</option>
-            </select>
-          </div>
-          <div class="option-group">
-            <span class="option-label-text">Select Link Room (Optional portal exit):</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.target_room} 
-              on:change={saveCurrentRoom}
-            >
-              <option value="">(No Teleport, Just Unlocks)</option>
-              {#each rooms as r}
-                <option value={r}>{r === activeRoomId ? `${r} (This Room)` : r}</option>
-              {/each}
-            </select>
-          </div>
-        {:else if selectedPlacedEntity.category === 'portals' || selectedPlacedEntity.type === 'portal'}
-          <div class="option-group">
-            <span class="option-label-text">Select Link Room:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.target_room} 
-              on:change={saveCurrentRoom}
-            >
-              {#each rooms as r}
-                <option value={r}>{r === activeRoomId ? `${r} (This Room)` : r}</option>
-              {/each}
-            </select>
-          </div>
-        {:else if selectedPlacedEntity.type === 'conveyor'}
-          <div class="option-group">
-            <span class="option-label-text">Belt Direction:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.conveyor_direction} 
-              on:change={saveCurrentRoom}
-            >
-              <option value={1.0}>⏩ Move Right</option>
-              <option value={-1.0}>⏪ Move Left</option>
-            </select>
-          </div>
-          <div class="option-group">
-            <span class="option-label-text">Belt Speed:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.conveyor_speed} 
-              on:change={saveCurrentRoom}
-            >
-              <option value={80.0}>🐌 Slow</option>
-              <option value={140.0}>🏃 Fast</option>
-              <option value={220.0}>⚡ Super Fast</option>
-            </select>
-          </div>
-        {:else if selectedPlacedEntity.type === 'mystery_box'}
-          <div class="option-group">
-            <span class="option-label-text">Weighted Rewards:</span>
-            <span style="font-size: 0.85rem; color: #94a3b8;">Spawns Coins, Health, Speed boost, Shields, or a surprise slime!</span>
-          </div>
-        {:else if selectedPlacedEntity.category === 'particles' || selectedPlacedEntity.type === 'particles'}
-          <div class="option-group">
-            <span class="option-label-text">Effect Theme:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.particle_theme} 
-              on:change={saveCurrentRoom}
-            >
-              <option value="default">✨ Default</option>
-              <option value="rainbow">🌈 Rainbow Spark</option>
-              <option value="neon">⚡ Electric Neon</option>
-              <option value="frost">❄️ Frost Chill</option>
-              <option value="shadow">💀 Shadow Curse</option>
-            </select>
-          </div>
-
-          <div class="option-group">
-            <span class="option-label-text">Flow Speed:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.particle_intensity} 
-              on:change={saveCurrentRoom}
-            >
-              <option value="calm">🌸 Calm</option>
-              <option value="normal">💧 Normal</option>
-              <option value="wild">🌪️ Wild</option>
-            </select>
-          </div>
-
-          <div class="option-group">
-            <span class="option-label-text">Wind Direction:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.particle_direction} 
-              on:change={saveCurrentRoom}
-            >
-              <option value="up">⬆️ Blow Up</option>
-              <option value="down">⬇️ Blow Down</option>
-              <option value="left">⬅️ Blow Left</option>
-              <option value="right">➡️ Blow Right</option>
-            </select>
-          </div>
-        {:else if selectedPlacedEntity.type === 'trigger'}
-          <div class="option-group">
-            <span class="option-label-text">Link Target Gate:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.target_id} 
-              on:change={saveCurrentRoom}
-            >
-              <option value="">❌ None</option>
-              {#each placed.filter(ent => ent.type === 'gate' || ent.type === 'locked_door' || ent.type === 'portal') as ent}
-                <option value={ent.instance_id}>
-                  {ent.type.toUpperCase()}: {findAsset(ent.asset_id)?.name ?? ent.asset_id} ({ent.instance_id.slice(0, 8)}...)
-                </option>
-              {/each}
-            </select>
-          </div>
-        {:else if selectedPlacedEntity.type === 'jelly'}
-          <div class="option-group">
-            <span class="option-label-text">Bounce Power 🚀:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.bounce_force} 
-              on:change={saveCurrentRoom}
-            >
-              <option value={350}>🌸 Soft Spring (Low)</option>
-              <option value={500}>🦘 Kangaroo Hop (Medium)</option>
-              <option value={750}>🚀 Sky Launch (High)</option>
-              <option value={1000}>🌌 Orbit Rocket (Super)</option>
-            </select>
-          </div>
-        {:else if selectedPlacedEntity.type === 'speed_pad'}
-          <div class="option-group">
-            <span class="option-label-text">Boost Direction:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.boost_direction} 
-              on:change={saveCurrentRoom}
-            >
-              <option value={1}>➡️ Boost Right</option>
-              <option value={-1}>⬅️ Boost Left</option>
-            </select>
-          </div>
-          <div class="option-group">
-            <span class="option-label-text">Boost Speed:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.boost_force} 
-              on:change={saveCurrentRoom}
-            >
-              <option value={300}>🏃 Jog Speed</option>
-              <option value={550}>⚡ Turbo Zoom</option>
-              <option value={800}>🔥 Hyper Drive</option>
-            </select>
-          </div>
-        {:else if selectedPlacedEntity.type === 'speech_sign'}
-          <div class="option-group">
-            <span class="option-label-text">Choose Pre-made Message:</span>
-            <select 
-              class="option-select" 
-              on:change={(e) => {
-                selectedPlacedEntity.modifiers.speech_text = e.currentTarget.value;
-                saveCurrentRoom();
-              }}
-            >
-              <option value="">(Select or write custom text below)</option>
-              <option value="Watch out! 🌋">Watch out! 🌋</option>
-              <option value="Collect all the gems! 💎">Collect all the gems! 💎</option>
-              <option value="Double Jump to reach the top! 👟">Double Jump to reach the top! 👟</option>
-              <option value="Almost there! Find the portal! 🏁">Almost there! Find the portal! 🏁</option>
-              <option value="Hello adventurer! 🧙‍♂️">Hello adventurer! 🧙‍♂️</option>
-            </select>
-          </div>
-          <div class="option-group">
-            <span class="option-label-text">Custom Bubble Text:</span>
-            <textarea 
-              class="option-textarea" 
-              style="width: 100%; height: 60px; border-radius: 6px; padding: 6px; font-size: 0.9rem; background: #1e293b; color: white; border: 1px solid #475569;"
-              bind:value={selectedPlacedEntity.modifiers.speech_text}
-              placeholder="Type speech bubble text..."
-              on:input={saveCurrentRoom}
-            ></textarea>
-          </div>
-        {:else if selectedPlacedEntity.type === 'water_block'}
-          <div class="option-group">
-            <span class="option-label-text">Water Flavor:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.water_flavor} 
-              on:change={saveCurrentRoom}
-            >
-              <option value="normal">🌊 Blue Water (Swimmable)</option>
-              <option value="toxic">🧪 Toxic Sludge (Hurts Slowly)</option>
-              <option value="lava">🔥 Boiling Lava (Hurts Fast!)</option>
-            </select>
-          </div>
-          <div class="option-group">
-            <div class="option-label">
-              <span>Water Floatiness (Buoyancy):</span>
-              <span>{Math.round((selectedPlacedEntity.modifiers.water_buoyancy ?? 0.5) * 100)}%</span>
-            </div>
-            <input 
-              type="range" 
-              min="0.1" 
-              max="0.9" 
-              step="0.05" 
-              class="option-slider" 
-              bind:value={selectedPlacedEntity.modifiers.water_buoyancy} 
-              on:change={saveCurrentRoom} 
-            />
-          </div>
-        {:else if selectedPlacedEntity.type === 'pet'}
-          <div class="option-group">
-            <span class="option-label-text">Magic Power 🔮:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.pet_power} 
-              on:change={saveCurrentRoom}
-            >
-              <option value="magnet">🧲 Coin Magnet (Pulls Coins)</option>
-              <option value="light">💡 Lantern Fly (Lights Dark Rooms)</option>
-              <option value="shield">🛡️ Shield Link (Protects Player)</option>
-            </select>
-          </div>
-        {:else if selectedPlacedEntity.type === 'crumbling_cloud'}
-          <div class="option-group">
-            <div class="option-label">
-              <span>Crumble Delay:</span>
-              <span>{selectedPlacedEntity.modifiers.crumble_delay ?? 0.5}s</span>
-            </div>
-            <input 
-              type="range" 
-              min="0.1" 
-              max="2.0" 
-              step="0.1" 
-              class="option-slider" 
-              bind:value={selectedPlacedEntity.modifiers.crumble_delay} 
-              on:change={saveCurrentRoom} 
-            />
-          </div>
-          <div class="option-group">
-            <div class="option-label">
-              <span>Respawn Time:</span>
-              <span>{selectedPlacedEntity.modifiers.respawn_time ?? 3.0}s</span>
-            </div>
-            <input 
-              type="range" 
-              min="1.0" 
-              max="10.0" 
-              step="0.5" 
-              class="option-slider" 
-              bind:value={selectedPlacedEntity.modifiers.respawn_time} 
-              on:change={saveCurrentRoom} 
-            />
-          </div>
-        {:else if selectedPlacedEntity.type === 'hazard'}
-          <div class="option-group">
-            <div class="option-label">
-              <span>Spike/Cactus Damage:</span>
-              <span>{selectedPlacedEntity.modifiers.damage_value ?? 15} HP</span>
-            </div>
-            <input 
-              type="range" 
-              min="5" 
-              max="75" 
-              step="5" 
-              class="option-slider" 
-              bind:value={selectedPlacedEntity.modifiers.damage_value} 
-              on:change={saveCurrentRoom} 
-            />
-          </div>
-        {:else if selectedPlacedEntity.type === 'wind_zone'}
-          <div class="option-group">
-            <span class="option-label-text">Wind Direction:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.wind_direction} 
-              on:change={saveCurrentRoom}
-            >
-              <option value="right">➡️ Blow Right</option>
-              <option value="left">⬅️ Blow Left</option>
-              <option value="up">⬆️ Blow Up</option>
-              <option value="down">⬇️ Blow Down</option>
-            </select>
-          </div>
-          <div class="option-group">
-            <span class="option-label-text">Wind Strength:</span>
-            <select 
-              class="option-select" 
-              bind:value={selectedPlacedEntity.modifiers.wind_force} 
-              on:change={saveCurrentRoom}
-            >
-              <option value={150.0}>🍃 Gentle Breeze</option>
-              <option value={300.0}>💨 Windy Gust</option>
-              <option value={500.0}>🌪️ Hurricane Push</option>
-            </select>
-          </div>
-        {:else if selectedPlacedEntity.type === 'target_practice'}
-          <div class="option-group">
-            <span class="option-label-text">Target Mode:</span>
-            <span style="font-size: 0.85rem; color: #94a3b8;">🎯 Hit this target with projectiles, stomps, or a hammer to trigger magic rules!</span>
-          </div>
-        {:else if selectedPlacedEntity.type === 'zonai_fan'}
-          <div class="option-group">
-            <span class="option-label-text">Blow Direction:</span>
-            <select class="option-select" bind:value={selectedPlacedEntity.modifiers.zonai_direction} on:change={saveCurrentRoom}>
-              <option value="right">➡️ Right</option>
-              <option value="left">⬅️ Left</option>
-              <option value="up">⬆️ Up</option>
-              <option value="down">⬇️ Down</option>
-            </select>
-          </div>
-          <div class="option-group">
-            <div class="option-label">
-              <span>Wind Force:</span>
-              <span>{selectedPlacedEntity.modifiers.wind_force ?? 400}</span>
-            </div>
-            <input type="range" min="100" max="800" step="50" class="option-slider" bind:value={selectedPlacedEntity.modifiers.wind_force} on:change={saveCurrentRoom} />
-          </div>
-        {:else if selectedPlacedEntity.type === 'zonai_rocket'}
-          <div class="option-group">
-            <span class="option-label-text">Thrust Direction:</span>
-            <select class="option-select" bind:value={selectedPlacedEntity.modifiers.zonai_direction} on:change={saveCurrentRoom}>
-              <option value="up">⬆️ Up</option>
-              <option value="right">➡️ Right</option>
-              <option value="left">⬅️ Left</option>
-              <option value="down">⬇️ Down</option>
-            </select>
-          </div>
-          <div class="option-group">
-            <div class="option-label">
-              <span>Thrust Force:</span>
-              <span>{selectedPlacedEntity.modifiers.thrust_force ?? 800}</span>
-            </div>
-            <input type="range" min="300" max="1500" step="50" class="option-slider" bind:value={selectedPlacedEntity.modifiers.thrust_force} on:change={saveCurrentRoom} />
-          </div>
-          <div class="option-group">
-            <div class="option-label">
-              <span>Blast Duration (seconds):</span>
-              <span>{selectedPlacedEntity.modifiers.duration ?? 2.5}s</span>
-            </div>
-            <input type="range" min="0.5" max="5.0" step="0.5" class="option-slider" bind:value={selectedPlacedEntity.modifiers.duration} on:change={saveCurrentRoom} />
-          </div>
-        {:else if selectedPlacedEntity.type === 'zonai_balloon'}
-          <div class="option-group">
-            <div class="option-label">
-              <span>Lift Power:</span>
-              <span>{selectedPlacedEntity.modifiers.lift_force ?? 250}</span>
-            </div>
-            <input type="range" min="50" max="500" step="25" class="option-slider" bind:value={selectedPlacedEntity.modifiers.lift_force} on:change={saveCurrentRoom} />
-          </div>
-        {:else if selectedPlacedEntity.type === 'zonai_spring'}
-          <div class="option-group">
-            <div class="option-label">
-              <span>Spring Force:</span>
-              <span>{selectedPlacedEntity.modifiers.spring_force ?? 600}</span>
-            </div>
-            <input type="range" min="200" max="1200" step="50" class="option-slider" bind:value={selectedPlacedEntity.modifiers.spring_force} on:change={saveCurrentRoom} />
-          </div>
-        {:else if selectedPlacedEntity.type === 'zonai_beam'}
-          <div class="option-group">
-            <span class="option-label-text">Laser Direction:</span>
-            <select class="option-select" bind:value={selectedPlacedEntity.modifiers.zonai_direction} on:change={saveCurrentRoom}>
-              <option value="right">➡️ Right</option>
-              <option value="left">⬅️ Left</option>
-              <option value="up">⬆️ Up</option>
-              <option value="down">⬇️ Down</option>
-            </select>
-          </div>
-          <div class="option-group">
-            <div class="option-label">
-              <span>Laser Damage:</span>
-              <span>{selectedPlacedEntity.modifiers.damage ?? 15}</span>
-            </div>
-            <input type="range" min="5" max="50" step="5" class="option-slider" bind:value={selectedPlacedEntity.modifiers.damage} on:change={saveCurrentRoom} />
-          </div>
-        {:else if selectedPlacedEntity.type === 'zonai_battery'}
-          <div class="option-group">
-            <div class="option-label">
-              <span>Battery Energy:</span>
-              <span>{selectedPlacedEntity.modifiers.battery_capacity ?? 100}</span>
-            </div>
-            <input type="range" min="50" max="500" step="25" class="option-slider" bind:value={selectedPlacedEntity.modifiers.battery_capacity} on:change={saveCurrentRoom} />
-          </div>
-        {:else if selectedPlacedEntity.type === 'companion_pikmin'}
-          <div class="option-group">
-            <span class="option-label-text">Pikmin Color 🌱:</span>
-            <select class="option-select" bind:value={selectedPlacedEntity.modifiers.pikmin_color} on:change={saveCurrentRoom}>
-              <option value="red">❤️ Red (Fireproof)</option>
-              <option value="blue">💙 Blue (Swim/Water)</option>
-              <option value="yellow">💛 Yellow (Electricproof)</option>
-            </select>
-          </div>
-        {:else if selectedPlacedEntity.type === 'companion_ghost'}
-          <div class="option-group">
-            <div class="option-label">
-              <span>Life Drain Rate:</span>
-              <span>{selectedPlacedEntity.modifiers.drain_rate ?? 10}</span>
-            </div>
-            <input type="range" min="5" max="30" step="5" class="option-slider" bind:value={selectedPlacedEntity.modifiers.drain_rate} on:change={saveCurrentRoom} />
-          </div>
-        {:else if selectedPlacedEntity.type === 'bbq_spit'}
-          <div class="option-group">
-            <span class="option-label-text">Cooking Difficulty 🍖:</span>
-            <select class="option-select" bind:value={selectedPlacedEntity.modifiers.cook_difficulty} on:change={saveCurrentRoom}>
-              <option value="easy">🟢 Easy (Slow color shifts)</option>
-              <option value="medium">🟡 Medium (Normal timing)</option>
-              <option value="hard">🔴 Hard (Rapid color shifts)</option>
-            </select>
-          </div>
-        {/if}
-      </div>
-
-      <footer class="customizer-footer">
-        <button class="customizer-delete-btn" on:click={() => {
-          placed = eraseEntity(placed, selectedPlacedEntity.instance_id);
-          selectedPlacedEntity = null;
-          playUiSound('squeak');
-          saveCurrentRoom();
-        }}>🗑️ Throw Away Toy</button>
-      </footer>
-    </div>
+    <SelectedEntityCustomizer
+      entity={selectedPlacedEntity}
+      {rooms}
+      {activeRoomId}
+      {placed}
+      {findAsset}
+      on:close={() => selectedPlacedEntity = null}
+      on:deleteToy={(event) => deleteSelectedEntity(event.detail)}
+      on:saveRoom={saveCurrentRoom}
+    />
   {/if}
 </main>
 
@@ -3237,915 +1018,4 @@
     grid-template-rows: auto auto 1fr auto;
   }
 
-  .ribbon-visual-container,
-  .stamp-visual-container {
-    width: 100%;
-    height: 100%;
-    display: grid;
-    place-items: center;
-    overflow: hidden;
-  }
-
-  .active-visual-container {
-    width: 24px;
-    height: 24px;
-    display: grid;
-    place-items: center;
-    overflow: hidden;
-  }
-
-  .topbar,
-  .quick-ribbon,
-  footer {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    padding: 12px;
-    background: #101827;
-    border-bottom: 3px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .topbar {
-    flex-wrap: wrap;
-  }
-
-  .logo {
-    font-size: 1.5rem;
-    font-weight: 900;
-    color: #ffd84d;
-    margin-right: 12px;
-  }
-
-  .room-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(255, 255, 255, 0.05);
-    padding: 4px 10px;
-    border-radius: 18px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .room-controls select,
-  .room-controls input {
-    background: #1f2937;
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 12px;
-    padding: 4px 8px;
-    font-weight: 800;
-    font-size: 0.9rem;
-  }
-
-  .room-controls input {
-    width: 130px;
-  }
-
-  .bookshelf-btn {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: white;
-  }
-
-  .world-controls {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(255, 255, 255, 0.05);
-    padding: 4px 10px;
-    border-radius: 18px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .world-label {
-    font-size: 1rem;
-    line-height: 1;
-  }
-
-  .world-select {
-    background: #1f2937;
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 10px;
-    padding: 4px 8px;
-    font-weight: 700;
-    font-size: 0.85rem;
-    cursor: pointer;
-  }
-
-  .save {
-    background: #3b82f6;
-    color: white;
-  }
-
-  button {
-    border: 0;
-    border-radius: 18px;
-    padding: 12px 18px;
-    font-weight: 900;
-    cursor: pointer;
-    background: #f3f5ff;
-    color: #101827;
-    box-shadow: 0 5px 0 rgba(0, 0, 0, 0.35);
-  }
-
-  button:active {
-    transform: translateY(3px);
-    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
-  }
-
-  button.active {
-    outline: 4px solid #ffd84d;
-  }
-
-  .play {
-    background: #55e36f;
-    font-size: 1.2rem;
-  }
-
-  .icon-btn {
-    padding: 6px 12px;
-    border-radius: 12px;
-  }
-
-  .refresh-btn {
-    background: #92400e;
-    color: #fde68a;
-    font-size: 1rem;
-  }
-
-  .refresh-btn:hover {
-    background: #b45309;
-  }
-
-
-  .quick-ribbon {
-    overflow-x: auto;
-  }
-
-  .quick-ribbon button {
-    display: grid;
-    place-items: center;
-    min-width: 104px;
-  }
-
-  .quick-ribbon span {
-    font-size: 2rem;
-  }
-
-  .canvas {
-    position: relative;
-    overflow: hidden;
-    cursor: grab;
-    transition: background 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-
-  .canvas:active {
-    cursor: grabbing;
-  }
-
-  .canvas.theme-default {
-    background: linear-gradient(#31466d, #1d2d45 55%, #1b2331 55%);
-  }
-
-  .canvas.theme-space {
-    background: linear-gradient(#0d1130, #06081c 55%, #030412 55%);
-  }
-
-  .canvas.theme-candy {
-    background: linear-gradient(#fecdd3, #fda4af 55%, #f43f5e 55%);
-  }
-
-  .canvas.theme-jungle {
-    background: linear-gradient(#4d7c0f, #15803d 55%, #14532d 55%);
-  }
-
-  .canvas.theme-ice {
-    background: linear-gradient(#e0f2fe, #bae6fd 55%, #38bdf8 55%);
-  }
-
-  .canvas.theme-volcano {
-    background: linear-gradient(#7f1d1d, #ef4444 55%, #450a0a 55%);
-  }
-
-  .canvas-inner {
-    position: absolute;
-    width: 5000px;
-    height: 3000px;
-    pointer-events: none;
-    background:
-      linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-    background-size: 32px 32px, 32px 32px;
-  }
-
-  .canvas-inner :global(*) {
-    pointer-events: auto;
-  }
-
-  .horizon {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 55%;
-    height: 4px;
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .stamp {
-    position: absolute;
-    transform: translate(-50%, -50%);
-    width: 56px;
-    height: 56px;
-    padding: 0;
-    display: grid;
-    place-items: center;
-    font-size: 2rem;
-    border-radius: 50%;
-    animation: stamp-place-pop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-  }
-
-  @keyframes stamp-place-pop {
-    0% {
-      transform: translate(-50%, -50%) scale(0);
-    }
-    70% {
-      transform: translate(-50%, -50%) scale(1.25);
-    }
-    100% {
-      transform: translate(-50%, -50%) scale(1);
-    }
-  }
-
-  .stamp.terrain {
-    width: 160px;
-    border-radius: 14px;
-  }
-
-  .hover-guide {
-    position: absolute;
-    transform: translate(-50%, -50%);
-    width: 56px;
-    height: 56px;
-    opacity: 0.5;
-    border: 3px dashed #ffd84d;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    font-size: 2rem;
-    pointer-events: none;
-  }
-
-  .hover-guide.terrain {
-    width: 160px;
-    border-radius: 14px;
-  }
-
-  footer {
-    justify-content: space-between;
-    border-top: 3px solid rgba(255, 255, 255, 0.08);
-    border-bottom: 0;
-  }
-
-  /* Kid UI custom styles */
-  .world-cycle-controls {
-    display: flex;
-    gap: 8px;
-  }
-
-  .cycle-btn {
-    font-size: 1.8rem;
-    padding: 8px 14px;
-    border-radius: 50%;
-    background: #1e2937;
-    border: 3px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
-    cursor: pointer;
-    display: grid;
-    place-items: center;
-    transition: transform 0.1s, background-color 0.2s;
-  }
-
-  .cycle-btn:active {
-    transform: translateY(2px);
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
-  }
-
-  .stamp-select-btn {
-    background: #1f2937;
-    color: white;
-    border: 3px solid #f59e0b;
-    border-radius: 18px;
-    padding: 6px 12px;
-    font-weight: 800;
-  }
-
-  .edit-toy-btn {
-    background: #eab308;
-    color: #0f172a;
-    box-shadow: 0 4px 0 #a16207;
-  }
-
-  .eraser-btn-top {
-    background: #ef4444;
-    color: white;
-    box-shadow: 0 4px 0 #991b1b;
-  }
-
-  .snap-btn-top {
-    background: #3b82f6;
-    color: white;
-    box-shadow: 0 4px 0 #1e40af;
-  }
-
-  .toybox-btn-top {
-    background: #8b5cf6;
-    color: white;
-    box-shadow: 0 4px 0 #5b21b6;
-  }
-
-  .draw-toy-btn-top {
-    background: #ec4899;
-    color: white;
-    box-shadow: 0 4px 0 #9d174d;
-  }
-
-  .play-btn-top {
-    background: #22c55e;
-    color: white;
-    font-size: 1.3rem;
-    padding: 10px 24px;
-    box-shadow: 0 6px 0 #15803d;
-  }
-
-  .parents-toggle-btn {
-    background: #4b5563;
-    color: white;
-    box-shadow: 0 4px 0 #1f2937;
-  }
-
-  /* Parents Settings Panel */
-  .parents-panel-container {
-    background: #0f172a;
-    border-bottom: 4px solid #374151;
-    padding: 16px 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    color: white;
-  }
-
-  .parents-panel-header h3 {
-    margin: 0;
-    font-size: 1.1rem;
-    color: #fbbf24;
-  }
-
-  .parents-panel-body {
-    display: flex;
-    gap: 32px;
-    flex-wrap: wrap;
-  }
-
-  .panel-section {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .panel-section h4 {
-    margin: 0;
-    font-size: 0.85rem;
-    color: #9ca3af;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .panel-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .panel-row select,
-  .panel-row input {
-    background: #1f2937;
-    color: white;
-    border: 1px solid #4b5563;
-    border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 0.9rem;
-    font-weight: 700;
-  }
-
-  .panel-row input {
-    width: 140px;
-  }
-
-  .spec-labels {
-    font-family: monospace;
-    font-size: 0.85rem;
-    color: #cbd5e1;
-    gap: 16px;
-  }
-
-  /* Modals overrides/customs */
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.85);
-    backdrop-filter: blur(8px);
-    display: grid;
-    place-items: center;
-    z-index: 100;
-  }
-
-  .modal {
-    background: #1e293b;
-    border: 6px solid #fbbf24;
-    border-radius: 40px;
-    padding: 32px;
-    color: white;
-    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6);
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  .close-btn {
-    background: #ef4444;
-    color: white;
-    border: 0;
-    border-radius: 20px;
-    padding: 10px 24px;
-    font-size: 1.1rem;
-    font-weight: 900;
-    cursor: pointer;
-    box-shadow: 0 4px 0 #b91c1c;
-    transition: transform 0.1s, box-shadow 0.1s;
-    align-self: center;
-  }
-
-  .close-btn:active {
-    transform: translateY(4px);
-    box-shadow: 0 0 0 #b91c1c;
-  }
-
-  /* Theme selector card designs */
-  .theme-modal h2 {
-    text-align: center;
-    color: #fbbf24;
-    font-size: 2.2rem;
-    margin: 0;
-  }
-
-  .theme-cards {
-    display: flex;
-    gap: 20px;
-    justify-content: center;
-    padding: 10px 0;
-  }
-
-  .theme-card {
-    border: 4px solid #374151;
-    border-radius: 24px;
-    padding: 24px;
-    width: 220px;
-    color: white;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-    transition: transform 0.2s, border-color 0.2s;
-  }
-
-  .theme-card:hover {
-    transform: translateY(-8px) scale(1.03);
-    border-color: #fbbf24;
-  }
-
-  .theme-card .card-icon {
-    font-size: 4rem;
-    margin-bottom: 12px;
-  }
-
-  .theme-card h3 {
-    margin: 0 0 8px 0;
-    font-size: 1.3rem;
-  }
-
-  .theme-card p {
-    margin: 0;
-    font-size: 0.85rem;
-    color: #cbd5e1;
-    line-height: 1.4;
-  }
-
-  .theme-card.space {
-    background: linear-gradient(135deg, #1e1b4b, #311042);
-  }
-
-  .theme-card.candy {
-    background: linear-gradient(135deg, #be185d, #db2777);
-  }
-
-  .theme-card.jungle {
-    background: linear-gradient(135deg, #065f46, #047857);
-  }
-
-  /* Embedded Play Modal */
-  .play-modal {
-    width: min(850px, 90vw);
-    max-height: 90vh;
-  }
-
-  .play-modal header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .play-modal h2 {
-    margin: 0;
-    font-size: 1.8rem;
-    color: #22c55e;
-  }
-
-  .game-container {
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    background: black;
-    border-radius: 20px;
-    overflow: hidden;
-    border: 4px solid #4b5563;
-  }
-
-  .game-iframe {
-    width: 100%;
-    height: 100%;
-    border: 0;
-  }
-
-  .play-options {
-    display: flex;
-    justify-content: center;
-    margin-top: 10px;
-  }
-
-  .window-btn {
-    border: 0;
-    border-radius: 18px;
-    padding: 12px 24px;
-    font-weight: 900;
-    cursor: pointer;
-    background: #3b82f6;
-    color: white;
-    box-shadow: 0 4px 0 #1d4ed8;
-  }
-
-  .window-btn:active {
-    transform: translateY(2px);
-    box-shadow: 0 1px 0 #1d4ed8;
-  }
-
-  /* Click Animation Class */
-  :global(.bounce-click) {
-    animation: bounce-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  }
-
-  @keyframes bounce-pop {
-    0% { transform: scale(1); }
-    30% { transform: scale(1.15) rotate(-3deg); }
-    50% { transform: scale(0.92) rotate(2deg); }
-    80% { transform: scale(1.05) rotate(-1deg); }
-    100% { transform: scale(1) rotate(0deg); }
-  }
-
-  /* Hover Animation for Ribbon buttons */
-  .ribbon-btn {
-    display: grid;
-    place-items: center;
-    min-width: 104px;
-    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  }
-
-  .ribbon-btn:hover {
-    transform: translateY(-5px) scale(1.05);
-  }
-
-  .ribbon-btn:hover :global(span) {
-    animation: wobble 0.5s ease-in-out infinite alternate;
-  }
-
-  @keyframes wobble {
-    0% { transform: rotate(-5deg); }
-    100% { transform: rotate(5deg); }
-  }
-
-  .undo-btn-top {
-    background: #f87171;
-    color: white;
-    box-shadow: 0 5px 0 #b91c1c;
-  }
-  .undo-btn-top:active {
-    transform: translateY(3px);
-    box-shadow: 0 2px 0 #b91c1c;
-  }
-  .undo-btn-top:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-  }
-
-  .redo-btn-top {
-    background: #60a5fa;
-    color: white;
-    box-shadow: 0 5px 0 #1d4ed8;
-  }
-  .redo-btn-top:active {
-    transform: translateY(3px);
-    box-shadow: 0 2px 0 #1d4ed8;
-  }
-  .redo-btn-top:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-  }
-
-  .theme-card.ice {
-    background: linear-gradient(135deg, #0284c7, #38bdf8);
-  }
-
-  .theme-card.volcano {
-    background: linear-gradient(135deg, #7c2d12, #ea580c);
-  }
-
-  .play-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-  }
-
-  .play-controls-overlay {
-    display: flex;
-    gap: 12px;
-  }
-
-  .play-control-btn {
-    border: 0;
-    border-radius: 20px;
-    padding: 10px 20px;
-    font-size: 1.1rem;
-    font-weight: 900;
-    cursor: pointer;
-    color: white;
-    transition: transform 0.1s, box-shadow 0.1s;
-  }
-
-  .play-control-btn:active {
-    transform: translateY(3px);
-  }
-
-  .play-control-btn.pause-btn {
-    background: #eab308;
-    box-shadow: 0 5px 0 #ca8a04;
-  }
-  .play-control-btn.pause-btn:active {
-    box-shadow: 0 2px 0 #ca8a04;
-  }
-
-  .play-control-btn.restart-btn {
-    background: #3b82f6;
-    box-shadow: 0 5px 0 #1d4ed8;
-  }
-  .play-control-btn.restart-btn:active {
-    box-shadow: 0 2px 0 #1d4ed8;
-  }
-
-  .play-control-btn.stop-btn {
-    background: #ef4444;
-    box-shadow: 0 5px 0 #b91c1c;
-  }
-  .play-control-btn.stop-btn:active {
-    box-shadow: 0 2px 0 #b91c1c;
-  }
-
-  /* Customizer Inspector Panel styling */
-  .customizer-panel {
-    position: fixed;
-    top: 96px;
-    right: 24px;
-    width: 320px;
-    background: rgba(30, 41, 59, 0.95);
-    backdrop-filter: blur(12px);
-    border: 5px solid #fbbf24;
-    border-radius: 28px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-    display: flex;
-    flex-direction: column;
-    z-index: 90;
-    color: white;
-    padding: 20px;
-    gap: 16px;
-    max-height: calc(100vh - 140px);
-    overflow-y: auto;
-  }
-
-  .customizer-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .customizer-header h3 {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 900;
-    color: #fbbf24;
-  }
-
-  .close-customizer-btn {
-    border: 0;
-    background: transparent;
-    color: #94a3b8;
-    font-size: 1.5rem;
-    font-weight: 900;
-    cursor: pointer;
-  }
-
-  .toy-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: #0f172a;
-    padding: 10px 16px;
-    border-radius: 16px;
-  }
-
-  .toy-icon {
-    font-size: 2rem;
-  }
-
-  .toy-name {
-    font-weight: 900;
-    font-size: 1.1rem;
-  }
-
-  .customizer-body {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .option-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .option-group.flex-row {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    background: #0f172a;
-    padding: 10px 16px;
-    border-radius: 16px;
-  }
-
-  .option-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.95rem;
-    font-weight: 800;
-    color: #cbd5e1;
-  }
-
-  .option-slider {
-    width: 100%;
-    accent-color: #fbbf24;
-    cursor: pointer;
-  }
-
-  .option-label-text {
-    font-size: 0.95rem;
-    font-weight: 800;
-    color: #cbd5e1;
-  }
-
-  .option-select {
-    width: 100%;
-    background: #0f172a;
-    color: white;
-    font-weight: 800;
-    padding: 10px;
-    border-radius: 12px;
-    border: 2px solid #334155;
-    cursor: pointer;
-  }
-
-  .option-toggle {
-    width: 24px;
-    height: 24px;
-    accent-color: #fbbf24;
-    cursor: pointer;
-  }
-
-  .customizer-footer {
-    margin-top: 8px;
-  }
-
-  .customizer-delete-btn {
-    width: 100%;
-    border: 0;
-    background: #ef4444;
-    color: white;
-    font-weight: 900;
-    padding: 14px;
-    border-radius: 18px;
-    cursor: pointer;
-    box-shadow: 0 4px 0 #b91c1c;
-    transition: transform 0.1s, box-shadow 0.1s;
-  }
-
-  .customizer-delete-btn:active {
-    transform: translateY(2px);
-    box-shadow: 0 2px 0 #b91c1c;
-  }
-
-  /* ── Feature: 🎲 Surprise Me! Button ── */
-  .surprise-btn-top {
-    background: linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6);
-    color: white;
-    box-shadow: 0 4px 0 #92400e;
-    animation: surprise-shimmer 3s ease-in-out infinite;
-    background-size: 200% 200%;
-  }
-
-  .remix-btn-top {
-    background: linear-gradient(135deg, #10b981, #3b82f6, #8b5cf6);
-    color: white;
-    box-shadow: 0 4px 0 #065f46;
-    animation: surprise-shimmer 3.5s ease-in-out infinite;
-    background-size: 200% 200%;
-  }
-
-  @keyframes surprise-shimmer {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
-
-  /* ── Feature: Stamp Placement Pop-In Celebration ── */
-  .stamp {
-    animation: stamp-pop-in 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  }
-
-  @keyframes stamp-pop-in {
-    0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-    50% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
-    70% { transform: translate(-50%, -50%) scale(0.9); }
-    100% { transform: translate(-50%, -50%) scale(1); }
-  }
-
-  /* ── Feature: Drag-to-Reposition ── */
-  .stamp-dragging {
-    outline: 4px dashed #fbbf24 !important;
-    z-index: 999 !important;
-    cursor: grabbing !important;
-    filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.7));
-    animation: none !important;
-  }
-
-  /* Favorites ribbon styling */
-  .favorites-ribbon {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    padding: 8px 12px;
-    background: #1e1b4b;
-    border-bottom: 2px solid rgba(251, 191, 36, 0.4);
-    overflow-x: auto;
-  }
-  
-  .favorites-ribbon :global(.ribbon-btn) {
-    min-width: 80px !important;
-    padding: 6px 12px !important;
-  }
-  
-  .favorites-ribbon :global(.ribbon-btn span) {
-    font-size: 1.5rem !important;
-  }
-  
-  .ribbon-label {
-    color: #fbbf24;
-    font-weight: 900;
-    font-size: 1rem;
-    white-space: nowrap;
-    margin-right: 8px;
-    text-transform: uppercase;
-  }
 </style>
-

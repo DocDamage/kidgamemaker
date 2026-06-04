@@ -10,11 +10,12 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from PIL import Image, ImageDraw
 
 import tools.cut_tileset_sprites as cutter_module
-from tools.cut_tileset_sprites import BUILT_IN_PRESETS, DetectedSprite, MaxRectsPacker, build_arg_parser, discover_sheet_files, infer_auto_defaults, load_config_defaults, load_existing_records, looks_like_animation_sheet, main, options_from_args, pack_records_into_atlases, process_sheet, write_manifest, write_project_file
+from tools.cut_tileset_sprites import BUILT_IN_PRESETS, DetectedSprite, MaxRectsPacker, build_arg_parser, discover_sheet_files, infer_auto_defaults, load_config_defaults, load_existing_records, looks_like_animation_sheet, main, options_from_args, pack_records_into_atlases, process_sheet, process_sheet_batch, write_manifest, write_project_file
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -107,6 +108,31 @@ def image_size(path: Path) -> tuple[int, int]:
 
 def detection(label: int, x: int, y: int, width: int, height: int) -> DetectedSprite:
     return DetectedSprite(label=label, x=x, y=y, width=width, height=height, foreground_pixels=width * height)
+
+
+def batch_options(*, workers: int = 1, on_error: str = "skip") -> cutter_module.RunOptions:
+    return cutter_module.RunOptions(
+        mode="tileset",
+        animation_names=[],
+        animation_frame_mode="fixed",
+        animation_anchor="bottom-center",
+        animation_min_frames=1,
+        animation_fps=12,
+        pivot_debug=False,
+        pack_atlases=False,
+        atlas_size=2048,
+        atlas_padding=2,
+        atlas_allow_rotation=False,
+        engine_exports=[],
+        detection_settings=cutter_module.DetectionSettings(),
+        on_error=on_error,
+        workers=workers,
+        max_image_megapixels=0.0,
+        resume=False,
+        include_archives=False,
+        auto_detect_all=False,
+        auto_profile={},
+    )
 
 
 class CutTilesetSpritesTests(unittest.TestCase):
@@ -852,6 +878,39 @@ class CutTilesetSpritesTests(unittest.TestCase):
                 errors = json.load(handle)
             self.assertEqual(len(errors), 1)
             self.assertIn("bad.png", errors[0]["source_file"])
+
+    def test_process_sheet_batch_does_not_swallow_serial_assertion_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sheet = root / "sheet.png"
+            make_border_and_color_sheet(sheet)
+
+            with mock.patch("tools.cut_tileset_sprites.process_sheet", side_effect=AssertionError("unexpected bug")):
+                with self.assertRaises(AssertionError):
+                    process_sheet_batch(
+                        [sheet],
+                        root / "out",
+                        root / "preview",
+                        root / "manifest",
+                        batch_options(workers=1),
+                    )
+
+    def test_process_sheet_batch_does_not_swallow_threaded_assertion_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sheets = [root / "sheet_a.png", root / "sheet_b.png"]
+            for sheet in sheets:
+                make_border_and_color_sheet(sheet)
+
+            with mock.patch("tools.cut_tileset_sprites.process_sheet", side_effect=AssertionError("unexpected bug")):
+                with self.assertRaises(AssertionError):
+                    process_sheet_batch(
+                        sheets,
+                        root / "out",
+                        root / "preview",
+                        root / "manifest",
+                        batch_options(workers=2),
+                    )
 
     def test_fail_fast_mode_returns_error_for_bad_sheet(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

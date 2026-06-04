@@ -4,7 +4,7 @@
   "asset_name": "Wind Gust 💨",
   "category": "decorations",
   "runtime_template": "wind_zone",
-  "visual": "💨",
+  "visual": "wind_zone.svg",
   "visual_tags": [
     "wind",
     "force",

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 
 EDITABLE_FIELDS = {
@@ -698,7 +698,7 @@ def render_project_outputs(project: dict[str, Any], project_path: Path, out_dir:
                 crop.save(output_path)
             sprite["applied_output_file"] = str(output_path)
             rendered += 1
-        except Exception as exc:
+        except (KeyError, OSError, TypeError, UnidentifiedImageError, ValueError) as exc:
             errors.append({"sprite_id": str(sprite.get("id", "")), "error": f"{type(exc).__name__}: {exc}"})
 
     skipped_rejected = len([sprite for sprite in _sprites(project) if isinstance(sprite, dict) and sprite.get("review_status") == "rejected"])

@@ -6,10 +6,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from PIL import Image
 
-from tools.sprite_ide_api import run_ide_command
+from tools.sprite_ide_api import main, run_ide_command
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -325,6 +326,26 @@ class SpriteIdeApiTests(unittest.TestCase):
             payload = json.loads(completed.stdout)
             self.assertEqual(payload["ok"], True)
             self.assertTrue(output.exists())
+
+    def test_cli_reports_user_facing_request_errors_as_json(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(IDE_SCRIPT), "--json", json.dumps({"action": "palette.swap"})],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 1)
+        payload = json.loads(completed.stderr)
+        self.assertEqual(payload["ok"], False)
+        self.assertIn("ValueError", payload["error"])
+
+    def test_main_does_not_swallow_assertion_failures(self) -> None:
+        with mock.patch("tools.sprite_ide_api.run_ide_command", side_effect=AssertionError("unexpected bug")):
+            with self.assertRaises(AssertionError):
+                main(["--json", json.dumps({"action": "palette.extract"})])
 
 
 if __name__ == "__main__":

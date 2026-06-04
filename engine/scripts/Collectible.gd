@@ -8,6 +8,7 @@ signal collected(payload: Dictionary)
 @export var heal_value: int = 0
 @export var asset_id: String = ""
 @export var powerup_type: String = ""
+@export var charge_jump_speed: String = "normal"
 
 var _collected := false
 
@@ -27,6 +28,14 @@ func _ready() -> void:
 			powerup_type = "glider"
 		elif asset_id == "gadget_jetpack":
 			powerup_type = "jetpack"
+		elif asset_id == "charge_spring":
+			powerup_type = "charge_jump"
+		elif asset_id == "weapon_boomerang":
+			powerup_type = "boomerang"
+		elif asset_id == "weapon_bomb":
+			powerup_type = "bomb"
+		elif asset_id == "focus_amulet":
+			powerup_type = "focus_amulet"
 
 
 func _on_body_entered(body: Node) -> void:
@@ -48,6 +57,16 @@ func _on_body_entered(body: Node) -> void:
 
 	# ── Apply power-up status effect ──
 	if powerup_type != "" and body.has_method("apply_powerup"):
+		if powerup_type == "charge_jump":
+			var time_per_level := 0.8
+			match charge_jump_speed:
+				"fast":
+					time_per_level = 0.5
+				"slow":
+					time_per_level = 1.1
+				_:
+					time_per_level = 0.8
+			body.set("charge_jump_time_per_level", time_per_level)
 		body.apply_powerup(powerup_type)
 
 	# ── Notify Main (score board, HUD, etc.) ──

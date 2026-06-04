@@ -4,7 +4,7 @@
   "asset_name": "Neon Sign",
   "category": "decorations",
   "runtime_template": "decoration",
-  "visual": "💡",
+  "visual": "neon_sign.svg",
   "visual_tags": [
     "light",
     "neon",

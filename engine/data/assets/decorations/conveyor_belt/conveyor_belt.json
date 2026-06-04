@@ -4,7 +4,7 @@
   "asset_name": "Conveyor Belt ⚙️",
   "category": "decorations",
   "runtime_template": "conveyor",
-  "visual": "⚙️",
+  "visual": "conveyor_belt.svg",
   "visual_tags": [
     "conveyor",
     "belt",

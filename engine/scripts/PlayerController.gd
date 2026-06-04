@@ -1,5 +1,14 @@
 extends CharacterBody2D
 
+const PlayerVisualEffects = preload("res://scripts/PlayerVisualEffects.gd")
+const PlayerProjectileFactory = preload("res://scripts/PlayerProjectileFactory.gd")
+const PlayerClearPipe = preload("res://scripts/PlayerClearPipe.gd")
+const PlayerInventory = preload("res://scripts/PlayerInventory.gd")
+const PlayerPowerups = preload("res://scripts/PlayerPowerups.gd")
+const PlayerDamage = preload("res://scripts/PlayerDamage.gd")
+const PlayerStatusEffects = preload("res://scripts/PlayerStatusEffects.gd")
+const PlayerInputActions = preload("res://scripts/PlayerInputActions.gd")
+
 @export var max_health: int = 100
 @export var movement_speed: float = 220.0
 @export var jump_force: float = -460.0
@@ -42,6 +51,10 @@ var backpack_grid: Array = [
 var speed_boost_timer: float = 0.0
 var shield_active: bool = false
 var double_jump_enabled: bool = false
+var charge_jump_enabled: bool = false
+var is_charge_jump_charging: bool = false
+var charge_jump_timer: float = 0.0
+var charge_jump_time_per_level: float = 0.8
 var _jumps_remaining: int = 1
 var giant_timer: float = 0.0
 var is_giant: bool = false
@@ -82,6 +95,82 @@ var has_hammer: bool = false
 var has_lantern: bool = false
 var lantern_light: PointLight2D = null
 
+# Phase 2 Traversal & Combat Subsystems
+var coyote_time_duration: float = 0.15
+var coyote_timer: float = 0.0
+var jump_buffer_duration: float = 0.15
+var jump_buffer_timer: float = 0.0
+
+# Ledge hanging
+var is_ledge_hanging: bool = false
+var ledge_pos: Vector2 = Vector2.ZERO
+
+# Rope/Vine swinging
+var is_rope_climbing: bool = false
+var current_rope: Node2D = null
+var swing_angle: float = 0.0
+var swing_speed: float = 0.0
+var rope_length: float = 120.0
+
+# Grappling Hook
+var is_grappling: bool = false
+var grapple_target_pos: Vector2 = Vector2.ZERO
+var current_grapple_range: float = 180.0
+
+# Spin Dash
+var is_spindashing: bool = false
+var spindash_charge: float = 0.0
+var is_spindash_rolling: bool = false
+var spindash_roll_timer: float = 0.0
+
+# Speed Booster & Shinespark
+var run_timer: float = 0.0
+var speed_booster_active: bool = false
+var shinespark_stored: bool = false
+var shinespark_store_timer: float = 0.0
+var is_shinesparking: bool = false
+var shinespark_direction: Vector2 = Vector2.UP
+var shinespark_flight_timer: float = 0.0
+
+# Wall & Ceiling Run
+var is_wall_running: bool = false
+var is_ceiling_running: bool = false
+var magnet_meter: float = 3.0
+var wall_run_dir: float = 1.0
+
+# Crouching/Sliding
+var is_crouching: bool = false
+var is_sliding: bool = false
+var slide_boost_timer: float = 0.0
+var original_collision_height: float = 48.0
+var original_collision_y: float = 0.0
+var collision_shape: CollisionShape2D = null
+
+# Weapons & Focus
+var has_boomerang: bool = false
+var has_bomb: bool = false
+var has_focus_amulet: bool = false
+var focus_active: bool = false
+var focus_timer: float = 0.0
+var current_time_slow_factor: float = 0.2
+
+# Clear Pipes
+var is_in_clear_pipe: bool = false
+var pipe_current_block: Node2D = null
+var pipe_previous_block: Node2D = null
+var pipe_direction: Vector2 = Vector2.ZERO
+
+# Paint Gun & Squid Form
+var has_paint_gun: bool = false
+var is_squid_form: bool = false
+
+# Phase 4 Economy, Companions & Star Mode
+var star_pieces: int = 0
+var is_star_mode: bool = false
+var star_timer: float = 0.0
+var copied_enemy_projectile: String = ""
+var weapon_level: int = 1
+
 
 
 func _ready() -> void:
@@ -93,31 +182,18 @@ func _ready() -> void:
 	current_health = max_health
 	_ready_trail_particles()
 
+	# Initialize collision shape reference and dimensions
+	for child in get_children():
+		if child is CollisionShape2D:
+			collision_shape = child
+			break
+	if collision_shape != null and collision_shape.shape is RectangleShape2D:
+		original_collision_height = collision_shape.shape.size.y
+		original_collision_y = collision_shape.position.y
+
 
 func _ready_trail_particles() -> void:
-	trail_particles = CPUParticles2D.new()
-	trail_particles.name = "HeroTrailParticles"
-	trail_particles.amount = 15
-	trail_particles.lifetime = 0.4
-	trail_particles.speed_scale = 1.0
-	trail_particles.explosiveness = 0.0
-	trail_particles.randomness = 0.2
-	trail_particles.direction = Vector2(-1, 0)
-	trail_particles.spread = 15.0
-	trail_particles.gravity = Vector2.ZERO
-	trail_particles.initial_velocity_min = 20.0
-	trail_particles.initial_velocity_max = 50.0
-	
-	var curve := Curve.new()
-	curve.add_point(Vector2(0, 1.0))
-	curve.add_point(Vector2(1.0, 0.0))
-	trail_particles.scale_amount_curve = curve
-	trail_particles.scale_amount_min = 4.0
-	trail_particles.scale_amount_max = 8.0
-	
-	trail_particles.color = Color(0.2, 0.6, 1.0, 0.6)
-	trail_particles.emitting = false
-	add_child(trail_particles)
+	trail_particles = PlayerVisualEffects.create_hero_trail(self)
 
 
 func heal(amount: int) -> void:
@@ -129,173 +205,55 @@ func heal(amount: int) -> void:
 
 
 func apply_powerup(type: String) -> void:
-	var main := get_tree().get_root().get_node_or_null("Main")
-	match type:
-		"speed":
-			speed_boost_timer = 5.0
-			print("Player acquired Speed Boost!")
-			if main != null and main.has_method("play_sfx"):
-				main.play_sfx("coin")
-		"shield":
-			shield_active = true
-			print("Player acquired Shield!")
-			if main != null and main.has_method("play_sfx"):
-				main.play_sfx("coin")
-		"double_jump":
-			double_jump_enabled = true
-			print("Player acquired Double Jump Shoes!")
-			if main != null and main.has_method("play_sfx"):
-				main.play_sfx("coin")
-		"glider":
-			has_glider = true
-			print("Player acquired Glider Cape!")
-			if main != null and main.has_method("play_sfx"):
-				main.play_sfx("coin")
-		"jetpack":
-			has_jetpack = true
-			jetpack_fuel = 100.0
-			print("Player acquired Jetpack!")
-			if main != null and main.has_method("play_sfx"):
-				main.play_sfx("coin")
-		"giant":
-			giant_timer = 6.0
-			is_giant = true
-			scale = Vector2(2.0, 2.0)
-			print("Player acquired Giant Growth!")
-			if main != null and main.has_method("play_sfx"):
-				main.play_sfx("coin")
-		"gravity":
-			gravity_inverted = not gravity_inverted
-			gravity_scale = -1.0 if gravity_inverted else 1.0
-			print("Player toggled gravity!")
-			if main != null and main.has_method("play_sfx"):
-				main.play_sfx("coin")
-		"hammer":
-			has_hammer = true
-			print("Player acquired Toy Hammer!")
-			if main != null and main.has_method("play_sfx"):
-				main.play_sfx("coin")
-		"lantern":
-			has_lantern = true
-			print("Player acquired Lantern!")
-			if main != null and main.has_method("play_sfx"):
-				main.play_sfx("coin")
-		"sword":
-			has_sword = true
-			print("Player acquired Toy Sword!")
-			if main != null and main.has_method("play_sfx"):
-				main.play_sfx("coin")
-
-
-	if main != null and main.has_method("spawn_floating_text"):
-		main.spawn_floating_text(type.replace("_", " ").to_upper() + "!", global_position, Color.CYAN)
+	PlayerPowerups.apply(self, type)
 
 
 func take_damage(amount: int) -> void:
-	var main_ref = get_tree().get_root().get_node_or_null("Main")
-	if main_ref != null:
-		var diff = main_ref.get("difficulty")
-		if diff == "creative":
-			return
-		elif diff == "easy":
-			amount = int(max(1.0, float(amount) * 0.5))
-
-	if is_blocking:
-		if parry_window_timer > 0.0:
-			# Parry success!
-			var main := get_tree().get_root().get_node_or_null("Main")
-			if main != null:
-				if main.has_method("play_sfx"): main.play_sfx("coin")
-				if main.has_method("spawn_floating_text"):
-					main.spawn_floating_text("🛡️ PARRY!", global_position, Color.GOLD)
-			
-			_stun_closest_enemy()
-			
-			_invincible = true
-			var t := create_tween()
-			t.tween_property(self, "modulate:a", 0.5, 0.05)
-			t.tween_property(self, "modulate:a", 1.0, 0.05)
-			t.chain().tween_callback(func(): _invincible = false)
-			return
-		else:
-			# Standard Block
-			var reduction = 0.1 if hero_class == "warrior" else 0.3
-			amount = int(max(1.0, float(amount) * reduction))
-			var main := get_tree().get_root().get_node_or_null("Main")
-			if main != null and main.has_method("spawn_floating_text"):
-				main.spawn_floating_text("🛡️ BLOCKED!", global_position, Color.CYAN)
-
-	if _invincible:
-		return
-
-	if shield_active:
-		shield_active = false
-		print("Shield absorbed damage!")
-		var main := get_tree().get_root().get_node_or_null("Main")
-		if main != null and main.has_method("play_sfx"):
-			main.play_sfx("coin") # Chime on shield break
-		if main != null and main.has_method("spawn_floating_text"):
-			main.spawn_floating_text("SHIELD BLOCK!", global_position, Color.MAGENTA)
-		_invincible = true
-		var tween := create_tween()
-		tween.tween_property(self, "modulate:a", 0.5, 0.1)
-		tween.tween_property(self, "modulate:a", 1.0, 0.1)
-		tween.chain().tween_callback(func(): 
-			_invincible = false
-			modulate.a = 1.0
-		)
-		return
-
-	current_health -= amount
-	print("Player took %d damage! HP now: %d/%d" % [amount, current_health, max_health])
-
-	var main := get_tree().get_root().get_node_or_null("Main")
-	if main != null and main.has_method("spawn_floating_text"):
-		main.spawn_floating_text("-%d HP" % amount, global_position, Color.RED)
-
-	if main != null and main.has_method("play_custom_sfx"):
-		main.play_custom_sfx(asset_id, "hit")
-
-	if current_health <= 0:
-		current_health = 0
-		print("Player has died!")
-		if main != null:
-			if main.has_method("handle_player_death"):
-				main.call_deferred("handle_player_death")
-			elif main.has_method("_respawn_player"):
-				main.call_deferred("_respawn_player")
-		return
-
-	_invincible = true
-	var tween := create_tween()
-	tween.set_loops(int(invincibility_duration / 0.1))
-	tween.tween_property(self, "modulate:a", 0.3, 0.05)
-	tween.tween_property(self, "modulate:a", 1.0, 0.05)
-	tween.chain().tween_callback(func():
-		_invincible = false
-		modulate.a = 1.0
-	)
+	PlayerDamage.apply_damage(self, amount)
 
 
 func _physics_process(delta: float) -> void:
-	if is_shocked:
-		shock_timer -= delta
-		velocity = Vector2.ZERO
-		move_and_slide()
-		modulate = Color.YELLOW if Engine.get_physics_frames() % 4 < 2 else Color.WHITE
-		if shock_timer <= 0.0:
-			is_shocked = false
-			modulate = Color.WHITE
+	# ─── BLUE MAGE remains check ───
+	if hero_class == "mage" and get_parent() != null:
+		var main_ref = get_parent()
+		for child in main_ref.get_children():
+			if child.name.begins_with("Remains_") or (child.has_meta("is_defeated_remains") and child.get_meta("is_defeated_remains")):
+				if global_position.distance_to(child.global_position) < 40.0:
+					var p_type = str(child.get_meta("projectile_type"))
+					if p_type != "" and copied_enemy_projectile != p_type:
+						copied_enemy_projectile = p_type
+						if main_ref.has_method("spawn_floating_text"):
+							main_ref.spawn_floating_text("🧬 COPY: " + p_type.to_upper() + "! 🧬", global_position, Color.DEEP_SKY_BLUE)
+						if main_ref.has_method("play_sfx"):
+							main_ref.play_sfx("coin")
+					child.queue_free()
+
+	# ─── CLEAR PIPE TRAVEL OVERRIDE ───
+	if PlayerClearPipe.process_travel(self):
 		return
 
-	if is_burning:
-		burn_timer -= delta
-		modulate = Color.ORANGE_RED if Engine.get_physics_frames() % 6 < 3 else Color.WHITE
-		if int(burn_timer * 10) % 10 == 0:
-			take_damage(2)
-		if burn_timer <= 0.0:
-			is_burning = false
-			modulate = Color.WHITE
+	# ─── SQUID WALL SWIM OVERRIDE ───
+	if is_squid_form and is_on_wall():
+		var touching_painted_wall := false
+		for i in get_slide_collision_count():
+			var col = get_slide_collision(i)
+			var collider = col.get_collider()
+			if collider != null and collider.has_meta("paint_color") and collider.get_meta("paint_color") == "green":
+				touching_painted_wall = true
+				break
+		if touching_painted_wall:
+			var v_in := Input.get_axis("ui_up", "ui_down")
+			if v_in == 0.0 and Input.is_physical_key_pressed(KEY_W):
+				v_in = -1.0
+			elif v_in == 0.0 and Input.is_physical_key_pressed(KEY_S):
+				v_in = 1.0
+			velocity.y = v_in * movement_speed * 1.5
+			velocity.x = 0.0
+			move_and_slide()
+			return
+
+	if PlayerStatusEffects.update_status_effects(self, delta):
+		return
 
 	if hero_class == "mage":
 		mana_points = min(mana_points + 10.0 * delta, max_mana)
@@ -306,6 +264,405 @@ func _physics_process(delta: float) -> void:
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main != null and main.get("difficulty") == "creative":
 		is_creative = true
+
+	# Focus Amulet / Time Slow tick
+	if has_focus_amulet and focus_active:
+		focus_timer -= delta / Engine.time_scale
+		if focus_timer <= 0.0:
+			focus_active = false
+			Engine.time_scale = 1.0
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("TIME NORMAL", global_position, Color.CYAN)
+
+	# Shinespark Flight Mode Override
+	if is_shinesparking:
+		velocity = shinespark_direction * 800.0
+		shinespark_flight_timer -= delta
+		if main != null and main.has_method("spawn_floating_text") and randf() < delta * 15.0:
+			main.spawn_floating_text("✨", global_position + Vector2(randf_range(-12,12), randf_range(-12,12)), Color.YELLOW)
+		modulate = Color.YELLOW if Engine.get_physics_frames() % 4 < 2 else Color.ORANGE
+		var hit_something := false
+		if is_on_wall() or is_on_ceiling() or is_on_floor() or shinespark_flight_timer <= 0.0:
+			hit_something = true
+		for i in get_slide_collision_count():
+			var col = get_slide_collision(i)
+			var collider = col.get_collider()
+			if collider != null and collider.has_method("take_damage") and not collider.name.begins_with("Player"):
+				collider.take_damage(60)
+				hit_something = true
+			if collider != null and (collider.has_meta("is_speed_block") or collider.has_meta("is_destructible")):
+				collider.call_deferred("shatter")
+		if hit_something:
+			is_shinesparking = false
+			velocity = Vector2.ZERO
+			if main != null:
+				if main.has_method("trigger_screen_shake"): main.trigger_screen_shake(15.0, 0.4)
+				if main.has_method("play_sfx"): main.play_sfx("hit")
+				if main.has_method("spawn_floating_text"): main.spawn_floating_text("💥 SHOCKWAVE!", global_position, Color.RED)
+				_execute_ground_pound_damage()
+		move_and_slide()
+		return
+
+	# Grappling hook Override
+	if is_grappling:
+		var dir = (grapple_target_pos - global_position).normalized()
+		velocity = dir * 580.0
+		queue_redraw()
+		for i in get_slide_collision_count():
+			var col = get_slide_collision(i)
+			var collider = col.get_collider()
+			if collider != null and (collider.has_meta("is_destructible") or collider.has_meta("is_speed_block")):
+				collider.call_deferred("shatter")
+		if global_position.distance_to(grapple_target_pos) < 25.0 or not Input.is_physical_key_pressed(KEY_E):
+			is_grappling = false
+			velocity = velocity * 0.45
+			queue_redraw()
+		move_and_slide()
+		return
+
+	# Rope swing / climb Override
+	if is_rope_climbing:
+		if not is_instance_valid(current_rope):
+			is_rope_climbing = false
+		else:
+			velocity = Vector2.ZERO
+			queue_redraw()
+			var rope_anchor = current_rope.global_position
+			if Input.is_action_pressed("ui_up"):
+				rope_length = max(30.0, rope_length - 120.0 * delta)
+			elif Input.is_action_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S):
+				rope_length = min(300.0, rope_length + 120.0 * delta)
+			var h_input = Input.get_axis("ui_left", "ui_right")
+			swing_speed += h_input * delta * 5.0
+			swing_speed = lerp(swing_speed, 0.0, delta * 0.3)
+			swing_angle += swing_speed * delta
+			swing_angle = clamp(swing_angle, -deg_to_rad(65), deg_to_rad(65))
+			global_position = rope_anchor + Vector2(sin(swing_angle), cos(swing_angle)) * rope_length
+			if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
+				is_rope_climbing = false
+				velocity = Vector2(sin(swing_angle) * 350.0 + h_input * 120.0, -320.0)
+				current_rope = null
+				if main != null and main.has_method("play_sfx"): main.play_sfx("jump")
+			move_and_slide()
+			return
+
+	# Ledge Grab hanging Override
+	if is_ledge_hanging:
+		velocity = Vector2.ZERO
+		global_position = ledge_pos
+		if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
+			is_ledge_hanging = false
+			velocity = Vector2(facing_direction * 150.0, jump_force * 0.8)
+			if main != null and main.has_method("play_sfx"): main.play_sfx("jump")
+		elif Input.is_action_just_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S):
+			is_ledge_hanging = false
+		move_and_slide()
+		return
+
+	# Spin Dash charge Override
+	if is_spindashing:
+		velocity = Vector2.ZERO
+		spindash_charge = min(spindash_charge + delta * 2.5, 3.0)
+		position.x += randf_range(-1.2, 1.2)
+		scale = Vector2(1.1, 0.7)
+		var down_held = Input.is_action_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S)
+		if not down_held:
+			is_spindashing = false
+			is_spindash_rolling = true
+			spindash_roll_timer = 1.2
+			scale = Vector2(1.0, 1.0)
+			velocity.x = facing_direction * movement_speed * (1.8 + spindash_charge * 0.7)
+			if main != null and main.has_method("play_sfx"): main.play_sfx("jump")
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("🌀 SPIN DASH!", global_position, Color.CYAN)
+		else:
+			move_and_slide()
+			return
+
+	# Spin Dash roll Override
+	if is_spindash_rolling:
+		spindash_roll_timer -= delta
+		velocity.x = facing_direction * movement_speed * (1.8 + spindash_charge * 0.7)
+		rotation += facing_direction * 25.0 * delta
+		velocity.y += gravity * delta
+		for i in get_slide_collision_count():
+			var col = get_slide_collision(i)
+			var collider = col.get_collider()
+			if collider != null and collider.has_method("take_damage") and not collider.name.begins_with("Player"):
+				collider.take_damage(25)
+			if collider != null and (collider.has_meta("is_destructible") or collider.has_meta("is_speed_block")):
+				collider.call_deferred("shatter")
+				if main != null and main.has_method("play_sfx"): main.play_sfx("hit")
+		if spindash_roll_timer <= 0.0 or is_on_wall():
+			is_spindash_rolling = false
+			rotation = 0.0
+		move_and_slide()
+		return
+
+	# Wall Run detection
+	var input_dir := Input.get_axis("ui_left", "ui_right")
+	if is_on_wall() and velocity.y > -100.0 and input_dir != 0.0 and not is_on_floor() and not is_wall_running and not is_ceiling_running:
+		var on_wall_run_tile := false
+		if main != null:
+			for child in main.get_children():
+				if child.name.contains("wall_run_surface") or (child.has_meta("asset_id") and child.get_meta("asset_id") == "wall_run_surface"):
+					if global_position.distance_to(child.global_position) < 48.0:
+						on_wall_run_tile = true
+						break
+		if on_wall_run_tile:
+			is_wall_running = true
+			magnet_meter = 3.0
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("⚡ WALL RUN!", global_position, Color.CHARTREUSE)
+
+	if is_wall_running:
+		magnet_meter -= delta
+		velocity.y = -movement_speed * 1.3
+		velocity.x = 0.0
+		modulate = Color.CHARTREUSE if Engine.get_physics_frames() % 4 < 2 else Color.WHITE
+		if magnet_meter <= 0.0 or not is_on_wall() or Input.get_axis("ui_left", "ui_right") * get_wall_normal().x > 0.0:
+			is_wall_running = false
+		if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
+			is_wall_running = false
+			velocity = Vector2(get_wall_normal().x * 250.0, jump_force * 0.9)
+			if main != null and main.has_method("play_sfx"): main.play_sfx("jump")
+		move_and_slide()
+		return
+
+	# Ceiling Run detection
+	if is_on_ceiling() and velocity.x != 0.0 and not is_ceiling_running and not is_wall_running:
+		var on_ceiling_run_tile := false
+		if main != null:
+			for child in main.get_children():
+				if child.name.contains("ceiling_run_surface") or (child.has_meta("asset_id") and child.get_meta("asset_id") == "ceiling_run_surface"):
+					if global_position.distance_to(child.global_position) < 48.0:
+						on_ceiling_run_tile = true
+						break
+		if on_ceiling_run_tile:
+			is_ceiling_running = true
+			magnet_meter = 3.0
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("🌀 CEILING RUN!", global_position, Color.CYAN)
+
+	if is_ceiling_running:
+		magnet_meter -= delta
+		velocity.y = -30.0
+		velocity.x = input_dir * movement_speed * 1.2
+		modulate = Color.CYAN if Engine.get_physics_frames() % 4 < 2 else Color.WHITE
+		if magnet_meter <= 0.0 or not is_on_ceiling() or input_dir == 0.0:
+			is_ceiling_running = false
+		move_and_slide()
+		return
+
+	# Ledge Grab check
+	if not is_on_floor() and not is_ledge_hanging and not is_rope_climbing and not is_grappling and not is_shinesparking:
+		var is_falling_y = velocity.y > 0.0 if not gravity_inverted else velocity.y < 0.0
+		if is_falling_y:
+			var space_state := get_world_2d().direct_space_state
+			var chest_query = PhysicsRayQueryParameters2D.create(global_position, global_position + Vector2(facing_direction * 22, 0))
+			chest_query.collision_mask = 1
+			chest_query.exclude = [self]
+			var chest_hit = space_state.intersect_ray(chest_query)
+			var head_query = PhysicsRayQueryParameters2D.create(global_position + Vector2(0, -32 if not gravity_inverted else 32), global_position + Vector2(facing_direction * 22, -32 if not gravity_inverted else 32))
+			head_query.collision_mask = 1
+			head_query.exclude = [self]
+			var head_hit = space_state.intersect_ray(head_query)
+			if not chest_hit.is_empty() and head_hit.is_empty():
+				is_ledge_hanging = true
+				ledge_pos = Vector2(chest_hit.position.x - facing_direction * 14.0, chest_hit.position.y + 12.0)
+				global_position = ledge_pos
+				velocity = Vector2.ZERO
+				if main != null and main.has_method("spawn_floating_text"):
+					main.spawn_floating_text("🧗 LEDGE GRAB!", global_position, Color.CHARTREUSE)
+
+	# Rope swing / climb detection trigger
+	var climb_input = Input.is_action_pressed("ui_up") or Input.is_action_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S)
+	if climb_input and not is_rope_climbing and not is_ledge_hanging and not is_grappling:
+		var near_rope: Node2D = null
+		if main != null:
+			for child in main.get_children():
+				if child.name.contains("climbable_vine") or child.name.contains("climbable_rope") or (child.has_meta("asset_id") and (child.get_meta("asset_id") == "climbable_vine" or child.get_meta("asset_id") == "climbable_rope")):
+					if global_position.distance_to(child.global_position) < 32.0:
+						near_rope = child
+						break
+		if near_rope != null:
+			is_rope_climbing = true
+			current_rope = near_rope
+			swing_angle = 0.0
+			swing_speed = 0.0
+			rope_length = clamp(global_position.distance_to(current_rope.global_position), 30.0, 300.0)
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("🧗 CLIMB!", global_position, Color.GREEN)
+
+	# Clear Pipe Entrance Check
+	if PlayerClearPipe.try_enter(self):
+		return
+
+	# Grapple ring target check E key
+	if Input.is_physical_key_pressed(KEY_E) and not is_grappling and not is_shinesparking and not is_rope_climbing:
+		var closest_anchor: Node2D = null
+		var min_dist = current_grapple_range
+		if main != null:
+			for child in main.get_children():
+				if child.name.contains("grapple_ring") or (child.has_meta("asset_id") and child.get_meta("asset_id") == "grapple_ring"):
+					var dist = global_position.distance_to(child.global_position)
+					if dist < min_dist:
+						min_dist = dist
+						closest_anchor = child
+		if closest_anchor != null:
+			is_grappling = true
+			grapple_target_pos = closest_anchor.global_position
+			if main != null and main.has_method("play_sfx"): main.play_sfx("jump")
+			queue_redraw()
+
+	# Coyote Time & Jump Buffer ticks
+	if is_on_floor() or inside_water:
+		coyote_timer = coyote_time_duration
+	else:
+		coyote_timer -= delta
+
+	if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
+		jump_buffer_timer = jump_buffer_duration
+	else:
+		jump_buffer_timer -= delta
+
+	var charge_jump_held := Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")
+	var charge_jump_pressed := Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up")
+	var charge_jump_down_held := Input.is_action_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S)
+	if charge_jump_enabled and is_on_floor() and charge_jump_pressed and not charge_jump_down_held and not is_charge_jump_charging:
+		is_charge_jump_charging = true
+		charge_jump_timer = 0.0
+		jump_buffer_timer = 0.0
+		velocity = Vector2.ZERO
+		queue_redraw()
+		if main != null and main.has_method("spawn_floating_text"):
+			main.spawn_floating_text("HOLD...", global_position, Color.GOLD)
+		move_and_slide()
+		return
+
+	if is_charge_jump_charging:
+		if not is_on_floor() or charge_jump_down_held:
+			is_charge_jump_charging = false
+			charge_jump_timer = 0.0
+			scale = Vector2.ONE
+			queue_redraw()
+		elif charge_jump_held:
+			charge_jump_timer = min(charge_jump_timer + delta, charge_jump_time_per_level * 3.0)
+			var charge_ratio = clamp(charge_jump_timer / max(charge_jump_time_per_level * 3.0, 0.1), 0.0, 1.0)
+			velocity.x = input_dir * movement_speed * 0.25
+			velocity.y = 0.0
+			scale = Vector2(1.0 + charge_ratio * 0.18, 1.0 - charge_ratio * 0.25)
+			modulate = Color(1.0, 0.9 + charge_ratio * 0.1, 0.45 + charge_ratio * 0.35)
+			queue_redraw()
+			move_and_slide()
+			return
+		else:
+			var level: int = clamp(int(ceil(charge_jump_timer / max(charge_jump_time_per_level, 0.1))), 1, 3)
+			var jump_multiplier: float = 1.0
+			match level:
+				2:
+					jump_multiplier = 1.45
+				3:
+					jump_multiplier = 1.9
+				_:
+					jump_multiplier = 1.0
+			is_charge_jump_charging = false
+			charge_jump_timer = 0.0
+			scale = Vector2.ONE
+			velocity.y = jump_force * jump_multiplier if not gravity_inverted else -jump_force * jump_multiplier
+			velocity.x += input_dir * movement_speed * 0.35
+			_jumps_remaining = 1 if double_jump_enabled else 0
+			coyote_timer = 0.0
+			jump_buffer_timer = 0.0
+			if main != null and main.has_method("play_custom_sfx"):
+				main.play_custom_sfx(asset_id, "jump")
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("SPRING x%d!" % level, global_position, Color.GOLD)
+			queue_redraw()
+			move_and_slide()
+			return
+
+	# Crouching, Sliding & Squid Form Logic
+	var down_input_pressed := Input.is_action_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S)
+	var on_paint := false
+	if has_paint_gun:
+		for i in get_slide_collision_count():
+			var col = get_slide_collision(i)
+			var collider = col.get_collider()
+			if collider != null and collider.has_meta("paint_color") and collider.get_meta("paint_color") == "green":
+				on_paint = true
+				break
+
+	if has_paint_gun and on_paint and down_input_pressed:
+		if not is_squid_form:
+			is_squid_form = true
+			is_crouching = true
+			PlayerVisualEffects.toggle_squid_visuals(self, true)
+	elif is_squid_form and (not down_input_pressed or not on_paint):
+		if set_crouch_state(false):
+			is_squid_form = false
+			is_crouching = false
+			PlayerVisualEffects.toggle_squid_visuals(self, false)
+
+	if not is_squid_form:
+		if is_on_floor() and down_input_pressed:
+			if not is_crouching:
+				is_crouching = true
+				set_crouch_state(true)
+				if abs(velocity.x) > movement_speed * 0.8:
+					is_sliding = true
+					slide_boost_timer = 0.6
+					if main != null and main.has_method("spawn_floating_text"):
+						main.spawn_floating_text("💨 SLIDE!", global_position, Color.AQUAMARINE)
+		elif not down_input_pressed:
+			if is_crouching:
+				if set_crouch_state(false):
+					is_crouching = false
+					is_sliding = false
+
+	if is_sliding:
+		slide_boost_timer -= delta
+		if slide_boost_timer <= 0.0:
+			is_sliding = false
+
+	# Speed Booster running charge
+	if is_on_floor() and abs(velocity.x) > movement_speed * 0.85 and input_dir != 0.0 and not is_crouching:
+		run_timer += delta
+		if run_timer >= 2.0 and not speed_booster_active:
+			speed_booster_active = true
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("⚡ SPEED BOOSTER ACTIVE! ⚡", global_position, Color.GOLD)
+	else:
+		if not is_on_floor() or input_dir == 0.0 or is_crouching:
+			run_timer = 0.0
+			if not shinespark_stored:
+				speed_booster_active = false
+
+	# Shinespark store
+	if speed_booster_active and down_input_pressed and is_on_floor():
+		shinespark_stored = true
+		shinespark_store_timer = 4.0
+		speed_booster_active = false
+		run_timer = 0.0
+		if main != null and main.has_method("spawn_floating_text"):
+			main.spawn_floating_text("✨ SHINESPARK STORED! ✨", global_position, Color.GOLD)
+
+	if shinespark_stored:
+		shinespark_store_timer -= delta
+		if shinespark_store_timer <= 0.0:
+			shinespark_stored = false
+		if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
+			shinespark_stored = false
+			is_shinesparking = true
+			shinespark_flight_timer = 1.5
+			var vertical_in = Input.get_axis("ui_up", "ui_down")
+			var horizontal_in = Input.get_axis("ui_left", "ui_right")
+			shinespark_direction = Vector2(horizontal_in, -1.0 if vertical_in == 0.0 else vertical_in).normalized()
+			if shinespark_direction.length_squared() < 0.1:
+				shinespark_direction = Vector2.UP
+			velocity = shinespark_direction * 800.0
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("🚀 SHINESPARK!!!", global_position, Color.GOLD)
 
 	# Configure up direction dynamically
 	if gravity_inverted:
@@ -326,7 +683,7 @@ func _physics_process(delta: float) -> void:
 			tex.gradient = grad
 			tex.width = 300
 			tex.height = 300
-			
+
 			lantern_light.texture = tex
 			lantern_light.energy = 1.3
 			lantern_light.blend_mode = Light2D.BLEND_MODE_ADD
@@ -338,7 +695,7 @@ func _physics_process(delta: float) -> void:
 		if water_hurt_timer <= 0.0:
 			var dmg = 8 if water_type == "toxic" else 25
 			take_damage(dmg)
-			water_hurt_timer = 0.8 # tick every 0.8 seconds
+			water_hurt_timer = 0.8
 
 	# Handle giant timer
 	if giant_timer > 0.0:
@@ -349,26 +706,73 @@ func _physics_process(delta: float) -> void:
 		is_giant = false
 		scale = Vector2(1.0, 1.0)
 
+	# Determine final active speed
 	var active_speed := movement_speed
-	if is_creative:
-		modulate = Color(1.0, 0.9, 0.4) # Gold modulation for creative mode
+	if is_star_mode:
+		active_speed = movement_speed * 1.6
+	elif is_squid_form:
+		active_speed = movement_speed * 1.8
+	elif is_sliding:
+		active_speed = movement_speed * 1.5
+	elif is_crouching:
+		active_speed = movement_speed * 0.5
+	elif speed_booster_active:
+		active_speed = movement_speed * 1.8
+
+	if is_star_mode:
+		star_timer -= delta
+		queue_redraw()
+		var frame = Engine.get_physics_frames() % 9
+		if frame < 3: modulate = Color(1.3, 1.3, 0.5)
+		elif frame < 6: modulate = Color(0.5, 1.3, 1.3)
+		else: modulate = Color(1.3, 0.5, 1.3)
+
+		if Engine.get_physics_frames() % 4 == 0:
+			var star_fx_main = get_parent()
+			if star_fx_main != null:
+				var p = CPUParticles2D.new()
+				p.global_position = global_position + Vector2(randf_range(-10, 10), randf_range(-10, 10))
+				p.amount = 4
+				p.one_shot = true
+				p.lifetime = 0.3
+				p.initial_velocity_min = 20.0
+				p.initial_velocity_max = 50.0
+				p.spread = 180.0
+				p.color = Color.GOLD
+				p.scale_amount_min = 2.0
+				p.scale_amount_max = 4.0
+				star_fx_main.add_child(p)
+				p.emitting = true
+				get_tree().create_timer(0.4).timeout.connect(p.queue_free)
+
+		if star_timer <= 0.0:
+			is_star_mode = false
+			modulate = Color.WHITE
+			var star_expire_main = get_parent()
+			if star_expire_main != null and star_expire_main.has_method("spawn_floating_text"):
+				star_expire_main.spawn_floating_text("Star Mode Expired! 🌟", global_position, Color.WHITE)
+	elif is_creative:
+		modulate = Color(1.0, 0.9, 0.4)
+	elif shinespark_stored:
+		modulate = Color.YELLOW if Engine.get_physics_frames() % 4 < 2 else Color.ORANGE
+	elif speed_booster_active:
+		modulate = Color.CYAN if Engine.get_physics_frames() % 6 < 3 else Color.YELLOW
 	elif speed_boost_timer > 0.0:
 		speed_boost_timer -= delta
 		active_speed = movement_speed * 1.6
-		modulate = Color(0.4, 1.0, 1.0) # Cyan modulation for speed
+		modulate = Color(0.4, 1.0, 1.0)
 	elif shield_active:
-		modulate = Color(1.0, 0.5, 1.0) # Pink modulation for shield
+		modulate = Color(1.0, 0.5, 1.0)
 	elif is_giant:
-		modulate = Color(1.0, 0.8, 0.2) # Orange/gold modulation for giant
+		modulate = Color(1.0, 0.8, 0.2)
 	elif gravity_inverted:
-		modulate = Color(0.6, 0.4, 1.0) # Purple modulation for gravity
+		modulate = Color(0.6, 0.4, 1.0)
 	else:
 		if not _invincible:
 			if costume_tint != "" and costume_tint != "default":
 				modulate = Color(costume_tint)
 			else:
 				modulate = Color(1.0, 1.0, 1.0)
-
 
 	# Update timers
 	if dash_timer > 0.0:
@@ -396,9 +800,15 @@ func _physics_process(delta: float) -> void:
 				var spd: float = collider.get_meta("conveyor_speed")
 				conveyor_velocity.x = dir * spd
 
-	var input_dir := Input.get_axis("ui_left", "ui_right")
 	if input_dir != 0.0:
 		facing_direction = sign(input_dir)
+
+	# Spin Dash charge trigger (holding Down and pressing Jump on floor)
+	if is_on_floor() and down_input_pressed and (Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up")):
+		is_spindashing = true
+		spindash_charge = 0.0
+		velocity = Vector2.ZERO
+		return
 
 	# Handle Dash Input
 	var can_dash_rogue = (hero_class == "rogue" and dashes_spent < 2 and not is_dashing)
@@ -408,7 +818,7 @@ func _physics_process(delta: float) -> void:
 		dash_timer = 0.2
 		dash_direction = facing_direction
 		velocity.y = 0.0
-		
+
 		if hero_class == "rogue":
 			dashes_spent += 1
 			if dashes_spent == 2:
@@ -417,7 +827,7 @@ func _physics_process(delta: float) -> void:
 				dash_cooldown = 0.15
 		else:
 			dash_cooldown = 1.2
-			
+
 		if main != null and main.has_method("play_sfx"):
 			main.play_sfx("jump")
 		if main != null and main.has_method("spawn_floating_text"):
@@ -516,48 +926,54 @@ func _physics_process(delta: float) -> void:
 		speed_pad_velocity = speed_pad_velocity.move_toward(Vector2.ZERO, delta * 900.0)
 
 	# Water buoyancy, jetpack thrust, glider cape glide, or standard gravity
-	if is_dashing or is_ground_pounding:
-		pass
-	elif is_creative:
-		var v_input := Input.get_axis("ui_up", "ui_down")
-		velocity.y = v_input * active_speed
-		if Input.is_action_pressed("ui_accept"):
-			velocity.y = -active_speed if not gravity_inverted else active_speed
-	elif inside_water:
-		velocity.y += gravity * (1.0 - water_buoyancy) * delta
-		velocity.y = clamp(velocity.y, -220.0, 180.0)
-	elif has_jetpack and jetpack_fuel > 0.0 and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
-		velocity.y = -260.0 if not gravity_inverted else 260.0
-		jetpack_fuel -= delta * 35.0
-		modulate = Color(1.0, 0.5, 0.2) # Jetpack orange visual tint
-		if main != null and main.has_method("spawn_floating_text") and randf() < delta * 4.0:
-			main.spawn_floating_text("🔥", global_position, Color.ORANGE)
-	elif has_glider and not is_on_floor() and (velocity.y > 0.0 if not gravity_inverted else velocity.y < 0.0) and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
-		if gravity_inverted:
-			velocity.y = max(velocity.y, -45.0)
-		else:
-			velocity.y = min(velocity.y, 45.0)
-		modulate = Color(1.0, 0.8, 0.5) # Glider yellow/peach visual tint
-	elif not is_on_floor():
-		velocity.y += gravity * gravity_scale * delta
-	
+	if not is_dashing and not is_ground_pounding:
+		if is_creative or is_star_mode:
+			var v_input := Input.get_axis("ui_up", "ui_down")
+			if v_input == 0.0 and Input.is_physical_key_pressed(KEY_W):
+				v_input = -1.0
+			elif v_input == 0.0 and Input.is_physical_key_pressed(KEY_S):
+				v_input = 1.0
+			velocity.y = v_input * active_speed
+			if Input.is_action_pressed("ui_accept"):
+				velocity.y = -active_speed if not gravity_inverted else active_speed
+		elif inside_water:
+			velocity.y += gravity * (1.0 - water_buoyancy) * delta
+			velocity.y = clamp(velocity.y, -220.0, 180.0)
+		elif has_jetpack and jetpack_fuel > 0.0 and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
+			velocity.y = -260.0 if not gravity_inverted else 260.0
+			jetpack_fuel -= delta * 35.0
+			modulate = Color(1.0, 0.5, 0.2) # Jetpack orange visual tint
+			if main != null and main.has_method("spawn_floating_text") and randf() < delta * 4.0:
+				main.spawn_floating_text("🔥", global_position, Color.ORANGE)
+		elif has_glider and not is_on_floor() and (velocity.y > 0.0 if not gravity_inverted else velocity.y < 0.0) and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
+			if gravity_inverted:
+				velocity.y = max(velocity.y, -45.0)
+			else:
+				velocity.y = min(velocity.y, 45.0)
+			modulate = Color(1.0, 0.8, 0.5) # Glider yellow/peach visual tint
+		elif not is_on_floor():
+			velocity.y += gravity * gravity_scale * delta
+
 	if is_on_floor():
 		_jumps_remaining = 2 if double_jump_enabled else 1
 		is_ground_pounding = false
 		dashes_spent = 0
 
-	if not is_creative and (Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up")):
+	if not is_creative and jump_buffer_timer > 0.0:
 		var did_jump := false
 		if inside_water:
 			# Swim stroke
 			velocity.y = -220.0 if not gravity_inverted else 220.0
 			did_jump = true
+			jump_buffer_timer = 0.0
 			if main != null and main.has_method("play_sfx"):
 				main.play_sfx("jump")
-		elif is_on_floor():
+		elif is_on_floor() or coyote_timer > 0.0:
 			velocity.y = jump_force if not gravity_inverted else -jump_force
 			_jumps_remaining = 1 if double_jump_enabled else 0
 			did_jump = true
+			coyote_timer = 0.0
+			jump_buffer_timer = 0.0
 		elif is_on_wall():
 			# WALL JUMP!
 			var wall_normal := get_wall_normal()
@@ -565,12 +981,14 @@ func _physics_process(delta: float) -> void:
 			velocity.x = wall_normal.x * movement_speed * 1.3
 			_jumps_remaining = 1 if double_jump_enabled else 0
 			did_jump = true
+			jump_buffer_timer = 0.0
 			if main != null and main.has_method("spawn_floating_text"):
 				main.spawn_floating_text("🧗 WALL JUMP!", global_position, Color.CHARTREUSE)
 		elif _jumps_remaining > 0:
 			velocity.y = jump_force * 0.9 if not gravity_inverted else -jump_force * 0.9
 			_jumps_remaining -= 1
 			did_jump = true
+			jump_buffer_timer = 0.0
 			if hero_class == "archer":
 				dash_cooldown = 0.0
 			scale = Vector2(0.8, 1.3)
@@ -616,98 +1034,25 @@ func _physics_process(delta: float) -> void:
 				if is_stomp:
 					var bounce = jump_force * 0.75
 					velocity.y = bounce if not gravity_inverted else -bounce
-					
+
 					var stomp_dmg = 40 if is_giant else 20
 					collider.take_damage(stomp_dmg)
-					
+
 					if main != null and main.has_method("play_sfx"):
 						main.play_sfx("jump")
 					break
 
 	# Update trail particles
 	if trail_particles != null:
-		if velocity.length_squared() > 100.0:
-			trail_particles.emitting = true
-			trail_particles.direction = -velocity.normalized()
-		else:
-			trail_particles.emitting = false
-		trail_particles.color = modulate
-		trail_particles.color.a = 0.6
+		PlayerVisualEffects.update_hero_trail(trail_particles, velocity, modulate)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed:
-		var emoji := ""
-		match event.keycode:
-			KEY_1: emoji = "😊"
-			KEY_2: emoji = "😡"
-			KEY_3: emoji = "😱"
-			KEY_4: emoji = "🎉"
-			KEY_5: emoji = "💤"
-			KEY_TAB:
-				var main = get_tree().get_root().get_node_or_null("Main")
-				if main != null and main.has_method("toggle_backpack_ui"):
-					main.toggle_backpack_ui()
-			KEY_F:
-				var main = get_tree().get_root().get_node_or_null("Main")
-				if main != null:
-					var thrown = false
-					for child in get_parent().get_children():
-						if child.has_meta("asset_id") and child.get_meta("asset_id") == "companion_pikmin":
-							if child.has_method("is_following") and child.is_following():
-								child.throw(facing_direction)
-								thrown = true
-								break
-					if thrown:
-						if main.has_method("play_sfx"): main.play_sfx("jump")
-			KEY_Q:
-				var main = get_tree().get_root().get_node_or_null("Main")
-				if main != null:
-					if main.has_method("play_sfx"): main.play_sfx("coin")
-					if main.has_method("spawn_floating_text"):
-						main.spawn_floating_text("📢 WHISTLE!", global_position, Color.CHARTREUSE)
-					for child in get_parent().get_children():
-						if child.has_meta("asset_id") and child.get_meta("asset_id") == "companion_pikmin":
-							if child.has_method("recall"):
-								child.recall()
-		if emoji != "":
-			show_emote(emoji)
+	PlayerInputActions.handle(self, event)
 
 
 func show_emote(emoji: String) -> void:
-	var old_lbl = get_node_or_null("EmoteLabel")
-	if old_lbl != null:
-		old_lbl.queue_free()
-		
-	var label := Label.new()
-	label.name = "EmoteLabel"
-	label.text = emoji
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	
-	var settings := LabelSettings.new()
-	settings.font_size = 28
-	settings.outline_size = 4
-	settings.outline_color = Color.BLACK
-	label.label_settings = settings
-	
-	label.size = Vector2(80, 40)
-	label.position = Vector2(-40, -60)
-	add_child(label)
-	
-	label.scale = Vector2(0.2, 0.2)
-	label.pivot_offset = Vector2(40, 20)
-	
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(label, "position:y", -90.0, 1.2).set_ease(Tween.EASE_OUT)
-	tween.tween_property(label, "scale", Vector2(1.2, 1.2), 0.15).set_ease(Tween.EASE_OUT)
-	tween.tween_property(label, "scale", Vector2(1.0, 1.0), 0.15).set_delay(0.15)
-	
-	var fade_tween := create_tween()
-	fade_tween.tween_interval(0.9)
-	fade_tween.tween_property(label, "modulate:a", 0.0, 0.3)
-	fade_tween.chain().tween_callback(label.queue_free)
+	PlayerVisualEffects.show_emote(self, emoji)
 
 
 func _execute_melee_strike(step: int) -> void:
@@ -723,10 +1068,10 @@ func _execute_melee_strike(step: int) -> void:
 		text = "🔥 FINISHER!"
 		dmg = 30
 		kback = 450.0
-		
+
 	if hero_class == "warrior":
 		dmg = int(dmg * 1.2)
-		
+
 	if main != null and main.has_method("play_sfx"):
 		main.play_sfx("hit")
 	if main != null and main.has_method("spawn_floating_text"):
@@ -738,7 +1083,7 @@ func _execute_melee_strike(step: int) -> void:
 	slash.size = Vector2(36, 12) if step < 3 else Vector2(48, 20)
 	slash.position = Vector2(facing_direction * 16 - slash.size.x * 0.5, -12)
 	add_child(slash)
-	
+
 	var tween = create_tween()
 	tween.tween_property(slash, "scale:y", 0.0, 0.15)
 	tween.chain().tween_callback(slash.queue_free)
@@ -751,7 +1096,7 @@ func _execute_melee_strike(step: int) -> void:
 	query.shape = rect
 	query.transform = Transform2D(0, global_position + Vector2(facing_direction * 28, 0))
 	query.collision_mask = 1 # hits enemies
-	
+
 	var hits = space_state.intersect_shape(query)
 	for hit in hits:
 		var node = hit.get("collider")
@@ -761,64 +1106,34 @@ func _execute_melee_strike(step: int) -> void:
 				node.velocity += Vector2(facing_direction * kback, -100.0)
 
 
+func _configure_linear_projectile(
+	projectile: Area2D,
+	projectile_velocity: Vector2,
+	projectile_damage: int,
+	projectile_lifetime: float,
+	rotate_to_velocity: bool = false,
+	pierce: bool = false,
+	gravity_y: float = 0.0,
+	applies_burn: bool = false
+) -> void:
+	PlayerProjectileFactory._configure_linear_projectile(
+		projectile,
+		self,
+		projectile_velocity,
+		projectile_damage,
+		projectile_lifetime,
+		rotate_to_velocity,
+		pierce,
+		gravity_y,
+		applies_burn
+	)
+
+
 func _fire_projectile(charge: float) -> void:
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main == null:
 		return
-
-	var is_mega = charge >= 1.0
-	var text = "⚡ MEGA BLAST!" if is_mega else "🔫 PEW!"
-	var dmg = 40 if is_mega else 10
-	var speed = 180.0 if is_mega else 300.0
-	var size_vec = Vector2(24, 24) if is_mega else Vector2(10, 6)
-	var color_tint = Color(1.0, 0.85, 0.1, 1.0) if is_mega else Color(0.1, 0.85, 1.0, 1.0)
-
-	if main.has_method("play_sfx"):
-		main.play_sfx("jump")
-	if main.has_method("spawn_floating_text"):
-		main.spawn_floating_text(text, global_position, Color.GOLD if is_mega else Color.CYAN)
-
-	var bullet := Area2D.new()
-	bullet.name = "PlayerProjectile"
-
-	var visual := ColorRect.new()
-	visual.color = color_tint
-	visual.size = size_vec
-	visual.position = -visual.size * 0.5
-	bullet.add_child(visual)
-
-	var shape := CircleShape2D.new()
-	shape.radius = size_vec.x * 0.5
-	var col := CollisionShape2D.new()
-	col.shape = shape
-	bullet.add_child(col)
-
-	bullet.collision_layer = 0
-	bullet.collision_mask = 1 # hits enemies
-
-	var bullet_script := GDScript.new()
-	bullet_script.source_code = "extends Area2D\nvar velocity := Vector2.ZERO\nfunc _physics_process(delta: float) -> void:\n\tglobal_position += velocity * delta\n"
-	bullet_script.reload()
-	bullet.set_script(bullet_script)
-
-	bullet.set("velocity", Vector2(facing_direction * speed, 0.0))
-	bullet.global_position = global_position + Vector2(facing_direction * 16, -10)
-
-	bullet.body_entered.connect(func(body):
-		if body == self:
-			return
-		if body.has_method("take_damage") and not body.name.begins_with("Player"):
-			body.take_damage(dmg)
-			bullet.queue_free()
-	)
-
-	var timer = get_tree().create_timer(4.0)
-	timer.timeout.connect(func():
-		if is_instance_valid(bullet):
-			bullet.queue_free()
-	)
-
-	main.add_child(bullet)
+	PlayerProjectileFactory.fire_projectile(self, main, charge)
 
 
 func _stun_closest_enemy() -> void:
@@ -845,7 +1160,7 @@ func _execute_ground_pound_damage() -> void:
 	query.shape = rect
 	query.transform = Transform2D(0, global_position + Vector2(0, 10))
 	query.collision_mask = 1 # hits enemies
-	
+
 	var hits = space_state.intersect_shape(query)
 	for hit in hits:
 		var node = hit.get("collider")
@@ -858,202 +1173,105 @@ func _execute_ground_pound_damage() -> void:
 func _fire_archer_arrow() -> void:
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main == null: return
-	
-	if main.has_method("play_sfx"): main.play_sfx("jump")
-	if main.has_method("spawn_floating_text"):
-		main.spawn_floating_text("🏹 ARROW!", global_position, Color.GREEN)
-		
-	var shoot_dir := Vector2(facing_direction, 0.0)
-	var closest_enemy: Node2D = null
-	var closest_dist := 300.0
-	for child in main.get_children():
-		if child.has_method("take_damage") and not child.name.begins_with("Player"):
-			var dist = global_position.distance_to(child.global_position)
-			if dist < closest_dist:
-				closest_dist = dist
-				closest_enemy = child
-	if closest_enemy != null:
-		shoot_dir = (closest_enemy.global_position - global_position).normalized()
-		
-	var bullet := Area2D.new()
-	bullet.name = "ArcherArrow"
-	
-	var visual := ColorRect.new()
-	visual.color = Color.GREEN
-	visual.size = Vector2(16, 4)
-	visual.position = -visual.size * 0.5
-	bullet.add_child(visual)
-	
-	var shape := CircleShape2D.new()
-	shape.radius = 4.0
-	var col := CollisionShape2D.new()
-	col.shape = shape
-	bullet.add_child(col)
-	
-	bullet.collision_layer = 0
-	bullet.collision_mask = 1 # hits enemies
-	
-	var bullet_script := GDScript.new()
-	bullet_script.source_code = "extends Area2D\nvar velocity := Vector2.ZERO\nfunc _physics_process(delta: float) -> void:\n\tglobal_position += velocity * delta\n\trotation = velocity.angle()\n"
-	bullet_script.reload()
-	bullet.set_script(bullet_script)
-	
-	bullet.set("velocity", shoot_dir * 450.0)
-	bullet.global_position = global_position + Vector2(facing_direction * 16, -10)
-	
-	bullet.body_entered.connect(func(body):
-		if body == self: return
-		if body.has_method("take_damage") and not body.name.begins_with("Player"):
-			body.take_damage(12)
-			bullet.queue_free()
-	)
-	
-	var timer = get_tree().create_timer(3.0)
-	timer.timeout.connect(func():
-		if is_instance_valid(bullet): bullet.queue_free()
-	)
-	main.add_child(bullet)
+	PlayerProjectileFactory.fire_archer_arrow(self, main)
 
 
 func _fire_mage_wand_bolt() -> void:
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main == null: return
-	
-	if main.has_method("play_sfx"): main.play_sfx("hit")
-	if main.has_method("spawn_floating_text"):
-		main.spawn_floating_text("🔮 WAND!", global_position, Color.PURPLE)
-		
-	var bullet := Area2D.new()
-	bullet.name = "MageWandBolt"
-	
-	var visual := ColorRect.new()
-	visual.color = Color(0.8, 0.4, 1.0)
-	visual.size = Vector2(8, 8)
-	visual.position = -visual.size * 0.5
-	bullet.add_child(visual)
-	
-	var shape := CircleShape2D.new()
-	shape.radius = 4.0
-	var col := CollisionShape2D.new()
-	col.shape = shape
-	bullet.add_child(col)
-	
-	bullet.collision_layer = 0
-	bullet.collision_mask = 1
-	
-	var bullet_script := GDScript.new()
-	bullet_script.source_code = "extends Area2D\nvar velocity := Vector2.ZERO\nfunc _physics_process(delta: float) -> void:\n\tglobal_position += velocity * delta\n"
-	bullet_script.reload()
-	bullet.set_script(bullet_script)
-	
-	bullet.set("velocity", Vector2(facing_direction * 350.0, 0.0))
-	bullet.global_position = global_position + Vector2(facing_direction * 16, -10)
-	
-	bullet.body_entered.connect(func(body):
-		if body == self: return
-		if body.has_method("take_damage") and not body.name.begins_with("Player"):
-			body.take_damage(8)
-			bullet.queue_free()
-	)
-	
-	var timer = get_tree().create_timer(2.0)
-	timer.timeout.connect(func():
-		if is_instance_valid(bullet): bullet.queue_free()
-	)
-	main.add_child(bullet)
+	PlayerProjectileFactory.fire_mage_wand_bolt(self, main, copied_enemy_projectile)
+
+
+func _fire_copied_projectile() -> void:
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main == null: return
+	PlayerProjectileFactory.fire_copied_projectile(self, main, copied_enemy_projectile)
 
 
 func _fire_mage_magic_blast() -> void:
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main == null: return
-	
-	if main.has_method("play_sfx"): main.play_sfx("jump")
-	if main.has_method("spawn_floating_text"):
-		main.spawn_floating_text("⚡ MAGIC BLAST!", global_position, Color.MAGENTA)
-		
-	var bullet := Area2D.new()
-	bullet.name = "MageMagicBlast"
-	
-	var visual := ColorRect.new()
-	visual.color = Color(1.0, 0.2, 0.8)
-	visual.size = Vector2(20, 20)
-	visual.position = -visual.size * 0.5
-	bullet.add_child(visual)
-	
-	var shape := CircleShape2D.new()
-	shape.radius = 10.0
-	var col := CollisionShape2D.new()
-	col.shape = shape
-	bullet.add_child(col)
-	
-	bullet.collision_layer = 0
-	bullet.collision_mask = 1
-	
-	var bullet_script := GDScript.new()
-	bullet_script.source_code = "extends Area2D\nvar velocity := Vector2.ZERO\nfunc _physics_process(delta: float) -> void:\n\tglobal_position += velocity * delta\n"
-	bullet_script.reload()
-	bullet.set_script(bullet_script)
-	
-	bullet.set("velocity", Vector2(facing_direction * 220.0, 0.0))
-	bullet.global_position = global_position + Vector2(facing_direction * 16, -10)
-	
-	var hit_entities: Array = []
-	bullet.body_entered.connect(func(body):
-		if body == self: return
-		if body.has_method("take_damage") and not body.name.begins_with("Player"):
-			if not body in hit_entities:
-				hit_entities.append(body)
-				body.take_damage(25)
-	)
-	
-	var timer = get_tree().create_timer(3.5)
-	timer.timeout.connect(func():
-		if is_instance_valid(bullet): bullet.queue_free()
-	)
-	main.add_child(bullet)
+	PlayerProjectileFactory.fire_mage_magic_blast(self, main)
 
 
 func set_burning(duration: float) -> void:
-	is_burning = true
-	burn_timer = max(burn_timer, duration)
+	PlayerStatusEffects.set_burning(self, duration)
 
 
 func set_shocked(duration: float) -> void:
-	is_shocked = true
-	shock_timer = max(shock_timer, duration)
+	PlayerStatusEffects.set_shocked(self, duration)
 
 
 func add_to_backpack(item_type: String) -> bool:
-	var w = 1
-	var h = 1
-	if item_type == "shield":
-		w = 2
-		h = 2
-	elif item_type in ["sword", "firesword"]:
-		w = 1
-		h = 2
+	return PlayerInventory.add_to_backpack_grid(backpack_grid, item_type)
 
-	for r in range(4 - h + 1):
-		for c in range(4 - w + 1):
-			var fits = true
-			for dr in range(h):
-				for dc in range(w):
-					if backpack_grid[r + dr][c + dc] != null:
-						fits = false
-						break
-				if not fits: break
-			if fits:
-				for dr in range(h):
-					for dc in range(w):
-						backpack_grid[r + dr][c + dc] = {
-							"type": item_type,
-							"root_r": r,
-							"root_c": c,
-							"w": w,
-							"h": h
-						}
-				print("Added ", item_type, " to backpack at ", r, ", ", c)
-				return true
-	print("Backpack is full! Cannot add: ", item_type)
-	return false
 
+func set_crouch_state(crouch: bool) -> bool:
+	if collision_shape == null or not collision_shape.shape is RectangleShape2D:
+		return true
+
+	if crouch:
+		collision_shape.shape.size.y = original_collision_height * 0.5
+		collision_shape.position.y = original_collision_y + original_collision_height * 0.25
+		for child in get_children():
+			if child is CollisionShape2D or child.name.contains("Particles") or child.name.contains("Emote") or child.name.contains("Light"):
+				continue
+			child.scale.y = 0.5
+			if "position" in child:
+				child.position.y = original_collision_height * 0.25
+		return true
+	else:
+		var space_state := get_world_2d().direct_space_state
+		var query := PhysicsShapeQueryParameters2D.new()
+		var test_shape := RectangleShape2D.new()
+		test_shape.size = Vector2(24, original_collision_height)
+		query.shape = test_shape
+		query.transform = Transform2D(0, global_position + Vector2(0, original_collision_y - original_collision_height * 0.25))
+		query.collision_mask = 1 # solid layers
+		query.exclude = [self]
+
+		var results = space_state.intersect_shape(query, 1)
+		if results.is_empty():
+			collision_shape.shape.size.y = original_collision_height
+			collision_shape.position.y = original_collision_y
+			for child in get_children():
+				if child is CollisionShape2D or child.name.contains("Particles") or child.name.contains("Emote") or child.name.contains("Light"):
+					continue
+				child.scale.y = 1.0
+				if "position" in child:
+					child.position.y = 0.0
+			return true
+		else:
+			return false
+
+
+func _draw() -> void:
+	PlayerVisualEffects.draw_player_overlays(self)
+
+
+func _throw_boomerang() -> void:
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main == null: return
+	PlayerProjectileFactory.throw_boomerang(self, main)
+
+
+func _throw_bomb() -> void:
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main == null: return
+	PlayerProjectileFactory.throw_bomb(self, main)
+
+
+func _fire_paint_projectile() -> void:
+	var main = get_parent()
+	if main == null: return
+	PlayerProjectileFactory.fire_paint_projectile(self, main)
+
+
+func activate_star_mode() -> void:
+	is_star_mode = true
+	star_timer = 15.0
+	var main = get_parent()
+	if main != null and main.has_method("play_sfx"):
+		main.play_sfx("coin")
+	if main != null and main.has_method("spawn_floating_text"):
+		main.spawn_floating_text("🌟 STAR MODE INVINCIBILITY! 🌟", global_position, Color.GOLD)

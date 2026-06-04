@@ -5,7 +5,6 @@ import json
 import os
 import re
 import sys
-import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import Counter
 from dataclasses import dataclass
@@ -17,11 +16,13 @@ from PIL import Image, ImageDraw, ImageFont
 
 try:
     from tools.sprite_atlas import MaxRectsPacker, PackedRect, Rect, pack_records_into_atlases, rect_contains, rects_intersect
+    from tools.sprite_sheet_discovery import SUPPORTED_ARCHIVE_EXTENSIONS, SUPPORTED_IMAGE_EXTENSIONS, discover_sheet_files, extract_archive_sheet_files, is_generated_output_path, is_inside_spritecut_output, natural_key, unique_output_dir
     from tools.sprite_manifest import write_manifest, write_project_file
     from tools.sprite_reports import relative_link, write_html_report, write_visual_qa_report, write_visual_regression_report
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from tools.sprite_atlas import MaxRectsPacker, PackedRect, Rect, pack_records_into_atlases, rect_contains, rects_intersect
+    from tools.sprite_sheet_discovery import SUPPORTED_ARCHIVE_EXTENSIONS, SUPPORTED_IMAGE_EXTENSIONS, discover_sheet_files, extract_archive_sheet_files, is_generated_output_path, is_inside_spritecut_output, natural_key, unique_output_dir
     from tools.sprite_manifest import write_manifest, write_project_file
     from tools.sprite_reports import relative_link, write_html_report, write_visual_qa_report, write_visual_regression_report
 
@@ -32,8 +33,6 @@ MIN_GROUP_PIXELS = 24
 MIN_WIDTH = 3
 MIN_HEIGHT = 3
 PADDING = 1
-SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
-SUPPORTED_ARCHIVE_EXTENSIONS = {".zip"}
 BUILT_IN_PRESETS: dict[str, dict[str, object]] = {
     "pixel_tileset_white_bg": {
         "mode": "tileset",
@@ -167,6 +166,9 @@ class SheetError:
     error: str
 
 
+SHEET_PROCESSING_ERRORS = (OSError, ValueError, cv2.error)
+
+
 @dataclass
 class RunOptions:
     mode: str
@@ -189,134 +191,6 @@ class RunOptions:
     include_archives: bool
     auto_detect_all: bool
     auto_profile: dict[str, object]
-
-
-def natural_key(value: str) -> list[object]:
-    return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", value)]
-
-
-def unique_output_dir(root: Path, preferred_name: str) -> Path:
-    candidate = root / preferred_name
-    if not candidate.exists():
-        return candidate
-
-    index = 2
-    while True:
-        candidate = root / f"{preferred_name}_{index}"
-        if not candidate.exists():
-            return candidate
-        index += 1
-
-
-def is_generated_output_path(path: Path) -> bool:
-    return any(part.lower().startswith("_organized_sprites") for part in path.parts)
-
-
-def is_inside_spritecut_output(path: Path, root: Path) -> bool:
-    current = path if path.is_dir() else path.parent
-    while True:
-        if (current / "project.spritecut.json").exists() or (current / "manifest" / "sprites.json").exists():
-            return True
-        if current == root or current == current.parent:
-            return False
-        current = current.parent
-
-
-def _safe_extract_relative_path(raw_name: str) -> Path | None:
-    normalized = raw_name.replace("\\", "/")
-    if normalized.startswith("/") or normalized.startswith("../") or "/../" in normalized:
-        return None
-    raw_parts = normalized.split("/")
-    cleaned_parts: list[str] = []
-    for part in raw_parts:
-        cleaned = re.sub(r'[<>:"|?*\x00-\x1f]+', "_", part.strip())
-        cleaned = cleaned.rstrip(".")
-        if cleaned in {"", ".", ".."}:
-            return None
-        cleaned_parts.append(cleaned)
-    relative = Path(*cleaned_parts)
-    if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
-        return None
-    return relative
-
-
-def _safe_archive_folder_name(path: Path) -> str:
-    name = re.sub(r"[^A-Za-z0-9_.-]+", "_", path.stem).strip("._")
-    return name or "archive"
-
-
-def _is_appledouble_metadata_path(path: Path) -> bool:
-    return any(part == "__MACOSX" or part.startswith("._") for part in path.parts)
-
-
-def extract_archive_sheet_files(archive_path: Path, destination_root: Path) -> list[Path]:
-    if archive_path.suffix.lower() not in SUPPORTED_ARCHIVE_EXTENSIONS:
-        return []
-
-    output_root = destination_root / _safe_archive_folder_name(archive_path)
-    extracted: list[Path] = []
-    try:
-        with zipfile.ZipFile(archive_path) as archive:
-            for member in archive.infolist():
-                relative = _safe_extract_relative_path(member.filename)
-                if (
-                    relative is None
-                    or member.is_dir()
-                    or _is_appledouble_metadata_path(relative)
-                    or relative.suffix.lower() not in SUPPORTED_IMAGE_EXTENSIONS
-                ):
-                    continue
-                target = output_root / relative
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with archive.open(member) as source, target.open("wb") as handle:
-                    handle.write(source.read())
-                extracted.append(target)
-    except zipfile.BadZipFile:
-        return []
-
-    return sorted(extracted, key=lambda path: natural_key(str(path.relative_to(output_root))))
-
-
-def _sheet_sort_key(path: Path, root: Path) -> list[object]:
-    try:
-        return natural_key(str(path.relative_to(root)))
-    except ValueError:
-        return natural_key(str(path))
-
-
-def _is_relative_to(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-    except ValueError:
-        return False
-    return True
-
-
-def discover_sheet_files(input_path: Path, *, include_archives: bool = False, archive_extract_dir: Path | None = None) -> list[Path]:
-    if input_path.is_file():
-        if input_path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS:
-            return [input_path]
-        if include_archives and archive_extract_dir is not None:
-            return extract_archive_sheet_files(input_path, archive_extract_dir)
-        return []
-
-    sheets: list[Path] = []
-    for path in input_path.rglob("*"):
-        if archive_extract_dir is not None and _is_relative_to(path, archive_extract_dir):
-            continue
-        if is_generated_output_path(path) or is_inside_spritecut_output(path, input_path):
-            continue
-        if not path.is_file():
-            continue
-        if _is_appledouble_metadata_path(path):
-            continue
-        if path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS:
-            sheets.append(path)
-        elif include_archives and archive_extract_dir is not None and path.suffix.lower() in SUPPORTED_ARCHIVE_EXTENSIONS:
-            relative = path.relative_to(input_path).with_suffix("")
-            archive_destination = archive_extract_dir / relative.parent
-            sheets.extend(extract_archive_sheet_files(path, archive_destination))
-    return sorted(sheets, key=lambda path: _sheet_sort_key(path, input_path))
 
 
 def load_config_defaults(config_path: Path | None, preset_name: str | None = None) -> dict[str, object]:
@@ -532,7 +406,7 @@ def _auto_sheet_stats(sheet: Path) -> dict[str, object] | None:
             image = image.convert("RGBA")
             image.thumbnail((1024, 1024), Image.Resampling.NEAREST)
             rgba = np.array(image)
-    except Exception:
+    except (OSError, ValueError):
         return None
 
     rgb = rgba[:, :, :3]
@@ -1381,7 +1255,7 @@ def process_sheet_batch(
             _safe_print(f"PROCESSING {sheet}")
             try:
                 records = process_sheet(sheet, out_dir, preview_dir, options)
-            except Exception as exc:
+            except SHEET_PROCESSING_ERRORS as exc:
                 message = f"{type(exc).__name__}: {exc}"
                 if options.on_error == "fail":
                     raise SystemExit(f"Failed processing {sheet}: {message}") from exc
@@ -1404,7 +1278,7 @@ def process_sheet_batch(
                     records = future.result()
                     records_by_sheet[sheet] = records
                     _safe_print(f"DONE {sheet} sprites={len(records)}")
-                except Exception as exc:
+                except SHEET_PROCESSING_ERRORS as exc:
                     message = f"{type(exc).__name__}: {exc}"
                     if options.on_error == "fail":
                         raise SystemExit(f"Failed processing {sheet}: {message}") from exc

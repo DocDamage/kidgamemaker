@@ -10,7 +10,7 @@ from PIL import Image
 
 from tools.sprite_vision_labeler import FixtureVisionProvider, label_project_with_vision, provider_from_name
 from tools.reconstruct_sprite_project_from_cuts import write_reconstructed_project
-from tools.seeded_sprite_vision import apply_seeded_labels, count_missing_vision_labels
+from tools.seeded_sprite_vision import apply_seeded_labels, count_missing_vision_labels, write_seed_labels
 
 
 def write_sprite(path: Path) -> None:
@@ -19,6 +19,13 @@ def write_sprite(path: Path) -> None:
         for x in range(4, 8):
             image.putpixel((x, y), (40, 180, 40, 255))
     image.save(path)
+
+
+class AssertionVisionProvider:
+    name = "assertion"
+
+    def label_sprite(self, image_path: Path, sprite: dict[str, object]) -> dict[str, object]:
+        raise AssertionError("unexpected provider invariant failure")
 
 
 class SpriteVisionLabelerTests(unittest.TestCase):
@@ -152,6 +159,65 @@ class SpriteVisionLabelerTests(unittest.TestCase):
 
             self.assertEqual(write_cache.call_count, 3)
 
+    def test_label_project_with_vision_reports_expected_provider_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sprite_path = root / "crate.png"
+            write_sprite(sprite_path)
+            project_path = root / "project.spritecut.json"
+            project_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "sprites": [
+                            {
+                                "id": "sprite_001",
+                                "display_name": "unknown_001",
+                                "category": "sprites",
+                                "output_file": str(sprite_path),
+                                "review_status": "needs_review",
+                                "review_flags": [],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = label_project_with_vision(project_path, provider=FixtureVisionProvider({}))
+
+            self.assertFalse(result["ok"])
+            self.assertEqual(len(result["errors"]), 1)
+            self.assertIn("ValueError", result["errors"][0]["error"])
+
+    def test_label_project_with_vision_does_not_swallow_assertion_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sprite_path = root / "crate.png"
+            write_sprite(sprite_path)
+            project_path = root / "project.spritecut.json"
+            project_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "sprites": [
+                            {
+                                "id": "sprite_001",
+                                "display_name": "unknown_001",
+                                "category": "sprites",
+                                "output_file": str(sprite_path),
+                                "review_status": "needs_review",
+                                "review_flags": [],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(AssertionError):
+                label_project_with_vision(project_path, provider=AssertionVisionProvider())
+
     def test_gemini_and_nano_banana_provider_aliases_require_google_credentials(self) -> None:
         with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": ""}, clear=False):
             for provider in ("gemini", "nano_banana"):
@@ -179,6 +245,34 @@ class SpriteVisionLabelerTests(unittest.TestCase):
             self.assertEqual(project["sprites"][0]["category"], "props_and_items")
             self.assertEqual(project["sprites"][1]["kind"], "animation_frame")
             self.assertEqual(project["sprites"][1]["sequence"], "hero_idle_row_01")
+
+    def test_reconstruct_project_from_cut_pngs_reports_bad_pngs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sprite_path = root / "sprites" / "props_and_items" / "crate.png"
+            sprite_path.parent.mkdir(parents=True)
+            sprite_path.write_bytes(b"not a real png")
+            project_path = root / "project.spritecut.vision.json"
+
+            result = write_reconstructed_project(root, project_path, progress_interval=0)
+
+            project = json.loads(project_path.read_text(encoding="utf-8"))
+            self.assertEqual(result["total_sprites"], 0)
+            self.assertEqual(result["skipped"], 1)
+            self.assertEqual(project["summary"]["sheets_failed"], 1)
+            self.assertIn("ValueError", project["reconstruction_errors"][0]["error"])
+
+    def test_reconstruct_project_from_cut_pngs_does_not_swallow_assertion_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sprite_path = root / "sprites" / "props_and_items" / "crate.png"
+            sprite_path.parent.mkdir(parents=True)
+            write_sprite(sprite_path)
+            project_path = root / "project.spritecut.vision.json"
+
+            with mock.patch("tools.reconstruct_sprite_project_from_cuts.sprite_entry", side_effect=AssertionError("unexpected bug")):
+                with self.assertRaises(AssertionError):
+                    write_reconstructed_project(root, project_path, progress_interval=0)
 
     def test_apply_seeded_labels_streams_vision_labels_without_loading_project(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -245,6 +339,38 @@ class SpriteVisionLabelerTests(unittest.TestCase):
             self.assertEqual(labeled["sprites"][0]["vision_label"]["provider"], "gemini_seeded")
             self.assertIn("vision_labeled", labeled["sprites"][0]["review_flags"])
             self.assertIn("vision_seeded", labeled["sprites"][1]["review_flags"])
+
+    def test_write_seed_labels_does_not_swallow_assertion_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sprite_path = root / "crate.png"
+            write_sprite(sprite_path)
+            project_path = root / "project.spritecut.vision.json"
+            seed_path = root / "manifest" / "vision_category_seeds.json"
+            project_path.write_text(
+                "\n".join(
+                    [
+                        "{",
+                        '  "schema_version": 1,',
+                        '  "sprites": [',
+                        json.dumps(
+                            {
+                                "id": "sprite_001",
+                                "display_name": "wood_crate",
+                                "category": "props_and_items",
+                                "output_file": str(sprite_path),
+                            }
+                        ),
+                        "  ]",
+                        "}",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch("tools.seeded_sprite_vision.provider_from_name", return_value=AssertionVisionProvider()):
+                with self.assertRaises(AssertionError):
+                    write_seed_labels(project_path, seed_path, provider_name="fixture")
 
 
 if __name__ == "__main__":

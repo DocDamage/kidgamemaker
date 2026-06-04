@@ -4,7 +4,7 @@
   "asset_name": "Spinning Target 🎯",
   "category": "decorations",
   "runtime_template": "target_practice",
-  "visual": "🎯",
+  "visual": "target_practice.svg",
   "visual_tags": [
     "target",
     "practice",

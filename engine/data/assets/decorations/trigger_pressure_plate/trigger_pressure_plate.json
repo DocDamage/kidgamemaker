@@ -4,13 +4,16 @@
   "asset_name": "Pressure Plate",
   "category": "decorations",
   "runtime_template": "trigger",
-  "visual": "🟨",
+  "visual": "trigger_pressure_plate.svg",
   "placement_logic": {
     "snapping_type": "free_float",
     "parallax_bucket": "play_layer"
   },
   "collision": {
     "shape": "rectangle",
-    "size": [48, 16]
+    "size": [
+      48,
+      16
+    ]
   }
 }

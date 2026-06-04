@@ -8,7 +8,7 @@ pub fn run() {
         inbox::start_inbox_watcher(repo_root);
     }
 
-    tauri::Builder::default()
+    if let Err(error) = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             commands::compile_and_play,
             commands::get_asset_inventory,
@@ -28,5 +28,7 @@ pub fn run() {
             commands::build_web_runner
         ])
         .run(tauri::generate_context!())
-        .expect("error while running KidGameMaker Tauri application");
+    {
+        eprintln!("error while running KidGameMaker Tauri application: {error}");
+    }
 }

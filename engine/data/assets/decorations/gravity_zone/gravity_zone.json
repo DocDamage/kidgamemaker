@@ -4,7 +4,7 @@
   "asset_name": "Gravity Zone 🌀",
   "category": "decorations",
   "runtime_template": "gravity_zone",
-  "visual": "🌀",
+  "visual": "gravity_zone.svg",
   "visual_tags": [
     "gravity",
     "zone",

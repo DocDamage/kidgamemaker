@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "asset_id": "charge_spring",
+  "asset_name": "Charge Spring",
+  "category": "collectibles",
+  "runtime_template": "collectible",
+  "visual": "charge_spring.svg",
+  "visual_tags": [
+    "movement",
+    "jump",
+    "upgrade"
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      24,
+      24
+    ]
+  },
+  "gameplay_logic": {
+    "on_pickup": "collect",
+    "score_value": 0,
+    "heal_value": 0,
+    "powerup_type": "charge_jump",
+    "charge_jump_speed": "normal",
+    "persistent": false
+  }
+}

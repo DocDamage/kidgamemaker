@@ -1,6 +1,35 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import {
+    SFX_PRESETS,
+    playSpriteEditorSound,
+    previewSfx,
+    synthesizeSfxBase64,
+    type SfxPresetName,
+    type SfxWaveType
+  } from './lib/spriteEditorAudio';
+  import {
+    addAnimationFrame,
+    advanceAnimationFrame,
+    applyTemplateGrid,
+    cloneGrid,
+    createEmptyGrid,
+    createPixelHistory,
+    deleteAnimationFrame,
+    drawPixelGrid,
+    exportFramesToPngBase64,
+    floodFillGrid,
+    paintBrush,
+    pushPixelHistory,
+    restorePixelHistory,
+    selectAnimationFrame,
+    type PixelGrid,
+    type PixelFrameState,
+    type PixelHistoryState
+  } from './lib/spriteGrid';
+  import { SPRITE_EDITOR_COLORS, SPRITE_EDITOR_GRID_SIZE, formatUnknownError } from './lib/spriteEditorConfig';
+  import { SPRITE_TEMPLATES, type SpriteTemplateName } from './lib/spriteTemplates';
 
   export let isVisible = false;
   export let targetAssetId = '';
@@ -12,23 +41,9 @@
     saved: string;
   }>();
 
-  const GRID_SIZE = 16;
+  const GRID_SIZE = SPRITE_EDITOR_GRID_SIZE;
   let canvasElement: HTMLCanvasElement;
   let ctx: CanvasRenderingContext2D | null = null;
-
-  // Curated premium high-contrast color palette for kids
-  const COLORS = [
-    '#ff4b4b', // Red
-    '#ff9030', // Orange
-    '#ffeb3b', // Yellow
-    '#00e676', // Green
-    '#2979ff', // Blue
-    '#d500f9', // Purple
-    '#ff4081', // Pink
-    '#8d6e63', // Brown
-    '#ffffff', // White
-    '#212121'  // Black
-  ];
 
   let currentColor = '#ff4b4b';
   let isDrawing = false;
@@ -42,23 +57,23 @@
   let activeTab: 'draw' | 'sound' = 'draw';
   
   // Synthesizer parameters
-  let sfxWaveType: 'sine' | 'square' | 'triangle' | 'sawtooth' | 'noise' = 'square';
+  let sfxWaveType: SfxWaveType = 'square';
   let sfxStartFreq = 440;
   let sfxEndFreq = 440;
   let sfxDuration = 0.25;
   let sfxSweep = 0; // custom sweep frequency change
 
-  // Sound preset configs
-  const presets = {
-    jump: { waveType: 'square' as const, startFreq: 150, endFreq: 800, duration: 0.15 },
-    laser: { waveType: 'sawtooth' as const, startFreq: 1200, endFreq: 100, duration: 0.2 },
-    chime: { waveType: 'sine' as const, startFreq: 600, endFreq: 1200, duration: 0.3 },
-    explosion: { waveType: 'noise' as const, startFreq: 400, endFreq: 50, duration: 0.4 },
-    hurt: { waveType: 'triangle' as const, startFreq: 180, endFreq: 60, duration: 0.18 }
-  };
+  function currentSfxParams() {
+    return {
+      waveType: sfxWaveType,
+      startFreq: sfxStartFreq,
+      endFreq: sfxEndFreq,
+      duration: sfxDuration
+    };
+  }
 
-  function applyPreset(name: 'jump' | 'laser' | 'chime' | 'explosion' | 'hurt') {
-    const p = presets[name];
+  function applyPreset(name: SfxPresetName) {
+    const p = SFX_PRESETS[name];
     sfxWaveType = p.waveType;
     sfxStartFreq = p.startFreq;
     sfxEndFreq = p.endFreq;
@@ -68,86 +83,12 @@
   }
 
   function playSynthesizedPreview() {
-    if (isMuted) return;
-    try {
-      const ctx = getAudioContext();
-      const now = ctx.currentTime;
-      
-      if (sfxWaveType === 'noise') {
-        const bufferSize = ctx.sampleRate * sfxDuration;
-        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-          const t = i / ctx.sampleRate;
-          const env = 1.0 - (t / sfxDuration);
-          data[i] = (Math.random() * 2 - 1) * env * 0.25;
-        }
-        const noiseNode = ctx.createBufferSource();
-        noiseNode.buffer = buffer;
-        noiseNode.connect(ctx.destination);
-        noiseNode.start(now);
-      } else {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = sfxWaveType;
-        
-        osc.frequency.setValueAtTime(sfxStartFreq, now);
-        osc.frequency.exponentialRampToValueAtTime(Math.max(10, sfxEndFreq), now + sfxDuration);
-        
-        gain.gain.setValueAtTime(0.08, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + sfxDuration);
-        
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + sfxDuration);
-      }
-    } catch (_) {}
-  }
-
-  function buildWav(samples: Int16Array, sampleRate = 22050): ArrayBuffer {
-    const buffer = new ArrayBuffer(44 + samples.length * 2);
-    const view = new DataView(buffer);
-
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + samples.length * 2, true);
-    writeString(view, 8, 'WAVE');
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeString(view, 36, 'data');
-    view.setUint32(40, samples.length * 2, true);
-
-    for (let i = 0; i < samples.length; i++) {
-      view.setInt16(44 + i * 2, samples[i], true);
-    }
-
-    return buffer;
-  }
-
-  function writeString(view: DataView, offset: number, string: string) {
-    for (let i = 0; i < string.length; i++) {
-      view.setUint8(offset + i, string.charCodeAt(i));
-    }
-  }
-
-  function arrayBufferToBase64(buffer: ArrayBuffer): string {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
+    previewSfx(currentSfxParams(), isMuted);
   }
 
   let isSavingAudio = false;
   let audioStatus = '';
+  let audioStatusTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   async function saveCustomAudio() {
     if (!targetAssetId) {
@@ -159,38 +100,7 @@
     audioStatus = 'Creating sound file...';
 
     try {
-      const sampleRate = 22050;
-      const totalSamples = Math.round(sfxDuration * sampleRate);
-      const samples = new Int16Array(totalSamples);
-      
-      let phase = 0;
-      for (let i = 0; i < totalSamples; i++) {
-        const t = i / sampleRate;
-        const ratio = t / sfxDuration;
-        const freq = sfxStartFreq + (sfxEndFreq - sfxStartFreq) * ratio;
-        phase += (2 * Math.PI * freq) / sampleRate;
-        
-        let val = 0;
-        if (sfxWaveType === 'sine') {
-          val = Math.sin(phase);
-        } else if (sfxWaveType === 'square') {
-          val = Math.sin(phase) >= 0 ? 1 : -1;
-        } else if (sfxWaveType === 'triangle') {
-          val = Math.abs((phase % (2 * Math.PI)) / Math.PI - 1) * 2 - 1;
-        } else if (sfxWaveType === 'sawtooth') {
-          val = (phase % (2 * Math.PI)) / Math.PI - 1;
-        } else if (sfxWaveType === 'noise') {
-          val = Math.random() * 2 - 1;
-        }
-        
-        const env = 1.0 - ratio;
-        const sampleVal = val * env * 0.3;
-        
-        samples[i] = Math.max(-32768, Math.min(32767, Math.round(sampleVal * 32767)));
-      }
-      
-      const buffer = buildWav(samples, sampleRate);
-      const base64Data = arrayBufferToBase64(buffer);
+      const base64Data = synthesizeSfxBase64(currentSfxParams());
       
       audioStatus = 'Saving...';
       const result = await invoke<string>('save_custom_audio', {
@@ -201,18 +111,20 @@
       
       audioStatus = 'Saved successfully! 🎉';
       playDrawSound('chime');
-      setTimeout(() => { audioStatus = ''; }, 3000);
-    } catch (err: any) {
+      clearAudioStatusTimeout();
+      audioStatusTimeoutId = setTimeout(() => {
+        audioStatus = '';
+        audioStatusTimeoutId = null;
+      }, 3000);
+    } catch (err: unknown) {
       console.error(err);
-      audioStatus = `Failed to save: ${err}`;
+      audioStatus = `Failed to save: ${formatUnknownError(err)}`;
     } finally {
       isSavingAudio = false;
     }
   }
 
-  let pixels: string[][] = Array(GRID_SIZE)
-    .fill(null)
-    .map(() => Array(GRID_SIZE).fill('transparent'));
+  let pixels: PixelGrid = createEmptyGrid(GRID_SIZE);
 
   // Run on visibility changes
   $: if (isVisible && canvasElement) {
@@ -220,241 +132,48 @@
     loadExistingSprite();
     activeTab = 'draw';
   }
-
-  let audioCtx: AudioContext | null = null;
-  function getAudioContext() {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
-    return audioCtx;
+  $: if (!isVisible) {
+    stopAnimPlayback(false);
+    clearAudioStatusTimeout();
   }
 
   function playDrawSound(type: 'draw' | 'clear' | 'chime') {
-    if (isMuted) return;
-    try {
-      const ctx = getAudioContext();
-      const now = ctx.currentTime;
-      if (type === 'draw') {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(1000 + Math.random() * 200, now);
-        gain.gain.setValueAtTime(0.04, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.08);
-      } else if (type === 'clear') {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
-        gain.gain.setValueAtTime(0.08, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.15);
-      } else if (type === 'chime') {
-        const notes = [600, 800, 1000, 1200];
-        notes.forEach((freq, i) => {
-          const time = now + i * 0.04;
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, time);
-          gain.gain.setValueAtTime(0.05, time);
-          gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(time);
-          osc.stop(time + 0.1);
-        });
-      }
-    } catch (_) {}
+    playSpriteEditorSound(type, isMuted);
   }
 
-  const TEMPLATES = {
-    sword: [
-      '.......##.......',
-      '......#..#......',
-      '......#..#......',
-      '......#..#......',
-      '......#..#......',
-      '......#..#......',
-      '......#..#......',
-      '......#..#......',
-      '......#..#......',
-      '....###..###....',
-      '....#......#....',
-      '....########....',
-      '......#..#......',
-      '......#..#......',
-      '.....##..##.....',
-      '......####......'
-    ],
-    monster: [
-      '......####......',
-      '....##....##....',
-      '..##........##..',
-      '.#............#.',
-      '#....#....#....#',
-      '#...##....##...#',
-      '#..............#',
-      '#...#......#...#',
-      '#....######....#',
-      '.#............#.',
-      '..##........##..',
-      '....########....',
-      '................',
-      '................',
-      '................',
-      '................'
-    ],
-    coin: [
-      '......####......',
-      '....##....##....',
-      '..##........##..',
-      '.#...######...#.',
-      '#...##....##...#',
-      '#...#..##..#...#',
-      '#...#..##..#...#',
-      '#...#..##..#...#',
-      '#...#..##..#...#',
-      '#...#..##..#...#',
-      '#...##....##...#',
-      '.#...######...#.',
-      '..##........##..',
-      '....##....##....',
-      '......####......',
-      '................'
-    ],
-    heart: [
-      '......####......',
-      '....##....##....',
-      '..##........##..',
-      '.#............#.',
-      '#..............#',
-      '#..............#',
-      '#..............#',
-      '.#............#.',
-      '..##........##..',
-      '....##....##....',
-      '......####......',
-      '................',
-      '................',
-      '................',
-      '................',
-      '................'
-    ],
-    star: [
-      '.......##.......',
-      '......####......',
-      '......####......',
-      '....########....',
-      '..############..',
-      '...##########...',
-      '....########....',
-      '....########....',
-      '...##########...',
-      '..############..',
-      '..##........##..',
-      '.##..........##.',
-      '................',
-      '................',
-      '................',
-      '................'
-    ],
-    key: [
-      '......####......',
-      '....##....##....',
-      '....#......#....',
-      '....##....##....',
-      '......####......',
-      '......#..#......',
-      '......#..#......',
-      '......####......',
-      '......#..#......',
-      '......#..#......',
-      '......####......',
-      '......#..#......',
-      '......#..#......',
-      '......##........',
-      '................',
-      '................'
-    ],
-    crown: [
-      '................',
-      '.#....#...#....#',
-      '.##..#.#.#.#..##',
-      '.#.#.#.#.#.#.#.#',
-      '.#..#.......#..#',
-      '.#.............#',
-      '.###############',
-      '.###############',
-      '.###############',
-      '................',
-      '................',
-      '................',
-      '................',
-      '................',
-      '................',
-      '................'
-    ]
-  };
-
   // Undo/Redo history stack
-  let history: string[][][] = [];
+  let historyState: PixelHistoryState = { history: [], index: -1 };
+  let history: PixelGrid[] = [];
   let historyIndex = -1;
+  $: history = historyState.history;
+  $: historyIndex = historyState.index;
 
   function saveHistoryState() {
-    if (historyIndex < history.length - 1) {
-      history = history.slice(0, historyIndex + 1);
-    }
-    history.push(pixels.map(row => [...row]));
-    historyIndex = history.length - 1;
-    if (history.length > 50) {
-      history.shift();
-      historyIndex--;
-    }
+    historyState = pushPixelHistory(historyState, pixels);
   }
 
   function handleUndo() {
-    if (historyIndex > 0) {
-      historyIndex--;
-      pixels = history[historyIndex].map(row => [...row]);
-      redrawGrid();
-      triggerAutoSave();
-      playDrawSound('draw');
-    }
+    const restored = restorePixelHistory(historyState, 'undo');
+    if (!restored) return;
+    historyState = restored.state;
+    pixels = restored.grid;
+    redrawGrid();
+    triggerAutoSave();
+    playDrawSound('draw');
   }
 
   function handleRedo() {
-    if (historyIndex < history.length - 1) {
-      historyIndex++;
-      pixels = history[historyIndex].map(row => [...row]);
-      redrawGrid();
-      triggerAutoSave();
-      playDrawSound('draw');
-    }
+    const restored = restorePixelHistory(historyState, 'redo');
+    if (!restored) return;
+    historyState = restored.state;
+    pixels = restored.grid;
+    redrawGrid();
+    triggerAutoSave();
+    playDrawSound('draw');
   }
 
-  function applyTemplate(templateName: keyof typeof TEMPLATES) {
-    const lines = TEMPLATES[templateName];
-    for (let y = 0; y < GRID_SIZE; y++) {
-      for (let x = 0; x < GRID_SIZE; x++) {
-        if (lines[y][x] === '#') {
-          pixels[y][x] = '#212121'; // black outline
-        } else {
-          pixels[y][x] = 'transparent';
-        }
-      }
-    }
+  function applyTemplate(templateName: SpriteTemplateName) {
+    pixels = applyTemplateGrid(SPRITE_TEMPLATES[templateName], GRID_SIZE);
     redrawGrid();
     saveHistoryState();
     triggerAutoSave();
@@ -468,23 +187,25 @@
   }
 
   // Animation frames state
-  let frameList: string[][][] = [
-    Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill('transparent'))
-  ];
+  let frameList: PixelGrid[] = [createEmptyGrid(GRID_SIZE)];
   let currentFrameIdx = 0;
   let isAnimPlaying = false;
-  let animIntervalId: any = null;
+  let animIntervalId: ReturnType<typeof setInterval> | null = null;
+
+  function currentFrameState(): PixelFrameState {
+    return { frames: frameList, currentIndex: currentFrameIdx, pixels };
+  }
+
+  function applyFrameState(state: PixelFrameState) {
+    frameList = state.frames;
+    currentFrameIdx = state.currentIndex;
+    pixels = state.pixels;
+  }
 
   function addFrame() {
-    if (frameList.length >= 4) return;
-    // Save current frame before adding new one
-    frameList[currentFrameIdx] = pixels.map(row => [...row]);
-    
-    // Duplicate current frame
-    const newFrame = pixels.map(row => [...row]);
-    frameList = [...frameList, newFrame];
-    currentFrameIdx = frameList.length - 1;
-    pixels = frameList[currentFrameIdx];
+    const nextFrameState = addAnimationFrame(currentFrameState());
+    if (!nextFrameState) return;
+    applyFrameState(nextFrameState);
     redrawGrid();
     saveHistoryState();
     triggerAutoSave();
@@ -492,11 +213,10 @@
   }
 
   function deleteFrame(idx: number) {
-    if (frameList.length <= 1) return;
     if (isAnimPlaying) toggleAnimPlayback();
-    frameList = frameList.filter((_, i) => i !== idx);
-    currentFrameIdx = Math.max(0, currentFrameIdx - 1);
-    pixels = frameList[currentFrameIdx];
+    const nextFrameState = deleteAnimationFrame(currentFrameState(), idx);
+    if (!nextFrameState) return;
+    applyFrameState(nextFrameState);
     redrawGrid();
     saveHistoryState();
     triggerAutoSave();
@@ -505,10 +225,9 @@
 
   function selectFrame(idx: number) {
     if (isAnimPlaying) toggleAnimPlayback();
-    // Save current editing grid into frameList
-    frameList[currentFrameIdx] = pixels.map(row => [...row]);
-    currentFrameIdx = idx;
-    pixels = frameList[currentFrameIdx];
+    const nextFrameState = selectAnimationFrame(currentFrameState(), idx);
+    if (!nextFrameState) return;
+    applyFrameState(nextFrameState);
     redrawGrid();
     playDrawSound('draw');
   }
@@ -516,23 +235,42 @@
   function toggleAnimPlayback() {
     isAnimPlaying = !isAnimPlaying;
     if (isAnimPlaying) {
-      // Save current frame before starting playback
-      frameList[currentFrameIdx] = pixels.map(row => [...row]);
+      const savedFrameState = selectAnimationFrame(currentFrameState(), currentFrameIdx);
+      if (savedFrameState) {
+        applyFrameState(savedFrameState);
+      }
       animIntervalId = setInterval(() => {
-        currentFrameIdx = (currentFrameIdx + 1) % frameList.length;
-        pixels = frameList[currentFrameIdx];
+        applyFrameState(advanceAnimationFrame(currentFrameState()));
         redrawGrid();
       }, 150); // 8fps loop
     } else {
-      if (animIntervalId) {
-        clearInterval(animIntervalId);
-        animIntervalId = null;
-      }
-      // Re-align pixels to the correct current frame
-      pixels = frameList[currentFrameIdx];
+      stopAnimPlayback();
+    }
+  }
+
+  function stopAnimPlayback(shouldRedraw = true) {
+    if (animIntervalId) {
+      clearInterval(animIntervalId);
+      animIntervalId = null;
+    }
+    isAnimPlaying = false;
+    pixels = frameList[currentFrameIdx];
+    if (shouldRedraw) {
       redrawGrid();
     }
   }
+
+  function clearAudioStatusTimeout() {
+    if (audioStatusTimeoutId) {
+      clearTimeout(audioStatusTimeoutId);
+      audioStatusTimeoutId = null;
+    }
+  }
+
+  onDestroy(() => {
+    stopAnimPlayback(false);
+    clearAudioStatusTimeout();
+  });
 
   async function loadExistingSprite() {
     if (targetAssetId) {
@@ -548,55 +286,26 @@
         }
       } catch (err) {
         console.error('Failed to load existing sprite:', err);
-        frameList = [Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill('transparent'))];
+        frameList = [createEmptyGrid(GRID_SIZE)];
         currentFrameIdx = 0;
         pixels = frameList[0];
       }
     } else {
-      frameList = [Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill('transparent'))];
+      frameList = [createEmptyGrid(GRID_SIZE)];
       currentFrameIdx = 0;
       pixels = frameList[0];
     }
     redrawGrid();
-    // Reset history
-    history = [pixels.map(row => [...row])];
-    historyIndex = 0;
+    historyState = createPixelHistory(pixels);
   }
 
   function redrawGrid() {
     if (!ctx || !canvasElement) return;
-    ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-    const cellSize = canvasElement.width / GRID_SIZE;
-
-    for (let y = 0; y < GRID_SIZE; y++) {
-      for (let x = 0; x < GRID_SIZE; x++) {
-        if (pixels[y][x] !== 'transparent') {
-          ctx.fillStyle = pixels[y][x];
-          ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-        }
-      }
-    }
+    drawPixelGrid(ctx, canvasElement, pixels);
   }
 
   function paintPixel(x: number, y: number, color: string): boolean {
-    const startX = x - Math.floor(brushSize / 2);
-    const startY = y - Math.floor(brushSize / 2);
-    let drawnAny = false;
-    
-    for (let dy = 0; dy < brushSize; dy++) {
-      for (let dx = 0; dx < brushSize; dx++) {
-        const px = startX + dx;
-        const py = startY + dy;
-        if (px >= 0 && px < GRID_SIZE && py >= 0 && py < GRID_SIZE) {
-          if (pixels[py][px] !== color) {
-            pixels[py][px] = color;
-            drawnAny = true;
-          }
-        }
-      }
-    }
-    return drawnAny;
+    return paintBrush(pixels, x, y, color, brushSize);
   }
 
   function handlePointer(clientX: number, clientY: number) {
@@ -615,7 +324,7 @@
       if (isBucket) {
         const targetColor = pixels[y][x];
         if (targetColor !== colorToUse) {
-          floodFill(x, y, targetColor, colorToUse);
+          floodFillGrid(pixels, x, y, targetColor, colorToUse);
           redrawGrid();
           playDrawSound('chime');
         }
@@ -641,21 +350,6 @@
     }
   }
 
-  function floodFill(startX: number, startY: number, targetColor: string, replacementColor: string) {
-    if (targetColor === replacementColor) return;
-    const queue: [number, number][] = [[startX, startY]];
-    while (queue.length > 0) {
-      const [cx, cy] = queue.shift()!;
-      if (pixels[cy][cx] === targetColor) {
-        pixels[cy][cx] = replacementColor;
-        if (cx > 0) queue.push([cx - 1, cy]);
-        if (cx < GRID_SIZE - 1) queue.push([cx + 1, cy]);
-        if (cy > 0) queue.push([cx, cy - 1]);
-        if (cy < GRID_SIZE - 1) queue.push([cx, cy + 1]);
-      }
-    }
-  }
-
   async function triggerAutoSave() {
     if (!canvasElement) return;
 
@@ -665,46 +359,11 @@
     }
 
     // Save current frame into frameList list
-    frameList[currentFrameIdx] = pixels.map(row => [...row]);
+    frameList[currentFrameIdx] = cloneGrid(pixels);
 
     const isSpritesheetVal = frameList.length > 1 && (category === 'heroes' || category === 'enemies');
-    const exportCanvas = document.createElement('canvas');
-    
-    if (isSpritesheetVal) {
-      exportCanvas.width = GRID_SIZE * frameList.length;
-      exportCanvas.height = GRID_SIZE;
-    } else {
-      exportCanvas.width = GRID_SIZE;
-      exportCanvas.height = GRID_SIZE;
-    }
-    
-    const exportCtx = exportCanvas.getContext('2d');
-    if (!exportCtx) return;
-
-    if (isSpritesheetVal) {
-      for (let f = 0; f < frameList.length; f++) {
-        const frameGrid = frameList[f];
-        for (let y = 0; y < GRID_SIZE; y++) {
-          for (let x = 0; x < GRID_SIZE; x++) {
-            if (frameGrid[y][x] !== 'transparent') {
-              exportCtx.fillStyle = frameGrid[y][x];
-              exportCtx.fillRect(f * GRID_SIZE + x, y, 1, 1);
-            }
-          }
-        }
-      }
-    } else {
-      for (let y = 0; y < GRID_SIZE; y++) {
-        for (let x = 0; x < GRID_SIZE; x++) {
-          if (pixels[y][x] !== 'transparent') {
-            exportCtx.fillStyle = pixels[y][x];
-            exportCtx.fillRect(x, y, 1, 1);
-          }
-        }
-      }
-    }
-
-    const base64Data = exportCanvas.toDataURL('image/png').split(',')[1];
+    const base64Data = exportFramesToPngBase64(frameList, pixels, GRID_SIZE, isSpritesheetVal);
+    if (!base64Data) return;
     
     // Compile frames array coordinates
     const framesCoords = frameList.map((_, idx) => ({
@@ -729,9 +388,7 @@
   }
 
   function handleClear() {
-    pixels = Array(GRID_SIZE)
-      .fill(null)
-      .map(() => Array(GRID_SIZE).fill('transparent'));
+    pixels = createEmptyGrid(GRID_SIZE);
     redrawGrid();
     triggerAutoSave();
     playDrawSound('clear');
@@ -828,7 +485,7 @@
             </div>
 
             <div class="colors-grid">
-              {#each COLORS as color}
+              {#each SPRITE_EDITOR_COLORS as color}
                 <button
                   class="color-dot"
                   style:background={color}

@@ -21,6 +21,9 @@ except ModuleNotFoundError:
     from tools.sprite_vision_labeler import label_project_with_vision, provider_from_name
 
 
+USER_FACING_ERRORS = (OSError, RuntimeError, TypeError, ValueError)
+
+
 def _load_image(path: Path | str) -> Image.Image:
     with Image.open(path) as image:
         return image.convert("RGBA").copy()
@@ -223,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
         result = run_ide_command(_load_request(args))
         print(json.dumps(result, indent=2))
         return 0
-    except Exception as exc:
+    except USER_FACING_ERRORS as exc:
         print(json.dumps({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, indent=2), file=sys.stderr)
         return 1
 

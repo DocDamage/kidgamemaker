@@ -4,7 +4,7 @@
   "asset_name": "Mystery Box ❓",
   "category": "decorations",
   "runtime_template": "mystery_box",
-  "visual": "❓",
+  "visual": "mystery_box.svg",
   "visual_tags": [
     "mystery",
     "box",

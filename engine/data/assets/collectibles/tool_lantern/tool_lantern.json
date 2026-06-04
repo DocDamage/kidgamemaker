@@ -4,15 +4,22 @@
   "asset_name": "Lantern",
   "category": "collectibles",
   "runtime_template": "collectible",
-  "visual": "🔦",
-  "visual_tags": ["tool", "light", "lantern"],
+  "visual": "tool_lantern.svg",
+  "visual_tags": [
+    "tool",
+    "light",
+    "lantern"
+  ],
   "placement_logic": {
     "snapping_type": "free_float",
     "parallax_bucket": "play_layer"
   },
   "collision": {
     "shape": "rectangle",
-    "size": [24, 24]
+    "size": [
+      24,
+      24
+    ]
   },
   "gameplay_logic": {
     "on_pickup": "collect",

@@ -272,7 +272,7 @@ def label_project_with_vision(
                     f"cached={cached} approved={approved} low_confidence={low_confidence}",
                     flush=True,
                 )
-        except Exception as exc:
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
             errors.append({"sprite_id": str(sprite.get("id", "")), "error": f"{type(exc).__name__}: {exc}"})
 
     _write_cache(cache_file, cache)

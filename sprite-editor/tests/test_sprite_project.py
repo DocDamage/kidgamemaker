@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -385,6 +386,31 @@ class SpriteProjectTests(unittest.TestCase):
             self.assertEqual(unity["animation_clips"][0]["frames"][0]["source_file"], project["sprites"][0]["applied_output_file"])
             self.assertTrue((exports_dir / "godot_sprites.json").exists())
             self.assertTrue((exports_dir / "unreal_sprites.json").exists())
+
+    def test_render_project_outputs_reports_bad_sprite_data(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = sample_render_project(root)
+            project["sprites"][0].pop("source_file")
+            project_path = root / "project.spritecut.json"
+            save_project(project, project_path)
+
+            result = render_project_outputs(project, project_path)
+
+            self.assertEqual(result["rendered"], 0)
+            self.assertEqual(len(result["errors"]), 1)
+            self.assertIn("KeyError", result["errors"][0]["error"])
+
+    def test_render_project_outputs_does_not_swallow_programmer_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = sample_render_project(root)
+            project_path = root / "project.spritecut.json"
+            save_project(project, project_path)
+
+            with patch("tools.sprite_project._normalize_bbox", side_effect=RuntimeError("unexpected bug")):
+                with self.assertRaises(RuntimeError):
+                    render_project_outputs(project, project_path)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ for dirpath, dirnames, filenames in os.walk(ROOT):
             path = Path(dirpath) / filename
             try:
                 json.loads(path.read_text(encoding='utf-8'))
-            except Exception as exc:
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
                 errors.append(f'{path.relative_to(ROOT)}: {exc}')
 
 if errors:

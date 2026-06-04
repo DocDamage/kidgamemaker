@@ -4,7 +4,7 @@
   "asset_name": "Stone Floor",
   "category": "terrain",
   "runtime_template": "terrain",
-  "visual": "🪨",
+  "visual": "stone_floor.svg",
   "visual_tags": [
     "stone",
     "floor",

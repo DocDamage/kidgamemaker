@@ -5,7 +5,12 @@
   "type": "object",
   "required": ["schema_version", "project_id", "room_id", "entities"],
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": {
+      "oneOf": [
+        { "const": 1 },
+        { "const": "2.0.0" }
+      ]
+    },
     "project_id": { "type": "string", "minLength": 1 },
     "room_id": { "type": "string", "minLength": 1 },
     "world_settings": {
@@ -19,9 +24,90 @@
     "entities": {
       "type": "array",
       "items": { "$ref": "#/$defs/entity" }
+    },
+    "movement_system": {
+      "allOf": [
+        { "$ref": "#/$defs/phase_a_block" },
+        {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "movement_ids": {
+              "type": "array",
+              "items": {
+                "enum": ["wall_jump", "double_jump", "dash", "glide", "ledge_grab", "ground_pound"]
+              }
+            },
+            "params": { "type": "object", "additionalProperties": { "type": "number" } }
+          }
+        }
+      ]
+    },
+    "combat_system": {
+      "allOf": [
+        { "$ref": "#/$defs/phase_a_block" },
+        {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "mechanics": {
+              "type": "array",
+              "items": {
+                "enum": ["sword_combo", "charge_shot", "parry", "shield_block"]
+              }
+            },
+            "params": { "type": "object", "additionalProperties": { "type": "number" } }
+          }
+        }
+      ]
+    },
+    "rules_engine": {
+      "allOf": [
+        { "$ref": "#/$defs/phase_a_block" },
+        {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "primitives": {
+              "type": "array",
+              "items": {
+                "enum": ["switch_door", "key_lock", "pressure_plate", "collectible_counter", "win_condition"]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ai_assist": {
+      "allOf": [
+        { "$ref": "#/$defs/phase_a_block" },
+        {
+          "type": "object",
+          "properties": {
+            "level_balancer": { "type": "boolean" },
+            "tutorial_whisperer": { "type": "boolean" }
+          }
+        }
+      ]
     }
   },
   "$defs": {
+    "phase_a_block": {
+      "type": "object",
+      "properties": {
+        "_meta": {
+          "type": "object",
+          "properties": {
+            "feature_domain": { "type": "string" },
+            "minimum_schema_version": { "const": "2.0.0" }
+          },
+          "required": ["feature_domain", "minimum_schema_version"],
+          "additionalProperties": true
+        }
+      },
+      "required": ["_meta"],
+      "additionalProperties": true
+    },
     "entity": {
       "type": "object",
       "required": ["instance_id", "asset_id", "category", "type", "position"],

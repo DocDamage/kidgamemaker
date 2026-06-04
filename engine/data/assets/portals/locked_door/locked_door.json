@@ -4,15 +4,23 @@
   "asset_name": "Locked Door",
   "category": "portals",
   "runtime_template": "locked_door",
-  "visual": "🔒",
-  "visual_tags": ["lock", "door", "gate", "locked"],
+  "visual": "locked_door.svg",
+  "visual_tags": [
+    "lock",
+    "door",
+    "gate",
+    "locked"
+  ],
   "placement_logic": {
     "snapping_type": "gravity_snap",
     "parallax_bucket": "play_layer"
   },
   "collision": {
     "shape": "rectangle",
-    "size": [48, 64]
+    "size": [
+      48,
+      64
+    ]
   },
   "gameplay_logic": {
     "requires_key": true,

@@ -78,7 +78,10 @@ pub fn slice_sprite_sheet(path: &Path, category: &str) -> Result<SlicingResult, 
 
     // Apply manual/single-frame fallback if confidence is low
     if confidence < 0.6 {
-        println!("Slicing confidence too low ({:.2}). Falling back to single frame.", confidence);
+        println!(
+            "Slicing confidence too low ({:.2}). Falling back to single frame.",
+            confidence
+        );
         Ok(SlicingResult {
             frames: vec![SpriteFrame {
                 x: 0,
@@ -122,10 +125,14 @@ fn load_png_pixels(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
     let file = File::open(path).map_err(|e| format!("Failed to open file: {e}"))?;
     let mut decoder = png::Decoder::new(file);
     decoder.set_transformations(png::Transformations::EXPAND);
-    
-    let mut reader = decoder.read_info().map_err(|e| format!("Failed to read PNG info: {e}"))?;
+
+    let mut reader = decoder
+        .read_info()
+        .map_err(|e| format!("Failed to read PNG info: {e}"))?;
     let mut buf = vec![0; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut buf).map_err(|e| format!("Failed to read PNG frame: {e}"))?;
+    let info = reader
+        .next_frame(&mut buf)
+        .map_err(|e| format!("Failed to read PNG frame: {e}"))?;
 
     let bytes = &buf[..info.buffer_size()];
     let width = info.width;
@@ -365,17 +372,22 @@ fn calculate_organic_confidence(frames: &[SpriteFrame]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error;
     use std::fs;
 
-    fn create_mock_png_bytes(width: u32, height: u32, active_rects: &[(u32, u32, u32, u32)]) -> Vec<u8> {
+    fn create_mock_png_bytes(
+        width: u32,
+        height: u32,
+        active_rects: &[(u32, u32, u32, u32)],
+    ) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut pixels = vec![0u8; (width * height * 4) as usize];
         for &(rx, ry, rw, rh) in active_rects {
             for y in ry..(ry + rh) {
                 for x in rx..(rx + rw) {
                     let idx = (y * width + x) as usize;
-                    pixels[idx * 4] = 255;     // R
-                    pixels[idx * 4 + 1] = 0;   // G
-                    pixels[idx * 4 + 2] = 0;   // B
+                    pixels[idx * 4] = 255; // R
+                    pixels[idx * 4 + 1] = 0; // G
+                    pixels[idx * 4 + 2] = 0; // B
                     pixels[idx * 4 + 3] = 255; // A (opaque)
                 }
             }
@@ -387,24 +399,21 @@ mod tests {
             let mut encoder = png::Encoder::new(&mut file_bytes, width, height);
             encoder.set_color(png::ColorType::Rgba);
             encoder.set_depth(png::BitDepth::Eight);
-            let mut writer = encoder.write_header().unwrap();
-            writer.write_image_data(&pixels).unwrap();
+            let mut writer = encoder.write_header()?;
+            writer.write_image_data(&pixels)?;
         }
-        file_bytes
+        Ok(file_bytes)
     }
 
     #[test]
-    fn test_bfs_connected_components() {
+    fn test_bfs_connected_components() -> Result<(), Box<dyn Error>> {
         // Create 2 components: one at (4,4) size 10x10, and one at (20,20) size 8x8
-        let bytes = create_mock_png_bytes(32, 32, &[
-            (4, 4, 10, 10),
-            (20, 20, 8, 8),
-        ]);
+        let bytes = create_mock_png_bytes(32, 32, &[(4, 4, 10, 10), (20, 20, 8, 8)])?;
 
         let temp = std::env::temp_dir().join("test_bfs.png");
-        fs::write(&temp, &bytes).unwrap();
+        fs::write(&temp, &bytes)?;
 
-        let (w, h, rgba) = load_png_pixels(&temp).unwrap();
+        let (w, h, rgba) = load_png_pixels(&temp)?;
         let _ = fs::remove_file(&temp);
 
         assert_eq!(w, 32);
@@ -414,38 +423,96 @@ mod tests {
         sort_sprite_frames(&mut comps);
 
         assert_eq!(comps.len(), 2);
-        assert_eq!(comps[0], SpriteFrame { x: 4, y: 4, w: 10, h: 10 });
-        assert_eq!(comps[1], SpriteFrame { x: 20, y: 20, w: 8, h: 8 });
+        assert_eq!(
+            comps[0],
+            SpriteFrame {
+                x: 4,
+                y: 4,
+                w: 10,
+                h: 10
+            }
+        );
+        assert_eq!(
+            comps[1],
+            SpriteFrame {
+                x: 20,
+                y: 20,
+                w: 8,
+                h: 8
+            }
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_uniform_grid_detection() {
+    fn test_uniform_grid_detection() -> Result<(), Box<dyn Error>> {
         // Grid size 16x16 on a 48x16 canvas. Occupy cells 0 and 2.
-        let bytes = create_mock_png_bytes(48, 16, &[
-            (2, 2, 12, 12),  // Cell 0: occupied
-            (34, 2, 12, 12), // Cell 2: occupied
-        ]);
+        let bytes = create_mock_png_bytes(
+            48,
+            16,
+            &[
+                (2, 2, 12, 12),  // Cell 0: occupied
+                (34, 2, 12, 12), // Cell 2: occupied
+            ],
+        )?;
 
         let temp = std::env::temp_dir().join("test_uniform.png");
-        fs::write(&temp, &bytes).unwrap();
+        fs::write(&temp, &bytes)?;
 
-        let res = slice_sprite_sheet(&temp, "enemies").unwrap();
+        let res = slice_sprite_sheet(&temp, "enemies")?;
         let _ = fs::remove_file(&temp);
 
         assert!(res.is_uniform);
         assert_eq!(res.grid_cell_size, Some(16));
         assert_eq!(res.frames.len(), 2);
-        assert_eq!(res.frames[0], SpriteFrame { x: 0, y: 0, w: 16, h: 16 });
-        assert_eq!(res.frames[1], SpriteFrame { x: 32, y: 0, w: 16, h: 16 });
+        assert_eq!(
+            res.frames[0],
+            SpriteFrame {
+                x: 0,
+                y: 0,
+                w: 16,
+                h: 16
+            }
+        );
+        assert_eq!(
+            res.frames[1],
+            SpriteFrame {
+                x: 32,
+                y: 0,
+                w: 16,
+                h: 16
+            }
+        );
+        Ok(())
     }
 
     #[test]
     fn test_organic_sorting() {
         let mut frames = vec![
-            SpriteFrame { x: 20, y: 22, w: 10, h: 10 },
-            SpriteFrame { x: 5, y: 5, w: 10, h: 10 },
-            SpriteFrame { x: 5, y: 20, w: 10, h: 10 },
-            SpriteFrame { x: 20, y: 5, w: 10, h: 10 },
+            SpriteFrame {
+                x: 20,
+                y: 22,
+                w: 10,
+                h: 10,
+            },
+            SpriteFrame {
+                x: 5,
+                y: 5,
+                w: 10,
+                h: 10,
+            },
+            SpriteFrame {
+                x: 5,
+                y: 20,
+                w: 10,
+                h: 10,
+            },
+            SpriteFrame {
+                x: 20,
+                y: 5,
+                w: 10,
+                h: 10,
+            },
         ];
 
         sort_sprite_frames(&mut frames);
@@ -455,9 +522,13 @@ mod tests {
         // 2. (20,5)
         // 3. (5,20)
         // 4. (20,22) (Y coordinates 20 and 22 are close, so sorted by X)
-        assert_eq!(frames[0].x, 5);  assert_eq!(frames[0].y, 5);
-        assert_eq!(frames[1].x, 20); assert_eq!(frames[1].y, 5);
-        assert_eq!(frames[2].x, 5);  assert_eq!(frames[2].y, 20);
-        assert_eq!(frames[3].x, 20); assert_eq!(frames[3].y, 22);
+        assert_eq!(frames[0].x, 5);
+        assert_eq!(frames[0].y, 5);
+        assert_eq!(frames[1].x, 20);
+        assert_eq!(frames[1].y, 5);
+        assert_eq!(frames[2].x, 5);
+        assert_eq!(frames[2].y, 20);
+        assert_eq!(frames[3].x, 20);
+        assert_eq!(frames[3].y, 22);
     }
 }

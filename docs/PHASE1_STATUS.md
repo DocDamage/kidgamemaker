@@ -16,7 +16,7 @@ The original plan correctly identified the strongest architecture: do not compil
 - `engine/scripts/Main.gd` — loads JSON, loads sidecar files, spawns runtime objects.
 - `engine/scripts/PlayerController.gd` — baseline platformer movement.
 - `engine/scripts/SmartEnemy.gd` — baseline patrol enemy.
-- `engine/scripts/Collectible.gd` — pickup behavior placeholder.
+- `engine/scripts/Collectible.gd` — pickup scoring, healing, power-up application, SFX, floating text, and cleanup tweening.
 - `engine/data/assets/**` — starter sidecar examples.
 
 ## One-Person Rule

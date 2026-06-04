@@ -266,7 +266,7 @@ def _safe_open_sprite(path: str) -> Image.Image | None:
     try:
         with Image.open(path) as image:
             return image.convert("RGBA").copy()
-    except Exception:
+    except (OSError, ValueError):
         return None
 
 
@@ -529,5 +529,4 @@ def write_visual_qa_report(records: Sequence[Any], out_dir: Path, manifest_dir: 
 
     report = render_visual_qa_html(before_after_cards, flagged_rows, palette_cards, autotile_cards)
     (manifest_dir / "visual_qa.html").write_text(report, encoding="utf-8")
-
 

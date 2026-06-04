@@ -74,7 +74,7 @@ def write_seed_labels(
             label["seed_image"] = str(image_path)
             seeds[category] = label
             print(f"VISION_SEED provider={provider.name} category={category} sprite_id={sprite.get('id', '')}", flush=True)
-        except Exception as exc:
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
             errors.append({"category": category, "sprite_id": str(sprite.get("id", "")), "error": f"{type(exc).__name__}: {exc}"})
 
     seed_path.parent.mkdir(parents=True, exist_ok=True)

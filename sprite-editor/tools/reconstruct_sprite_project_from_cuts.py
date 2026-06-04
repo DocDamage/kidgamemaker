@@ -105,7 +105,7 @@ def write_reconstructed_project(root: Path, project_path: Path, progress_interva
             try:
                 total += 1
                 entry = sprite_entry(root, path, kind, total)
-            except Exception as exc:
+            except (OSError, ValueError) as exc:
                 skipped.append({"path": str(path), "error": f"{type(exc).__name__}: {exc}"})
                 continue
             counts[str(entry["category"])] += 1

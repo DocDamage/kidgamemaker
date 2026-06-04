@@ -1,0 +1,200 @@
+Line 6: Section 00: Executive Summary
+Line 41: Chapter
+Line 42: Section
+Line 43: Feature Count
+Line 109: Chapter 1: Core Movement & Traversal
+Line 113: 1.1 Basic Platforming Enhancements
+Line 114: [Potential Feature] Wall Jump / Wall Climb
+Line 121: [Potential Feature] Double Jump & Triple Jump
+Line 128: [Potential Feature] Dash / Air Dash
+Line 157: 1.2 Advanced Traversal
+Line 158: [Potential Feature] Grappling Hook
+Line 201: 1.3 Flight & Swimming
+Line 202: [Potential Feature] Glide / Cape Glide
+Line 216: [Potential Feature] Underwater Swimming
+Line 238: 1.4 Speed & Momentum Systems
+Line 239: [Potential Feature] Spin Dash
+Line 282: 1.5 Comparison Tables
+Line 284: Feature
+Line 289: [Potential Feature] Wall Jump
+Line 294: [Potential Feature] Double Jump
+Line 299: [Potential Feature] Dash
+Line 303: [Potential Feature] Dash Crystal
+Line 314: [Potential Feature] Grappling Hook
+Line 344: [Potential Feature] Glide
+Line 348: [Potential Feature] Glide Wings collectible
+Line 354: [Potential Feature] Swimming
+Line 364: [Potential Feature] Spin Dash
+Line 368: [Potential Feature] Spin Dash ability stamp
+Line 400: [Potential Feature] Dash Speed
+Line 404: 0.9
+Line 405: 0.1
+Line 410: 0.5
+Line 411: 0.3
+Line 416: 0.3
+Line 417: 0.5
+Line 422: 0.4
+Line 423: 0.05
+Line 428: 1.0
+Line 429: 0.2
+Line 434: 0.6
+Line 435: 0.3
+Line 439: 1.6 Combinatorial Movement System
+Line 450: 1.7 Additional Movement Features
+Line 578: Chapter 2: Combat, Weapons & Boss Design
+Line 582: 2.1 Melee Combat
+Line 626: 2.2 Ranged Combat
+Line 663: 2.3 Special Moves
+Line 700: 2.4 Boss Fight Constructor
+Line 751: 2.5 Weapon System Comparison Tables
+Line 807: [Potential Feature] Dash-attack lunge
+Line 918: 2.6 Integration with Movement Systems
+Line 928: 2.7 Additional Combat & Boss Features
+Line 1042: Chapter 3: Character Classes, Forms & Abilities
+Line 1046: 3.1 Class & Job Systems
+Line 1091: 3.2 Transformation Systems
+Line 1150: 3.3 Badge, Charm & Passive Modifiers
+Line 1181: 3.4 Ability Acquisition & Upgrade
+Line 1247: 3.5 Elemental & Status Specialization
+Line 1392: Chapter 4: Companions, Pets & Multiplayer
+Line 1395: 4.1 Companion Systems
+Line 1454: 4.2 Pet & Follower Systems
+Line 1485: 4.3 Squad & Swarm Management
+Line 1523: 4.4 Buddy & Co-op Systems
+Line 1582: 4.5 Living World & Ecosystem
+Line 1690: 1P + AI
+Line 1695: 1P + 2 AI
+Line 1700: 1P + 1 AI
+Line 1715: 1P + AI
+Line 1719: Feature
+Line 1748: 5.1 Terrain Sculpting & Landscape Tools
+Line 1829: 5.2 Pathways, Transport & Traversal Geometry
+Line 1897: 5.3 Elemental Chemistry Engine
+Line 1993: 5.4 Zonai Device Gadgets
+Line 2068: 5.5 Environmental Conditions
+Line 2149: 5.6 Interior Design & Room Systems
+Line 2217: 5.7 Ink Painting Terrain & Special Environment Systems
+Line 2297: 5.8 Environment Comparison Summary
+Line 2299: Feature Category
+Line 2301: Feature Count
+Line 2331: TOTAL
+Line 2340: 6.1 Currency & Collection Systems
+Line 2408: 6.2 Crafting & Recipe Discovery
+Line 2545: 6.3 Cooking & Food Systems
+Line 2603: 6.4 Consumables & Healing
+Line 2658: 6.5 Equipment & Upgrades
+Line 2726: 6.6 Inventory Management
+Line 2755: 6.7 Shops & Economy
+Line 2797: 6.8 Special Item Systems
+Line 2839: 6.9 Economy & Item System Comparison
+Line 2840: Feature Category
+Line 2842: Feature Count
+Line 2876: TOTAL
+Line 2882: Chapter 7: Rules, Logic & Puzzle Systems
+Line 2883: 7.1 Trigger & Switch Systems
+Line 2895: 7.2 Door, Key & Gate Systems
+Line 2905: 7.3 Puzzle Mechanics
+Line 2915: 7.4 Custom Rule Engine
+Line 2930: Chapter 8: AI-Assisted Magic Features
+Line 2931: 8.1 AI Generation Tools
+Line 2941: 8.2 Voice & Natural Language
+Line 2950: 8.3 Procedural Generation
+Line 2959: 8.4 Adaptive Intelligence
+Line 2975: Chapter 9: Accessibility & Assist Features
+Line 2979: 9.1 Visual Accessibility
+Line 2983: Feature Name
+Line 3000: Feature Name
+Line 3016: Feature Name
+Line 3032: Feature Name
+Line 3048: Feature Name
+Line 3064: Feature Name
+Line 3077: 9.2 Motor Accessibility
+Line 3081: Feature Name
+Line 3097: Feature Name
+Line 3113: Feature Name
+Line 3129: Feature Name
+Line 3145: Feature Name
+Line 3161: Feature Name
+Line 3174: 9.3 Cognitive & Communication Accessibility
+Line 3178: Feature Name
+Line 3194: Feature Name
+Line 3210: Feature Name
+Line 3226: Feature Name
+Line 3242: Feature Name
+Line 3255: 9.4 Reading & Audio Accessibility
+Line 3259: Feature Name
+Line 3275: Feature Name
+Line 3288: 9.5 Adaptive Intelligence & Support
+Line 3292: Feature Name
+Line 3308: Feature Name
+Line 3324: Feature Name
+Line 3337: Feature Summary: Accessibility Coverage Matrix
+Line 3361: Chapter 10: Modern UX, Social & Polish
+Line 3365: 10.1 Capture & Sharing
+Line 3369: Feature Name
+Line 3386: Feature Name
+Line 3402: Feature Name
+Line 3418: Feature Name
+Line 3434: Feature Name
+Line 3447: 10.2 Progression & Motivation
+Line 3451: Feature Name
+Line 3467: Feature Name
+Line 3483: Feature Name
+Line 3499: Feature Name
+Line 3515: Feature Name
+Line 3531: Feature Name
+Line 3547: Feature Name
+Line 3560: 10.3 Community & Social
+Line 3564: Feature Name
+Line 3580: Feature Name
+Line 3596: Feature Name
+Line 3612: Feature Name
+Line 3625: [Potential Feature] Parent / Teacher Dashboard
+Line 3628: Feature Name
+Line 3629: [Potential Feature] Parent / Teacher Dashboard
+Line 3641: 10.4 Editor Polish & Delight
+Line 3645: Feature Name
+Line 3661: Feature Name
+Line 3677: Feature Name
+Line 3693: Feature Name
+Line 3709: Feature Name
+Line 3725: Feature Name
+Line 3741: Feature Name
+Line 3757: Feature Name
+Line 3770: Feature Summary: Modern UX, Social & Polish
+Line 3772: Feature Count
+Line 3790: Chapter 11: Special Systems & Minigames
+Line 3794: 11.1 Competitive & Creative Minigames
+Line 3798: Feature Name
+Line 3814: Feature Name
+Line 3830: Feature Name
+Line 3846: Feature Name
+Line 3862: Feature Name
+Line 3878: Feature Name
+Line 3894: Feature Name
+Line 3910: Feature Name
+Line 3926: Feature Name
+Line 3942: Feature Name
+Line 3955: 11.2 Special One-Off Mechanics
+Line 3959: Feature Name
+Line 3975: Feature Name
+Line 3991: Feature Name
+Line 4007: Feature Name
+Line 4023: Feature Name
+Line 4039: Feature Name
+Line 4055: Feature Name
+Line 4071: Feature Name
+Line 4087: Feature Name
+Line 4103: Feature Name
+Line 4119: Feature Name
+Line 4132: 11.3 Community & Persistent Systems
+Line 4136: Feature Name
+Line 4149: Feature Summary: Special Systems & Minigames Overview
+Line 4151: Feature
+Line 4266: Section 12: Implementation Roadmap
+Line 4269: 12.1 Phase-by-Phase Priority Matrix
+Line 4310: 12.2 Complexity vs. Impact Analysis
+Line 4312: #
+Line 4313: Feature
+Line 4319: [Potential Feature] Wall Jump / Dash / Double Jump
+Line 4410: 12.3 JSON Contract Evolution Strategy

@@ -4,15 +4,22 @@
   "asset_name": "Gold Ruby",
   "category": "collectibles",
   "runtime_template": "collectible",
-  "visual": "💎",
-  "visual_tags": ["treasure", "pickup", "shiny"],
+  "visual": "gold_ruby.svg",
+  "visual_tags": [
+    "treasure",
+    "pickup",
+    "shiny"
+  ],
   "placement_logic": {
     "snapping_type": "free_float",
     "parallax_bucket": "play_layer"
   },
   "collision": {
     "shape": "rectangle",
-    "size": [24, 24]
+    "size": [
+      24,
+      24
+    ]
   },
   "gameplay_logic": {
     "on_pickup": "collect",

@@ -17,6 +17,13 @@ def write_sprite(path: Path) -> None:
     Image.new("RGBA", (8, 8), (255, 0, 0, 255)).save(path)
 
 
+class AssertionVisionProvider:
+    name = "assertion"
+
+    def label_sprite(self, image_path: Path, sprite: dict[str, object]) -> dict[str, object]:
+        raise AssertionError("unexpected provider invariant failure")
+
+
 class SpriteSourceVisionTests(unittest.TestCase):
     def test_enrich_source_learning_with_vision_labels_groups_and_patterns(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -64,6 +71,23 @@ class SpriteSourceVisionTests(unittest.TestCase):
             self.assertEqual(group["vision_rename_pattern"], "enemy_death_burst_frame_{frame:03d}")
             self.assertEqual(enriched["vision_summary"]["missing_groups"], 0)
             self.assertTrue(verify_source_vision(output_path)["ok"])
+
+    def test_enrich_source_learning_with_vision_does_not_swallow_assertions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "ansimuz"
+            write_sprite(root / "Assets" / "Props" / "crate.png")
+            index_path = Path(tmp) / "learning.json"
+            output_path = Path(tmp) / "learning.vision.json"
+            write_source_learning_index(root, index_path)
+
+            with mock.patch("tools.sprite_source_vision.provider_from_name", return_value=AssertionVisionProvider()):
+                with self.assertRaises(AssertionError):
+                    enrich_source_learning_with_vision(
+                        index_path,
+                        output_path,
+                        provider_name="fixture",
+                        checkpoint_interval=0,
+                    )
 
 
 if __name__ == "__main__":

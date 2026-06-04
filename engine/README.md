@@ -16,4 +16,4 @@ Runtime override:
 Runner.exe --level-json C:\path\to\game_state.json
 ```
 
-The runner currently uses generated placeholder shapes instead of real art. Texture loading comes next.
+The runner loads authored asset visuals from `engine/data/assets`; generated fallback shapes are used only when an entity has no loadable visual.

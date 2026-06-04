@@ -295,13 +295,11 @@ def process_animation_sheet(
 def process_sheet(source_path: Path, out_dir: Path, preview_dir: Path, options: Any, hooks: SheetProcessingHooks) -> list[Any]:
     source_stem = hooks.safe_name(source_path.stem)
     source_label = f"sheet_{source_stem.zfill(2) if source_stem.isdigit() else source_stem}"
-    source_image = Image.open(source_path)
-    megapixels = (source_image.width * source_image.height) / 1_000_000
-    if options.max_image_megapixels > 0 and megapixels > options.max_image_megapixels:
-        source_image.close()
-        raise ValueError(f"{source_path} is {megapixels:.3f} megapixels and exceeds max_image_megapixels={options.max_image_megapixels}")
-    rgba_image = source_image.convert("RGBA")
-    source_image.close()
+    with Image.open(source_path) as source_image:
+        megapixels = (source_image.width * source_image.height) / 1_000_000
+        if options.max_image_megapixels > 0 and megapixels > options.max_image_megapixels:
+            raise ValueError(f"{source_path} is {megapixels:.3f} megapixels and exceeds max_image_megapixels={options.max_image_megapixels}")
+        rgba_image = source_image.convert("RGBA")
     rgba = np.array(rgba_image)
     rgb = rgba[:, :, :3]
     alpha = rgba[:, :, 3]
@@ -346,5 +344,4 @@ def process_sheet(source_path: Path, out_dir: Path, preview_dir: Path, options: 
 
     rgba_image.close()
     return records
-
 

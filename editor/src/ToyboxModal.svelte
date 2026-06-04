@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { convertFileSrc } from '@tauri-apps/api/core';
+  import { favoriteInventoryItems, getInventoryAssetUrl, isEmojiVisual } from './lib/assetInventory';
+  import { createAudioContext } from './lib/webAudio';
   import type { AssetInventory, ToyboxAsset } from './lib/canvasState';
 
   export let isVisible = false;
@@ -36,7 +37,7 @@
   }
 
   $: itemsToDisplay = activeCategory === 'favorites'
-    ? Object.values(inventory).flat().filter(item => favorites.includes(item.id))
+    ? favoriteInventoryItems(inventory, favorites)
     : (inventory[activeCategory] || []);
 
   function toggleFavorite(itemId: string, event: Event) {
@@ -49,25 +50,11 @@
     playTabSound();
   }
 
-  function isEmoji(str: string | undefined): boolean {
-    if (!str) return true;
-    return !str.includes('.') && !str.includes('/') && !str.includes('\\');
-  }
-
-  function getAssetUrl(asset: ToyboxAsset): string {
-    if (!asset.visual || isEmoji(asset.visual)) return '';
-    if (!asset.sidecar_path) return asset.visual;
-    const lastSlash = Math.max(asset.sidecar_path.lastIndexOf('/'), asset.sidecar_path.lastIndexOf('\\'));
-    if (lastSlash === -1) return asset.visual;
-    const dir = asset.sidecar_path.substring(0, lastSlash + 1);
-    return convertFileSrc(dir + asset.visual);
-  }
-
   // Local synthesizer sound trigger
   let audioCtx: AudioContext | null = null;
   function getAudioContext() {
     if (!audioCtx) {
-      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioCtx = createAudioContext();
     }
     if (audioCtx.state === 'suspended') {
       audioCtx.resume();
@@ -145,10 +132,10 @@
                   {favorites.includes(item.id) ? '❤️' : '🤍'}
                 </button>
                 <span class="toy-visual-container">
-                  {#if item.visual && !isEmoji(item.visual)}
+                  {#if item.visual && !isEmojiVisual(item.visual)}
                     {#if item.is_spritesheet && item.frames && item.frames[0]}
                       <img
-                        src={getAssetUrl(item)}
+                        src={getInventoryAssetUrl(item)}
                         alt={item.name}
                         style="
                           width: {item.frames[0].w}px;
@@ -162,7 +149,7 @@
                       />
                     {:else}
                       <img
-                        src={getAssetUrl(item)}
+                        src={getInventoryAssetUrl(item)}
                         alt={item.name}
                         style="max-width: 48px; max-height: 48px; object-fit: contain; display: block;"
                       />

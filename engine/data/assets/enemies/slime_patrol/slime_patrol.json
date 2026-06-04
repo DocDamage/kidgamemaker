@@ -4,11 +4,41 @@
   "asset_name": "Slime Patrol",
   "category": "enemies",
   "runtime_template": "enemy",
-  "visual": "👾",
+  "visual": "res://data/assets/enemies/red_slime_enemy/red_slime_enemy.png",
   "visual_tags": [
     "enemy",
     "small",
     "ground"
+  ],
+  "is_spritesheet": true,
+  "is_uniform_grid": true,
+  "grid_cell_size": 32,
+  "slicing_confidence": 1,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    {
+      "x": 32,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    {
+      "x": 0,
+      "y": 32,
+      "w": 32,
+      "h": 32
+    },
+    {
+      "x": 32,
+      "y": 32,
+      "w": 32,
+      "h": 32
+    }
   ],
   "baseline_attributes": {
     "max_health": 20,

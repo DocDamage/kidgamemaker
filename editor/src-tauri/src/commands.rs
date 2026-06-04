@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::BTreeMap,
-    fs,
-    io,
+    fs, io,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -166,7 +165,6 @@ pub fn launch_runner() -> Result<String, String> {
     }
 }
 
-
 #[tauri::command]
 pub fn get_asset_inventory() -> Result<BTreeMap<String, Vec<AssetSummary>>, String> {
     let repo_root = locate_repo_root()?;
@@ -276,11 +274,13 @@ fn read_asset_summary(
     let is_spritesheet = json.get("is_spritesheet").and_then(Value::as_bool);
     let frames = json.get("frames").and_then(Value::as_array).cloned();
 
-    let snapping_type = json.get("placement_logic")
+    let snapping_type = json
+        .get("placement_logic")
         .and_then(|p| p.get("snapping_type"))
         .and_then(Value::as_str)
         .map(ToString::to_string);
-    let parallax_bucket = json.get("placement_logic")
+    let parallax_bucket = json
+        .get("placement_logic")
         .and_then(|p| p.get("parallax_bucket"))
         .and_then(Value::as_str)
         .map(ToString::to_string);
@@ -308,7 +308,7 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
             id: "hero_knight".to_string(),
             name: "Hero Knight".to_string(),
             category: "heroes".to_string(),
-            visual: Some("🛡️".to_string()),
+            visual: Some("hero_knight.svg".to_string()),
             asset_type: Some("player".to_string()),
             sidecar_path: "engine/data/assets/heroes/hero_knight/hero_knight.json".to_string(),
             is_spritesheet: None,
@@ -324,7 +324,7 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
             id: "stone_floor".to_string(),
             name: "Stone Floor".to_string(),
             category: "terrain".to_string(),
-            visual: Some("🪨".to_string()),
+            visual: Some("stone_floor.svg".to_string()),
             asset_type: Some("terrain".to_string()),
             sidecar_path: "engine/data/assets/terrain/stone_floor/stone_floor.json".to_string(),
             is_spritesheet: None,
@@ -340,7 +340,9 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
             id: "slime_patrol".to_string(),
             name: "Slime Patrol".to_string(),
             category: "enemies".to_string(),
-            visual: Some("👾".to_string()),
+            visual: Some(
+                "res://data/assets/enemies/red_slime_enemy/red_slime_enemy.png".to_string(),
+            ),
             asset_type: Some("enemy".to_string()),
             sidecar_path: "engine/data/assets/enemies/slime_patrol/slime_patrol.json".to_string(),
             is_spritesheet: None,
@@ -396,13 +398,16 @@ fn locate_godot_runner(engine_dir: &Path) -> Option<PathBuf> {
         ]
     };
 
-    candidates.into_iter().find(|path| path.exists()).or_else(|| {
-        if Command::new("godot").arg("--version").output().is_ok() {
-            Some(PathBuf::from("godot"))
-        } else {
-            None
-        }
-    })
+    candidates
+        .into_iter()
+        .find(|path| path.exists())
+        .or_else(|| {
+            if Command::new("godot").arg("--version").output().is_ok() {
+                Some(PathBuf::from("godot"))
+            } else {
+                None
+            }
+        })
 }
 
 #[tauri::command]
@@ -505,8 +510,7 @@ pub fn delete_room(room_id: String) -> Result<String, String> {
         return Err(format!("Room does not exist: {safe_room_id}"));
     }
 
-    fs::remove_file(&room_path)
-        .map_err(|err| format!("Failed to delete room file: {err}"))?;
+    fs::remove_file(&room_path).map_err(|err| format!("Failed to delete room file: {err}"))?;
 
     Ok(format!("Room '{safe_room_id}' deleted successfully"))
 }
@@ -534,7 +538,8 @@ pub fn export_game(project_id: String) -> Result<String, String> {
     fs::create_dir_all(&exports_dir)
         .map_err(|err| format!("Failed to create exports directory: {err}"))?;
 
-    let safe_project_id = project_id.replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "_");
+    let safe_project_id =
+        project_id.replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "_");
     if safe_project_id.is_empty() {
         return Err("Project ID cannot be empty".to_string());
     }
@@ -649,7 +654,7 @@ fn zip_dir_to_file(source_dir: &Path, zip_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 
 #[tauri::command]
 pub fn load_child_sprite(
@@ -692,7 +697,7 @@ pub fn load_child_sprite(
     for f_idx in 0..num_frames {
         let mut grid = vec![vec!["transparent".to_string(); 16]; 16];
         let offset_x = f_idx * 16;
-        
+
         if info.color_type == png::ColorType::Rgba {
             for y in 0..img_h.min(16) {
                 for x in 0..16 {
@@ -786,10 +791,18 @@ pub fn save_child_sprite(
                     let alpha = buf[idx + 3];
                     if alpha > 10 {
                         has_pixels = true;
-                        if x < min_x { min_x = x; }
-                        if x > max_x { max_x = x; }
-                        if y < min_y { min_y = y; }
-                        if y > max_y { max_y = y; }
+                        if x < min_x {
+                            min_x = x;
+                        }
+                        if x > max_x {
+                            max_x = x;
+                        }
+                        if y < min_y {
+                            min_y = y;
+                        }
+                        if y > max_y {
+                            max_y = y;
+                        }
                     }
                 }
             }
@@ -809,7 +822,7 @@ pub fn save_child_sprite(
 
     // Crop the pixels into a new RGBA buffer
     let mut cropped_buf = vec![0u8; crop_w * crop_h * 4];
-    
+
     if info.color_type == png::ColorType::Rgba {
         for y in 0..crop_h {
             for x in 0..crop_w {
@@ -853,7 +866,9 @@ pub fn save_child_sprite(
     encoder.set_color(png::ColorType::Rgba);
     encoder.set_depth(png::BitDepth::Eight);
     let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
-    writer.write_image_data(&cropped_buf).map_err(|e| e.to_string())?;
+    writer
+        .write_image_data(&cropped_buf)
+        .map_err(|e| e.to_string())?;
 
     // Determine runtime_template and default collision/size settings based on category
     let template_type = match category.as_str() {
@@ -903,7 +918,8 @@ pub fn save_child_sprite(
 
     fs::write(
         &sidecar_path,
-        serde_json::to_string_pretty(&sidecar_payload).unwrap(),
+        serde_json::to_string_pretty(&sidecar_payload)
+            .map_err(|err| format!("Failed to serialize sprite sidecar: {err}"))?,
     )
     .map_err(|e| e.to_string())?;
 
@@ -939,8 +955,9 @@ pub fn save_custom_audio(
 
     if sidecar_path.exists() {
         let sidecar_content = fs::read_to_string(&sidecar_path).map_err(|e| e.to_string())?;
-        let mut sidecar_data: serde_json::Value = serde_json::from_str(&sidecar_content).map_err(|e| e.to_string())?;
-        
+        let mut sidecar_data: serde_json::Value =
+            serde_json::from_str(&sidecar_content).map_err(|e| e.to_string())?;
+
         if let Some(obj) = sidecar_data.as_object_mut() {
             obj.insert(
                 "audio_logic".to_string(),
@@ -951,10 +968,11 @@ pub fn save_custom_audio(
                 }),
             );
         }
-        
+
         fs::write(
             &sidecar_path,
-            serde_json::to_string_pretty(&sidecar_data).unwrap(),
+            serde_json::to_string_pretty(&sidecar_data)
+                .map_err(|err| format!("Failed to serialize audio sidecar: {err}"))?,
         )
         .map_err(|e| e.to_string())?;
     }
@@ -1017,12 +1035,12 @@ pub fn build_web_runner() -> Result<String, String> {
     let repo_root = locate_repo_root()?;
     let engine_dir = repo_root.join("engine");
     let web_export_dir = repo_root.join("editor").join("public").join("game");
-    
+
     fs::create_dir_all(&web_export_dir)
         .map_err(|err| format!("Failed to create web export directory: {err}"))?;
-        
+
     let output_html = web_export_dir.join("index.html");
-    
+
     let output = Command::new("godot")
         .arg("--headless")
         .arg("--path")
@@ -1032,7 +1050,7 @@ pub fn build_web_runner() -> Result<String, String> {
         .arg(&output_html)
         .output()
         .map_err(|err| format!("Failed to run godot compiler: {err}"))?;
-        
+
     if output.status.success() {
         Ok("Web runner built successfully!".to_string())
     } else {
@@ -1047,17 +1065,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_export_game() {
-        let result = export_game("test_project_id_123".to_string());
-        assert!(result.is_ok());
-
-        let path_str = result.unwrap();
+    fn test_export_game() -> Result<(), String> {
+        let path_str = export_game("test_project_id_123".to_string())?;
         assert!(path_str.contains("test_project_id_123_export.zip"));
 
-        let repo_root = locate_repo_root().unwrap();
-        let zip_path = repo_root.join("exports").join("test_project_id_123_export.zip");
+        let repo_root = locate_repo_root()?;
+        let zip_path = repo_root
+            .join("exports")
+            .join("test_project_id_123_export.zip");
         assert!(zip_path.exists());
 
         let _ = std::fs::remove_file(&zip_path);
+        Ok(())
     }
 }

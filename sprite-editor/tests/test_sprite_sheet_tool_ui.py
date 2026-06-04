@@ -7,6 +7,7 @@ import unittest
 import subprocess
 import sys
 from pathlib import Path
+from unittest import mock
 
 from PIL import Image
 
@@ -52,6 +53,7 @@ from tools.sprite_sheet_tool_ui import (
     project_animation_clip_names,
     project_sprite_preview_path_text,
     project_sprite_rows,
+    request_process_stop,
     scale_bbox_for_canvas,
     translate_bbox_by_canvas_delta,
     render_detection_preview,
@@ -426,6 +428,25 @@ class SpriteSheetToolUiTests(unittest.TestCase):
         self.assertIn("removed=1", text)
         self.assertIn("changed=1", text)
 
+    def test_studio_action_errors_are_reported_for_taxonomy_failures(self) -> None:
+        app = SpriteSheetToolUi(build=False)
+        app.current_project = sample_project()
+
+        with mock.patch("tools.sprite_sheet_tool_ui.apply_taxonomy_rules", side_effect=ValueError("bad taxonomy")):
+            app.auto_name_studio_project()
+
+        self.assertEqual(app.last_message[0], "Auto Name")
+        self.assertEqual(app.last_message[2], "error")
+        self.assertIn("bad taxonomy", app.last_message[1])
+
+    def test_studio_action_handlers_do_not_swallow_assertion_failures(self) -> None:
+        app = SpriteSheetToolUi(build=False)
+        app.current_project = sample_project()
+
+        with mock.patch("tools.sprite_sheet_tool_ui.apply_taxonomy_rules", side_effect=AssertionError("unexpected bug")):
+            with self.assertRaises(AssertionError):
+                app.auto_name_studio_project()
+
     def test_editor_helpers_summarize_palette_color_wheel_and_ide_actions(self) -> None:
         image = Image.new("RGBA", (4, 4), (255, 0, 0, 255))
         for x in range(2):
@@ -479,6 +500,26 @@ class SpriteSheetToolUiTests(unittest.TestCase):
         app.apply_editor_flip()
         app.apply_editor_rotate(clockwise=False)
         self.assertIn("Rotate", app.log_lines[-1])
+
+    def test_editor_action_errors_are_reported_for_invalid_crop_text(self) -> None:
+        app = SpriteSheetToolUi(build=False)
+        app.editor_session = ui_module.SpriteEditSession.from_image(Image.new("RGBA", (4, 4), (0, 0, 0, 0)), name="sample")
+        app.editor_crop_rect.set("1,2,3")
+
+        app.apply_editor_crop()
+
+        self.assertEqual(app.last_message[0], "Crop")
+        self.assertEqual(app.last_message[2], "error")
+        self.assertIn("Crop rectangle", app.last_message[1])
+
+    def test_editor_action_handlers_do_not_swallow_assertion_failures(self) -> None:
+        app = SpriteSheetToolUi(build=False)
+        app.editor_session = ui_module.SpriteEditSession.from_image(Image.new("RGBA", (4, 4), (0, 0, 0, 0)), name="sample")
+        app.editor_crop_rect.set("0,0,2,2")
+
+        with mock.patch("tools.sprite_sheet_tool_ui.editor_parse_rect_text", side_effect=AssertionError("unexpected bug")):
+            with self.assertRaises(AssertionError):
+                app.apply_editor_crop()
 
     def test_editor_workspace_state_methods_update_fullscreen_tool_and_scope(self) -> None:
         app = SpriteSheetToolUi(build=False)
@@ -686,6 +727,24 @@ class SpriteSheetToolUiTests(unittest.TestCase):
         self.assertEqual(settings.animation_fps, 12)
         self.assertIn("unity", settings.engine_exports)
 
+    def test_ui_action_errors_are_reported_for_invalid_builtin_preset(self) -> None:
+        app = SpriteSheetToolUi(build=False)
+        app.builtin_preset.set("missing_preset")
+
+        app.apply_builtin_preset()
+
+        self.assertEqual(app.last_message[0], "Built-In Preset")
+        self.assertEqual(app.last_message[2], "error")
+        self.assertIn("Unknown built-in preset", app.last_message[1])
+
+    def test_ui_action_handlers_do_not_swallow_assertion_failures(self) -> None:
+        app = SpriteSheetToolUi(build=False)
+        app.builtin_preset.set("transparent_animation_rows")
+
+        with mock.patch("tools.sprite_sheet_tool_ui.settings_from_builtin_preset", side_effect=AssertionError("unexpected bug")):
+            with self.assertRaises(AssertionError):
+                app.apply_builtin_preset()
+
     def test_preset_file_save_and_load(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             preset_path = Path(tmp) / "preset.json"
@@ -858,6 +917,37 @@ class SpriteSheetToolUiTests(unittest.TestCase):
         self.assertEqual(parse_pivot_fields("0.25", "0.75"), {"x": 0.25, "y": 0.75, "method": "manual"})
         self.assertEqual(parse_flags_text("touches_edge, manual_bbox | odd_aspect"), ["touches_edge", "manual_bbox", "odd_aspect"])
 
+    def test_review_action_errors_are_reported_for_invalid_split_boxes(self) -> None:
+        class FakeReviewList:
+            def selected_indices(self) -> list[int]:
+                return [0]
+
+        app = SpriteSheetToolUi(build=False)
+        app.current_project = copy.deepcopy(sample_project())
+        app.project_sprite_rows_cache = [app.current_project["sprites"][0]]  # type: ignore[index]
+        app._review_list = FakeReviewList()  # type: ignore[assignment]
+        app.review_split_boxes.set("1,2,3")
+
+        app.split_review_sprite()
+
+        self.assertEqual(app.last_message[0], "Split Sprite")
+        self.assertEqual(app.last_message[2], "error")
+        self.assertIn("Split boxes use", app.last_message[1])
+
+    def test_review_action_handlers_do_not_swallow_assertion_failures(self) -> None:
+        class FakeReviewList:
+            def selected_indices(self) -> list[int]:
+                return [0]
+
+        app = SpriteSheetToolUi(build=False)
+        app.current_project = copy.deepcopy(sample_project())
+        app.project_sprite_rows_cache = [app.current_project["sprites"][0]]  # type: ignore[index]
+        app._review_list = FakeReviewList()  # type: ignore[assignment]
+
+        with mock.patch("tools.sprite_sheet_tool_ui.approve_sprite", side_effect=AssertionError("unexpected bug")):
+            with self.assertRaises(AssertionError):
+                app.approve_review_sprite()
+
     def test_project_animation_clip_helpers_return_names_and_frames(self) -> None:
         project = sample_project()
 
@@ -918,6 +1008,152 @@ class SpriteSheetToolUiTests(unittest.TestCase):
     def test_cancel_button_state_reflects_active_process(self) -> None:
         self.assertEqual(cancel_button_state(True), "normal")
         self.assertEqual(cancel_button_state(False), "disabled")
+
+    def test_request_process_stop_waits_after_terminate(self) -> None:
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.terminated = False
+                self.killed = False
+
+            def poll(self) -> None:
+                return None
+
+            def terminate(self) -> None:
+                self.terminated = True
+
+            def kill(self) -> None:
+                self.killed = True
+
+            def wait(self, timeout: float | None = None) -> int:
+                return 0
+
+        process = FakeProcess()
+
+        outcome = request_process_stop(process)  # type: ignore[arg-type]
+
+        self.assertEqual(outcome, "terminated")
+        self.assertTrue(process.terminated)
+        self.assertFalse(process.killed)
+
+    def test_request_process_stop_kills_stubborn_process(self) -> None:
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.terminated = False
+                self.killed = False
+                self.waits = 0
+
+            def poll(self) -> None:
+                return None
+
+            def terminate(self) -> None:
+                self.terminated = True
+
+            def kill(self) -> None:
+                self.killed = True
+
+            def wait(self, timeout: float | None = None) -> int:
+                self.waits += 1
+                if self.waits == 1:
+                    raise subprocess.TimeoutExpired("fake", timeout)
+                return 0
+
+        process = FakeProcess()
+
+        outcome = request_process_stop(process, timeout=0.01)  # type: ignore[arg-type]
+
+        self.assertEqual(outcome, "killed")
+        self.assertTrue(process.terminated)
+        self.assertTrue(process.killed)
+
+    def test_shutdown_active_process_stops_running_child(self) -> None:
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.terminated = False
+                self.killed = False
+
+            def poll(self) -> None:
+                return None
+
+            def terminate(self) -> None:
+                self.terminated = True
+
+            def kill(self) -> None:
+                self.killed = True
+
+            def wait(self, timeout: float | None = None) -> int:
+                return 0
+
+        app = SpriteSheetToolUi(build=False)
+        process = FakeProcess()
+        app.active_process = process  # type: ignore[assignment]
+
+        app._shutdown_active_process()
+
+        self.assertTrue(process.terminated)
+        self.assertFalse(process.killed)
+        self.assertIn("Stopped active process during UI shutdown: terminated.", app.log_lines[-1])
+
+    def test_process_run_errors_are_logged(self) -> None:
+        app = SpriteSheetToolUi(build=False)
+
+        with mock.patch("tools.sprite_sheet_tool_ui.subprocess.Popen", side_effect=OSError("missing command")):
+            app._run_process(["missing-command"])
+
+        self.assertEqual(app.log_queue.get_nowait(), "Process failed: missing command")
+        self.assertEqual(app.log_queue.get_nowait(), "__STOP_PROGRESS__")
+
+    def test_process_run_assertions_are_not_swallowed(self) -> None:
+        class FakeProcess:
+            stdout = None
+
+        app = SpriteSheetToolUi(build=False)
+
+        with mock.patch("tools.sprite_sheet_tool_ui.subprocess.Popen", return_value=FakeProcess()):
+            with self.assertRaises(AssertionError):
+                app._run_process(["fake-command"])
+
+        self.assertEqual(app.log_queue.get_nowait(), "__STOP_PROGRESS__")
+
+    def test_dpg_item_delete_failure_is_logged(self) -> None:
+        class FakeDpg:
+            def does_item_exist(self, _tag: str) -> bool:
+                return True
+
+            def delete_item(self, _tag: str, *, children_only: bool = False) -> None:
+                raise RuntimeError("delete failed")
+
+            def set_value(self, _tag: str, _text: str) -> None:
+                return None
+
+        app = SpriteSheetToolUi(build=False)
+        app._built = True
+        original_dpg = ui_module.dpg
+        ui_module.dpg = FakeDpg()  # type: ignore[assignment]
+        try:
+            deleted = app._delete_dpg_item("preview_panel", children_only=True, context="Preview cleanup")
+        finally:
+            ui_module.dpg = original_dpg
+
+        self.assertFalse(deleted)
+        self.assertIn("Preview cleanup failed for preview_panel: delete failed", app.log_lines[-1])
+
+    def test_dpg_item_delete_assertions_are_not_swallowed(self) -> None:
+        class FakeDpg:
+            def does_item_exist(self, _tag: str) -> bool:
+                return True
+
+            def delete_item(self, _tag: str, *, children_only: bool = False) -> None:
+                raise AssertionError("unexpected bug")
+
+        app = SpriteSheetToolUi(build=False)
+        app._built = True
+        original_dpg = ui_module.dpg
+        ui_module.dpg = FakeDpg()  # type: ignore[assignment]
+        try:
+            with self.assertRaises(AssertionError):
+                app._delete_dpg_item("preview_panel", children_only=True, context="Preview cleanup")
+        finally:
+            ui_module.dpg = original_dpg
 
     def test_canvas_bbox_helpers_scale_and_translate_source_boxes(self) -> None:
         preview = scale_bbox_for_canvas(

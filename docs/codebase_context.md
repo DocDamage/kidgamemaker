@@ -108,7 +108,7 @@ When the Svelte editor saves levels, it compiles rooms to a structured payload s
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": "2.0.0",
   "project_id": "demo_project",
   "room_id": "candy_spooky_cloud_492",
   "world_settings": {
@@ -135,6 +135,39 @@ When the Svelte editor saves levels, it compiles rooms to a structured payload s
         "action_id": "gate_block_92a10"
       }
     ]
+  },
+  "movement_system": {
+    "_meta": { "feature_domain": "movement_system", "minimum_schema_version": "2.0.0" },
+    "enabled": true,
+    "movement_ids": ["wall_jump", "double_jump", "dash", "glide", "ledge_grab", "ground_pound"],
+    "params": {
+      "dash_cooldown_seconds": 1.2,
+      "dash_duration_seconds": 0.2,
+      "wall_cling_seconds": 0.3,
+      "glide_stamina_seconds": 4.0,
+      "ground_pound_speed": 900
+    }
+  },
+  "combat_system": {
+    "_meta": { "feature_domain": "combat_system", "minimum_schema_version": "2.0.0" },
+    "enabled": true,
+    "mechanics": ["sword_combo", "charge_shot", "parry", "shield_block"],
+    "params": {
+      "combo_steps": 3,
+      "combo_reset_seconds": 1.0,
+      "parry_window_seconds": 0.18,
+      "charge_shot_full_seconds": 1.0
+    }
+  },
+  "rules_engine": {
+    "_meta": { "feature_domain": "rules_engine", "minimum_schema_version": "2.0.0" },
+    "enabled": true,
+    "primitives": ["switch_door", "key_lock", "pressure_plate", "collectible_counter", "win_condition"]
+  },
+  "ai_assist": {
+    "_meta": { "feature_domain": "ai_assist", "minimum_schema_version": "2.0.0" },
+    "level_balancer": true,
+    "tutorial_whisperer": true
   },
   "entities": [
     {

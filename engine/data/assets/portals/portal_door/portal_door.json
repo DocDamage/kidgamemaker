@@ -4,13 +4,16 @@
   "asset_name": "Portal Door",
   "category": "portals",
   "runtime_template": "portal",
-  "visual": "🚪",
+  "visual": "portal_door.svg",
   "placement_logic": {
     "snapping_type": "gravity_snap",
     "parallax_bucket": "play_layer"
   },
   "collision": {
     "shape": "rectangle",
-    "size": [48, 64]
+    "size": [
+      48,
+      64
+    ]
   }
 }

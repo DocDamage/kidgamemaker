@@ -1,0 +1,325 @@
+Line     1 | Chapter | KidGameMaker: The Ultimate Feature Compendium
+Line     2 | Section | 350+ Ideas from AAA & Indie Studios for the World's Most Magical Kid-Friendly Game Maker
+Line     6 | Chapter | Section 00: Executive Summary
+Line     8 | Section | KidGameMaker Feature Compendium — Executive Summary
+Line    12 | Feature | 1. The KidGameMaker Vision
+Line    22 | Feature | 2. Research Methodology
+Line    39 | Feature | 3. Document Overview
+Line    61 | Feature | 4. Key Highlights
+Line    79 | Feature | 5. How to Use This Document
+Line    98 | Chapter | Chapter 1: Core Movement & Traversal
+Line   106 | Section | 1.1 Basic Platforming Enhancements
+Line   108 | Feature | Wall Jump / Wall Climb
+Line   137 | Feature | Double Jump & Triple Jump
+Line   162 | Feature | Dash / Air Dash
+Line   190 | Feature | Ground Pound / Butt Bounce
+Line   217 | Feature | Slide / Crawl
+Line   243 | Feature | Rope Swing / Vine Climb
+Line   271 | Section | 1.2 Advanced Traversal
+Line   273 | Feature | Grappling Hook
+Line   300 | Feature | Ledge Grab / Ledge Vault
+Line   327 | Feature | Wall Run / Ceiling Run
+Line   355 | Feature | Teleport / Blink
+Line   382 | Feature | Charge Jump / Super Jump
+Line   409 | Feature | Bounce Pad / Spring Launch
+Line   439 | Section | 1.3 Flight & Swimming
+Line   441 | Feature | Glide / Cape Glide
+Line   468 | Feature | Jetpack / Thruster Hover
+Line   495 | Feature | Underwater Swimming
+Line   525 | Feature | Mermaid Morph / Auto Swim Form
+Line   551 | Feature | Free Flight Mode
+Line   580 | Section | 1.4 Speed & Momentum Systems
+Line   582 | Feature | Spin Dash
+Line   609 | Feature | Speed Booster / Shinespark
+Line   636 | Feature | Slope Physics
+Line   663 | Feature | Loop-de-Loop Auto-Pilot
+Line   689 | Feature | Rail Grinding
+Line   716 | Feature | Time Slow / Bullet Time
+Line   746 | Section | 1.5 Comparison Tables
+Line   748 | Feature | Movement Feature Comparison Matrix
+Line   774 | Feature | Physics Parameter Presets by Feel
+Line   789 | Section | 1.6 Combinatorial Movement System
+Line   793 | Feature | Classic Combinations and Their Source Games
+Line   828 | Section | 1.7 Additional Movement Features
+Line   830 | Feature | Coyote Time
+Line   853 | Feature | Jump Buffer
+Line   876 | Feature | Ice Physics / Slippery Surfaces
+Line   901 | Feature | Conveyor Belt / Moving Floor
+Line   931 | Feature | Wind Zone / Current
+Line   959 | Feature | Gravity Flip Zone
+Line   986 | Feature | Ladder Climbing
+Line  1012 | Feature | Portal Pad / Warp Point
+Line  1041 | Feature | Quick Drop / Fast Fall
+Line  1069 | Feature | Sticky Surface / Climbable Wall
+Line  1094 | Feature | Zip Line / Tightrope
+Line  1122 | Feature | Moving Platform / Track System
+Line  1150 | Feature | Screen Wrap
+Line  1176 | Feature | Super Emeralds / Flight Transformation
+Line  1211 | Feature | Climbable Net / Mesh
+Line  1236 | Feature | Ceiling Swing / Spider Hang
+Line  1263 | Feature | Water Current / Flow Direction
+Line  1291 | Feature | Cloud Platform / Vanishing Platform
+Line  1323 | Chapter | Chapter 2: Combat, Weapons & Boss Design
+Line  1331 | Section | 2.1 Melee Combat
+Line  1333 | Feature | Sword Slash Combo
+Line  1361 | Feature | Charge Attack / Spin Attack
+Line  1389 | Feature | Counter / Parry
+Line  1424 | Feature | Trick Weapon Transform
+Line  1453 | Feature | Throw / Grapple Enemies
+Line  1481 | Feature | Beat-'Em-Up Combo Juggling
+Line  1512 | Section | 2.2 Ranged Combat
+Line  1514 | Feature | Charge Shot
+Line  1542 | Feature | Bow & Arrow
+Line  1573 | Feature | Magic Projectile
+Line  1602 | Feature | Boomerang
+Line  1630 | Feature | Bomb Placement
+Line  1661 | Section | 2.3 Special Moves
+Line  1663 | Feature | Limit Break / Super Moves
+Line  1696 | Feature | Elemental Specials
+Line  1724 | Feature | Celestial Brush
+Line  1756 | Feature | Shoryuken-Style Uppercut
+Line  1785 | Feature | Hadoken / Fireball
+Line  1817 | Section | 2.4 Boss Fight Constructor
+Line  1819 | Feature | Boss Fog Gate
+Line  1848 | Feature | Boss Phases
+Line  1892 | Feature | Boss Part Breaking
+Line  1919 | Feature | Boss Weakness Wheel
+Line  1949 | Feature | Boss Medley Rush
+Line  1978 | Feature | Boss Scale & Camera
+Line  2006 | Feature | Boss Health Bar & Name Card
+Line  2036 | Section | 2.5 Weapon System Comparison Tables
+Line  2038 | Feature | Melee Weapon Types
+Line  2051 | Feature | Ranged Weapon Types
+Line  2064 | Feature | Boss Design Pattern Templates
+Line  2079 | Section | 2.6 Integration with Movement Systems
+Line  2083 | Feature | Combat-Movement State Interactions
+Line  2093 | Feature | The Complete Combat-Movement State Machine
+Line  2135 | Section | 2.7 Additional Combat & Boss Features
+Line  2137 | Feature | Hit Stop / Hit Pause
+Line  2165 | Feature | Screen Shake on Impact
+Line  2192 | Feature | Invincibility Frames (i-Frames)
+Line  2219 | Feature | Damage Type System
+Line  2250 | Feature | Weapon Upgrade Anvil
+Line  2278 | Feature | Enemy Drop Table
+Line  2311 | Feature | Status Effect Infliction
+Line  2338 | Feature | Weapon Switching / Dual Wield
+Line  2366 | Feature | Skill Gem / Materia Socketing
+Line  2398 | Feature | Summon Ally / Call for Help
+Line  2428 | Feature | Guard / Block Stance
+Line  2456 | Feature | Reflect Projectiles
+Line  2483 | Feature | Finishing Move / Takedown
+Line  2511 | Feature | AOE Attack Indicator
+Line  2537 | Feature | Combo Counter UI
+Line  2566 | Feature | Death / Respawn Mechanics
+Line  2598 | Chapter | Chapter 3: Character Classes, Forms & Abilities
+Line  2606 | Section | 3.1 Class & Job Systems
+Line  2739 | Section | 3.2 Transformation Systems
+Line  2898 | Section | 3.3 Badge, Charm & Passive Modifiers
+Line  2983 | Section | 3.4 Ability Acquisition & Upgrade
+Line  3206 | Section | 3.5 Elemental & Status Specialization
+Line  3278 | Section | Comparison Tables
+Line  3280 | Feature | Class System Comparison
+Line  3289 | Feature | Transformation System Comparison
+Line  3302 | Feature | Passive Modifier System Comparison
+Line  3311 | Feature | Elemental System Comparison
+Line  3322 | Chapter | Chapter 4: Companions, Pets & Multiplayer
+Line  3328 | Section | 4.1 Companion Systems
+Line  3509 | Section | 4.2 Pet & Follower Systems
+Line  3601 | Section | 4.3 Squad & Swarm Management
+Line  3716 | Section | 4.4 Buddy & Co-op Systems
+Line  3910 | Section | 4.5 Living World & Ecosystem
+Line  3995 | Section | Comparison Tables
+Line  3997 | Feature | Companion System Comparison
+Line  4009 | Feature | Pet & Follower Comparison
+Line  4018 | Feature | Co-op & Combo Comparison
+Line  4029 | Feature | Squad Management Comparison
+Line  4041 | Chapter | 5. World Building, Terrain & Environment
+Line  4047 | Section | 5.1 Terrain Sculpting & Landscape Tools
+Line  4051 | Feature | Terrain Sculpting (Cliff & River Builder)
+Line  4061 | Feature | Terrain Painting Grid
+Line  4071 | Feature | Terraforming Hammer (Real-Time Build/Break)
+Line  4081 | Feature | Slope Placement (Gentle & Steep)
+Line  4091 | Feature | Destructible Terrain Blocks
+Line  4101 | Feature | Semisolid Platforms (Jump-Through)
+Line  4113 | Section | 5.2 Pathways, Transport & Traversal Geometry
+Line  4117 | Feature | Clear Pipes (Transparent Transport Tubes)
+Line  4127 | Feature | Track Systems (Moving Object Paths)
+Line  4137 | Feature | Auto-Scroll Camera Control
+Line  4147 | Feature | Speed Tunnel Auto-Runner
+Line  4157 | Feature | Cannon Travel Rapid Transit
+Line  4169 | Section | 5.3 Elemental Chemistry Engine
+Line  4173 | Feature | Core Element Sources
+Line  4183 | Feature | Elemental Reaction Matrix
+Line  4202 | Feature | Material Property System
+Line  4214 | Section | 5.4 Zonai Device Gadgets
+Line  4218 | Feature | Zonai Device Palette
+Line  4228 | Feature | Autobuild (Contraption Blueprint System)
+Line  4238 | Feature | Zonai Device Comparison
+Line  4253 | Section | 5.5 Environmental Conditions
+Line  4257 | Feature | Weather System
+Line  4267 | Feature | Day/Night Cycle
+Line  4277 | Feature | Seasonal Event System
+Line  4287 | Feature | Wind Zones
+Line  4297 | Feature | Rising Hazards (Lava / Water / Poison)
+Line  4307 | Feature | Gravity Flip Zones
+Line  4319 | Section | 5.6 Interior Design & Room Systems
+Line  4323 | Feature | Room/Interior Designer
+Line  4333 | Feature | Smart Room Recognition
+Line  4343 | Feature | Furniture Placement Grid
+Line  4353 | Feature | Custom Pattern Designer
+Line  4363 | Feature | Safe Room System
+Line  4375 | Section | 5.7 Ink Painting Terrain & Special Environment Systems
+Line  4379 | Feature | Ink Painting Terrain (Splatoon System)
+Line  4389 | Feature | Splatoon Weapon Types for Terrain Painting
+Line  4399 | Feature | Turf War Mode (Paint Coverage Scoring)
+Line  4409 | Feature | Celestial Brush Drawing (Okami Miracles)
+Line  4419 | Feature | Constellation Unlocking
+Line  4431 | Section | 5.8 Environment Comparison Summary
+Line  4451 | Chapter | 6. Items, Crafting & Economy
+Line  4457 | Section | 6.1 Currency & Collection Systems
+Line  4461 | Feature | Multi-Type Currency System
+Line  4471 | Feature | Currency Loss on Death (Recovery Run)
+Line  4481 | Feature | Link Chain Score Multiplier
+Line  4491 | Feature | Praise / Power-Up Orb Collection
+Line  4501 | Feature | Seven Emeralds / Star Piece Transformation
+Line  4513 | Section | 6.2 Crafting & Recipe Discovery
+Line  4517 | Feature | Crafting Recipe Discovery
+Line  4527 | Feature | Crafting Recipe Examples
+Line  4543 | Feature | Monster Part Breaking & Collection
+Line  4553 | Feature | Synthesis Workshop (Advanced Crafting)
+Line  4563 | Feature | NPC Town Builder Requests
+Line  4575 | Section | 6.3 Cooking & Food Systems
+Line  4579 | Feature | Cooking Pot / BBQ Mini-Game
+Line  4589 | Feature | Portable Cooking (Ingredient Mixing)
+Line  4599 | Feature | Cooking Dish Effect Types
+Line  4612 | Section | 6.4 Consumables & Healing
+Line  4616 | Feature | Flask Healing System (Limited Restores)
+Line  4626 | Feature | Custom Mix Buff Flask
+Line  4636 | Feature | Herb Combining System
+Line  4646 | Feature | Rally Health Regain (Aggressive Healing)
+Line  4658 | Section | 6.5 Equipment & Upgrades
+Line  4662 | Feature | Equipment Slot System
+Line  4672 | Feature | Weapon Upgrade Tiers
+Line  4682 | Feature | Armor Capsules (Hidden Upgrades)
+Line  4692 | Feature | Weapon Skill Swapping (Materia-Style)
+Line  4702 | Feature | Fragment-Based Permanent Upgrades
+Line  4714 | Section | 6.6 Inventory Management
+Line  4718 | Feature | Grid Inventory (Tetris-Style)
+Line  4728 | Feature | Item Box (Shared Storage)
+Line  4740 | Section | 6.7 Shops & Economy
+Line  4744 | Feature | NPC Merchant System
+Line  4754 | Feature | Quest Board System
+Line  4764 | Feature | Enemy Drop Tables
+Line  4776 | Section | 6.8 Special Item Systems
+Line  4780 | Feature | Trap Crafting & Deployment
+Line  4790 | Feature | Collectible Stamps & Album
+Line  4800 | Feature | Key Item & Door Matching
+Line  4812 | Section | 6.9 Economy & Item System Comparison
+Line  4831 | Chapter | Chapter 7: Rules, Logic & Puzzle Systems
+Line  4833 | Section | 7.1 Trigger & Switch Systems
+Line  4857 | Section | 7.2 Door, Key & Gate Systems
+Line  4877 | Section | 7.3 Puzzle Mechanics
+Line  4897 | Section | 7.4 Custom Rule Engine
+Line  4928 | Chapter | Chapter 8: AI-Assisted Magic Features
+Line  4930 | Section | 8.1 AI Generation Tools
+Line  4950 | Section | 8.2 Voice & Natural Language
+Line  4968 | Section | 8.3 Procedural Generation
+Line  4986 | Section | 8.4 Adaptive Intelligence
+Line  5019 | Chapter | Chapter 9: Accessibility & Assist Features
+Line  5027 | Section | 9.1 Visual Accessibility
+Line  5029 | Feature | Super See Mode
+Line  5044 | Feature | Colorblind Palette Adaptation
+Line  5057 | Feature | Sound-to-Light Translator
+Line  5070 | Feature | Screen Edge Directional Indicators
+Line  5083 | Feature | Sensitivity Safe Zone
+Line  5096 | Feature | Font Size & Dyslexia-Friendly Reader
+Line  5109 | Section | 9.2 Motor Accessibility
+Line  5111 | Feature | One-Tap Wonder Mode
+Line  5124 | Feature | Auto-Pilot Companion
+Line  5137 | Feature | Pause-and-Think Mode
+Line  5150 | Feature | Jump Timing Highlight
+Line  5163 | Feature | Adaptive Controller & Switch Support
+Line  5176 | Feature | Input Buffer & Forgiving Timing
+Line  5189 | Section | 9.3 Cognitive & Communication Accessibility
+Line  5191 | Feature | Symbol Speak Communication (AAC)
+Line  5204 | Feature | Difficulty Rainbow Slider
+Line  5217 | Feature | Granular Assist Toggles
+Line  5230 | Feature | Auto-Aim for Projectiles
+Line  5243 | Feature | Story Simplification Mode
+Line  5256 | Section | 9.4 Reading & Audio Accessibility
+Line  5258 | Feature | Read-to-Me Everything
+Line  5271 | Feature | Haptic Beat Buddy
+Line  5284 | Section | 9.5 Adaptive Intelligence & Support
+Line  5286 | Feature | Smart Checkpoint Dropper
+Line  5299 | Feature | Virtual Co-Pilot Companion
+Line  5312 | Feature | Assist Mode Presets Library
+Line  5325 | Section | Feature Summary: Accessibility Coverage Matrix
+Line  5344 | Chapter | Chapter 10: Modern UX, Social & Polish
+Line  5352 | Section | 10.1 Capture & Sharing
+Line  5354 | Feature | Magic Photo Studio
+Line  5369 | Feature | Replay Theater
+Line  5382 | Feature | Screenshot & Video Trailer Maker
+Line  5395 | Feature | One-Tap Share to Family
+Line  5408 | Feature | Remixable Asset System
+Line  5421 | Section | 10.2 Progression & Motivation
+Line  5423 | Feature | Achievement Scrapbook
+Line  5436 | Feature | Daily Surprise Box
+Line  5449 | Feature | Progressive Unlock System
+Line  5462 | Feature | New Game Plus Cycles
+Line  5475 | Feature | Multiple Endings System
+Line  5488 | Feature | Kishotenketsu Level Flow
+Line  5501 | Feature | Season of Wonder Events
+Line  5514 | Section | 10.3 Community & Social
+Line  5516 | Feature | Community Gallery with Kid-Safe Moderation
+Line  5529 | Feature | Family Circle
+Line  5542 | Feature | Co-Creation Mode
+Line  5555 | Feature | Player Message System
+Line  5568 | Feature | Parent / Teacher Dashboard
+Line  5581 | Section | 10.4 Editor Polish & Delight
+Line  5583 | Feature | Interactive Guide Character
+Line  5596 | Feature | Smart Undo/Redo Dog (Undodog)
+Line  5609 | Feature | Frequent Play-Test Toggle
+Line  5622 | Feature | Magic Wand Auto-Complete
+Line  5635 | Feature | Performance Thermometer
+Line  5648 | Feature | Progressive Onboarding Flow
+Line  5661 | Feature | Level Validation & Playability Guardian
+Line  5674 | Feature | Push-Notify Playdate Reminders
+Line  5687 | Section | Feature Summary: Modern UX, Social & Polish
+Line  5701 | Chapter | Chapter 11: Special Systems & Minigames
+Line  5709 | Section | 11.1 Competitive & Creative Minigames
+Line  5711 | Feature | Turf War Paint Mode
+Line  5724 | Feature | Tableturf Battle Card Game
+Line  5737 | Feature | Salmon Run Co-op Horde Mode
+Line  5750 | Feature | Blue Sphere Bonus Stage
+Line  5763 | Feature | Score Attack Time Trial
+Line  5776 | Feature | Card Battle Collectible Game
+Line  5789 | Feature | Fishing Minigame
+Line  5802 | Feature | Cooking Minigame
+Line  5815 | Feature | Attraction Flow Rides
+Line  5828 | Feature | Boss Rush Tower
+Line  5841 | Section | 11.2 Special One-Off Mechanics
+Line  5843 | Feature | Ink Painting Terrain Transformation
+Line  5856 | Feature | Celestial Brush Drawing
+Line  5869 | Feature | Time Travel Era Doors
+Line  5882 | Feature | Inverted Mirror World
+Line  5895 | Feature | Recall Time Rewind
+Line  5908 | Feature | Ascend Phase-Through
+Line  5921 | Feature | Morph Vehicle Building
+Line  5934 | Feature | Digging for Buried Treasures
+Line  5947 | Feature | Gummi Block Vehicle Builder
+Line  5960 | Feature | Phozon Absorption Growth
+Line  5973 | Feature | Sphere Grid Skill Board
+Line  5986 | Section | 11.3 Community & Persistent Systems
+Line  5988 | Feature | Message Board Signs
+Line  6001 | Section | Feature Summary: Special Systems & Minigames Overview
+Line  6032 | Chapter | Section 12: Implementation Roadmap
+Line  6038 | Section | 12.1 Phase-by-Phase Priority Matrix
+Line  6040 | Feature | Phase A: Foundation (P0) — "It Feels Like a Real Engine"
+Line  6056 | Feature | Phase B: Depth (P1) — "Every Game Feels Different"
+Line  6076 | Feature | Phase C: Magic (P2) — "Only KidGameMaker Does This"
+Line  6098 | Feature | Phase D: Polish (P3) — "A Product Worth Sharing"
+Line  6120 | Section | 12.2 Complexity vs. Impact Analysis
+Line  6146 | Section | 12.3 JSON Contract Evolution Strategy
+Line  6150 | Feature | Backward-Compatible Schema Versioning
+Line  6154 | Feature | Sidecar Metadata Block Extension Plan
+Line  6158 | Feature | Runtime Template Expansion Strategy

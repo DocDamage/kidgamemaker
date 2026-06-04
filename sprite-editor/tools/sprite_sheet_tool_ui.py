@@ -8,7 +8,7 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
@@ -45,6 +45,7 @@ try:
     )
     from tools.sprite_project import approve_sprite, attach_animation_edit_output, attach_sprite_edit_output, load_project, merge_sprites, redo_last_edit, reject_sprite, render_project_outputs, save_project, split_sprite, undo_last_edit, update_sprite
     from tools.sprite_studio import apply_taxonomy_rules, asset_browser_index, batch_health_score, build_engine_import_plans, build_review_dashboard, diff_projects, generate_collision_profiles, review_and_apply_project, search_assets, train_preset_from_project
+    from tools.sprite_ui_settings import CutterUiSettings, RunOutputTargets, builtin_preset_names, build_cutter_command, discover_sheet_files, load_preset_file, output_targets_from_cli_line, save_preset_file, settings_from_builtin_preset, settings_from_preset_dict, settings_to_preset_dict, summarize_cli_output_line
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from tools.autotile_tools import write_autotile_package
@@ -71,916 +72,75 @@ except ModuleNotFoundError:
     )
     from tools.sprite_project import approve_sprite, attach_animation_edit_output, attach_sprite_edit_output, load_project, merge_sprites, redo_last_edit, reject_sprite, render_project_outputs, save_project, split_sprite, undo_last_edit, update_sprite
     from tools.sprite_studio import apply_taxonomy_rules, asset_browser_index, batch_health_score, build_engine_import_plans, build_review_dashboard, diff_projects, generate_collision_profiles, review_and_apply_project, search_assets, train_preset_from_project
-
-
-SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
-SCRIPT_PATH = Path(__file__).with_name("cut_tileset_sprites.py")
-PREVIEW_ACCESSIBILITY_MODES = ["normal", "grayscale", "protanopia", "deuteranopia", "tritanopia"]
-VIEWPORT_SIZE = (1320, 820)
-LEFT_PANEL_WIDTH = 300
-CENTER_PANEL_WIDTH = 660
-RIGHT_PANEL_WIDTH = 340
-PREVIEW_MAX_SIZE = (620, 480)
-REVIEW_CANVAS_SIZE = (300, 180)
-REVIEW_IMAGE_PREVIEW_SIZE = (190, 130)
-TOOLTIP_TEXT: dict[str, str] = {
-    "input_path": "Folder or image file to process. Folder scans skip prior SpriteCut output folders automatically.",
-    "add_folder": "Choose a folder containing sprite sheets or nested asset folders.",
-    "add_file": "Choose a single sprite sheet image when you want to process just one file.",
-    "refresh_files": "Rescan the selected input path and rebuild the sheet list and preview.",
-    "create_sample_pack": "Create a small repeatable sample sprite pack for first-run demos and cutter smoke tests.",
-    "file_list": "Detected source sheets. Select a sheet to preview auto-detected sprite regions.",
-    "preview_accessibility": "Preview the detection overlay in normal or color-vision simulation modes.",
-    "process": "Run the cutter with the current settings and write sprites, manifests, reports, and project files.",
-    "reset_log": "Clear the run log without changing settings or output files.",
-    "cancel": "Stop the active processing run. Finished output from already completed sheets remains on disk.",
-    "open_output": "Open the latest output folder created by the cutter.",
-    "open_report": "Open the latest HTML report for visual review and filtering.",
-    "open_project": "Load the latest generated project file into the Review tab.",
-    "out_name": "Name of the output folder created next to the selected input.",
-    "auto_detect_all": "Let the tool infer backgrounds, thresholds, atlases, exports, workers, and animation FPS from the source art.",
-    "include_archives": "Process supported images found inside .zip asset packs. Extracted sources are kept inside the output folder for review.",
-    "builtin_preset": "Optional fixed recipe for repeatable batches. Auto detect all is usually the best first pass.",
-    "apply_preset": "Apply the selected preset to the visible settings controls.",
-    "mode": "Auto chooses animation rows or tileset crops per sheet. Use fixed modes only for strict batches.",
-    "animation_names": "Optional comma-separated names for animation rows, such as idle, run, attack.",
-    "animation_frame_mode": "Fixed keeps each animation row on stable same-size canvases; trimmed exports tight crops.",
-    "animation_anchor": "Anchor used when placing trimmed animation frames on fixed canvases.",
-    "animation_min_frames": "Minimum detections in a row before auto mode treats it as an animation row.",
-    "animation_fps": "Frame rate written to generated animation clip metadata.",
-    "pivot_debug": "Write debug previews showing contours and pivot crosses for review.",
-    "alpha_threshold": "Pixels at or below this alpha value are treated as transparent background.",
-    "white_threshold": "RGB values at or above this level may be treated as white sheet background.",
-    "white_tolerance": "Allowed channel spread when classifying near-white background pixels.",
-    "dark_artifact_threshold": "Dark matte threshold used to remove black or dark sheet backgrounds.",
-    "min_sprite_pixels": "Minimum foreground pixel count required to keep a detected component.",
-    "min_sprite_width": "Minimum component width required before a detection becomes a sprite crop.",
-    "min_sprite_height": "Minimum component height required before a detection becomes a sprite crop.",
-    "crop_padding": "Extra pixels added around each detected sprite crop.",
-    "on_error": "Skip bad sheets for production batches, or fail fast while tuning settings.",
-    "pack_atlases": "Pack extracted sprites into texture atlases grouped by category.",
-    "atlas_size": "Square atlas texture size used when packing sprites.",
-    "atlas_padding": "Pixels of spacing around sprites in generated atlases.",
-    "atlas_allow_rotation": "Allow atlas packing to rotate sprites when it improves fit.",
-    "engine_exports": "Choose which engine handoff JSON files to generate.",
-    "export_unity": "Generate Unity-oriented sprite import and clip metadata.",
-    "export_godot": "Generate Godot-oriented sprite and animation metadata.",
-    "export_unreal": "Generate Unreal-oriented sprite and flipbook metadata.",
-    "save_preset": "Save the current visible settings as a reusable JSON preset.",
-    "load_preset": "Load a JSON preset and apply it to the current controls.",
-    "load_project": "Open a project.spritecut.json file for manual review and corrections.",
-    "recent_projects": "Recently loaded SpriteCut project files that still exist on disk.",
-    "save_project": "Save the current project edits without regenerating output images.",
-    "undo": "Undo the last project edit, including structural split and merge edits.",
-    "redo": "Redo the last project edit after an undo.",
-    "apply_outputs": "Regenerate corrected crops and reviewed engine exports from the current project edits.",
-    "review_filter": "Filter the project list by review status.",
-    "review_query": "Search sprites by id, display name, category, or review flag.",
-    "review_list": "Project sprites. Select one or more for editing, approval, split, or merge operations.",
-    "review_source_canvas": "Source sheet preview with draggable bbox overlay for manual crop adjustment.",
-    "animation_clip": "Animation clip generated from row-based sheets for playback review.",
-    "play_animation": "Play the selected animation clip in the review preview.",
-    "stop_animation": "Stop animation playback in the review preview.",
-    "review_name": "Display name used for reviewed output files and engine metadata.",
-    "review_category": "Folder/category used when applying reviewed sprite outputs.",
-    "review_bbox": "Manual source rectangle as x, y, width, height.",
-    "review_pivot": "Manual pivot coordinates from 0.0 to 1.0 in sprite-local space.",
-    "review_status": "Review state used for filtering and apply-output behavior.",
-    "review_flags": "Comma-separated review flags for audit notes and report filtering.",
-    "apply_edit": "Apply the edited fields to the selected sprite in project memory.",
-    "approve": "Mark the selected sprite approved and clear review flags.",
-    "reject": "Mark the selected sprite rejected so Apply Outputs skips it.",
-    "split_boxes": "Split boxes in x,y,width,height format separated by semicolons.",
-    "split_selected": "Create child sprites from the split boxes and reject the original source sprite.",
-    "merge_selected": "Merge selected sprites into one union bbox and reject the sources.",
-    "studio_refresh": "Rebuild the studio dashboard, review queue, health score, and asset search rows from the loaded project.",
-    "studio_review_apply": "Run the one-click studio pass: auto naming, collision profiles, reviewed crops, import plans, health, and dashboard files.",
-    "studio_auto_name": "Apply the taxonomy naming pattern to active sprites and keep rejected sprites untouched.",
-    "studio_train_preset": "Write a trained preset suggestion beside the loaded project using categories, settings, and review corrections.",
-    "studio_diff_project": "Compare the loaded project against another project file and write a studio_diff.json rerun comparison.",
-    "studio_generate_profiles": "Generate collision, anchor, pivot, atlas, and engine import plan metadata for the loaded project.",
-    "studio_dashboard": "Current production readiness summary with health score, status counts, and review queue size.",
-    "studio_queue": "Priority review queue sorted by low confidence, review flags, duplicate names, and needs-review status.",
-    "studio_asset_query": "Search the asset browser by sprite name, category, source sheet, status, kind, or review flags.",
-    "studio_asset_list": "Searchable asset browser rows for quickly finding sprites by taxonomy, status, and review notes.",
-    "studio_taxonomy_pattern": "Naming template used by Auto Name and Review + Apply, such as category, source sheet, and index tokens.",
-    "editor_load_sprite": "Load one sprite PNG into the non-destructive editor session for palette, color, and autotile operations.",
-    "editor_save_package": "Save the edited sprite plus an edit manifest and extracted palette JSON package.",
-    "editor_fullscreen": "Expand the Editor into a focused workspace inside the app window.",
-    "editor_save_project": "Save the current edited sprite or animation frames back into the loaded SpriteCut project outputs.",
-    "editor_canvas": "Edit pixels with the active tool. Mouse wheel zooms, space-drag pans, and the status bar shows cursor details.",
-    "editor_tool_scope": "Choose whether an edit affects the active layer, selected region, current frame, selected frames, or all frames.",
-    "editor_tool_pencil": "Draw pixel-perfect strokes with the foreground color. Shortcut: B.",
-    "editor_tool_eraser": "Erase pixels on the active layer to transparent. Shortcut: E.",
-    "editor_tool_eyedropper": "Pick a visible canvas color into the active color field. Shortcut: I.",
-    "editor_tool_fill": "Flood-fill connected pixels with the foreground color. Shortcut: G.",
-    "editor_tool_line": "Drag to draw a straight line. Shortcut: L.",
-    "editor_tool_rect_fill": "Drag to draw a filled rectangle. Shortcut: R.",
-    "editor_tool_rect_outline": "Drag to draw a rectangle outline. Shortcut: Shift+R.",
-    "editor_tool_select_move": "Select pixels or move the selected region. Shortcut: M.",
-    "editor_tool_crop": "Drag a crop rectangle and apply it to the current sprite or frame. Shortcut: C.",
-    "editor_tool_pan": "Move around the zoomed canvas without changing pixels. Shortcut: H or space-drag.",
-    "editor_tool_zoom": "Zoom the canvas around the cursor with mouse wheel or shortcut keys.",
-    "editor_tool_palette_swap": "Replace one color with another in the current editing scope.",
-    "editor_tool_hue_shift": "Shift hue, saturation, and value for the current editing scope.",
-    "editor_tool_palette_variants": "Generate alternate colorway previews for review.",
-    "editor_tool_flip": "Flip the current sprite, frame, or selected editing scope.",
-    "editor_tool_rotate": "Rotate the current sprite, frame, or selected editing scope by 90 degrees.",
-    "editor_tool_resize": "Resize the current sprite or frame with nearest-neighbor scaling.",
-    "editor_layers_panel": "Manage layer order, active layer, visibility, opacity, duplication, and deletion.",
-    "editor_palette_panel": "Inspect colors, pick foreground/background colors, swap palettes, and generate variants.",
-    "editor_help_panel": "Read current tool directions, shortcuts, and quick-start guidance.",
-    "editor_timeline_panel": "Preview and edit frames from a loaded character animation clip.",
-    "editor_palette_summary": "Palette summary for the current edited sprite, sorted by dominant visible colors.",
-    "editor_source_color": "Source color to replace, written as a hex color such as #ff0000.",
-    "editor_target_color": "Target replacement color, written as a hex color such as #00ffff.",
-    "editor_swap_colors": "Replace the source color with the target color while preserving transparent pixels.",
-    "editor_undo": "Undo the most recent non-destructive sprite edit in the current editor session.",
-    "editor_redo": "Redo the most recently undone sprite edit in the current editor session.",
-    "editor_crop_rect": "Crop rectangle for the current sprite as x,y,width,height or four space-separated numbers.",
-    "editor_resize_size": "Resize target for the current sprite as width x height or two comma-separated numbers.",
-    "editor_flip_axis": "Flip the current sprite horizontally or vertically using nearest-neighbor pixel handling.",
-    "editor_crop": "Apply the crop rectangle to all layers in the current editor session.",
-    "editor_resize": "Resize all layers in the current editor session using nearest-neighbor pixel handling.",
-    "editor_flip": "Flip all layers in the current editor session across the selected axis.",
-    "editor_rotate": "Rotate all layers in the current editor session by 90 degrees.",
-    "editor_hue_degrees": "Hue rotation in degrees for color-wheel style sprite recoloring.",
-    "editor_hue_shift": "Apply hue, saturation, and value changes to the current sprite session.",
-    "editor_color_wheel": "Preview color harmony suggestions such as complementary, analogous, triadic, or tetradic.",
-    "editor_palette_variants": "Write colorway PNGs, manifest JSON, and contact sheet using the selected harmony colors.",
-    "editor_autotile_name": "Name used when writing a 16-mask cardinal autotile sheet and rule metadata.",
-    "editor_generate_autotile": "Generate a 16-variant autotile package from the current edited sprite.",
-    "editor_ide_api": "Show IDE-callable JSON actions for scripts, editors, and external tools.",
-}
-
-
-def tooltip_text(key: str) -> str:
-    return TOOLTIP_TEXT[key]
-
-
-@dataclass
-class CutterUiSettings:
-    input_path: Path
-    auto_detect_all: bool = True
-    include_archives: bool = False
-    out_name: str = "_organized_sprites"
-    mode: str = "auto"
-    animation_names: str = ""
-    animation_frame_mode: str = "fixed"
-    animation_anchor: str = "bottom-center"
-    animation_min_frames: int = 3
-    animation_fps: int = 12
-    pivot_debug: bool = False
-    pack_atlases: bool = True
-    atlas_size: int = 2048
-    atlas_padding: int = 2
-    atlas_allow_rotation: bool = False
-    engine_exports: list[str] = field(default_factory=lambda: ["unity", "godot", "unreal"])
-    alpha_threshold: int = 10
-    white_threshold: int = 250
-    white_tolerance: int = 8
-    dark_artifact_threshold: int = 45
-    min_sprite_pixels: int = 24
-    min_sprite_width: int = 3
-    min_sprite_height: int = 3
-    crop_padding: int = 1
-    on_error: str = "skip"
-
-
-@dataclass(frozen=True)
-class RunOutputTargets:
-    output_dir: Path
-    report_path: Path
-    project_path: Path
-
-
-def discover_sheet_files(root: Path) -> list[Path]:
-    if root.is_file():
-        return [root] if root.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS else []
-
-    files: list[Path] = []
-    for path in root.rglob("*"):
-        if "_organized_sprites" in path.parts or is_inside_spritecut_output(path, root):
-            continue
-        if path.is_file() and path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS:
-            files.append(path)
-    return sorted(files, key=lambda item: item.name.lower())
-
-
-def build_cutter_command(settings: CutterUiSettings, python_executable: str = sys.executable) -> list[str]:
-    command = [
-        python_executable,
-        str(SCRIPT_PATH),
-        "--out-name",
-        settings.out_name,
-    ]
-
-    if settings.auto_detect_all:
-        command.append("--auto-detect-all")
-        if settings.include_archives:
-            command.append("--include-archives")
-        if settings.animation_names.strip():
-            command.extend(["--animation-names", settings.animation_names.strip()])
-        command.append(str(settings.input_path))
-        return command
-
-    command.extend(
-        [
-            "--manual-defaults",
-            "--mode",
-            settings.mode,
-            "--animation-frame-mode",
-            settings.animation_frame_mode,
-            "--animation-anchor",
-            settings.animation_anchor,
-            "--animation-min-frames",
-            str(settings.animation_min_frames),
-            "--animation-fps",
-            str(settings.animation_fps),
-            "--alpha-threshold",
-            str(settings.alpha_threshold),
-            "--white-threshold",
-            str(settings.white_threshold),
-            "--white-tolerance",
-            str(settings.white_tolerance),
-            "--dark-artifact-threshold",
-            str(settings.dark_artifact_threshold),
-            "--min-sprite-pixels",
-            str(settings.min_sprite_pixels),
-            "--min-sprite-width",
-            str(settings.min_sprite_width),
-            "--min-sprite-height",
-            str(settings.min_sprite_height),
-            "--crop-padding",
-            str(settings.crop_padding),
-            "--on-error",
-            settings.on_error,
-        ]
-    )
-
-    if settings.animation_names.strip():
-        command.extend(["--animation-names", settings.animation_names.strip()])
-    if settings.include_archives:
-        command.append("--include-archives")
-    if settings.pivot_debug:
-        command.append("--pivot-debug")
-    if settings.pack_atlases:
-        command.extend(["--pack-atlases", "--atlas-size", str(settings.atlas_size), "--atlas-padding", str(settings.atlas_padding)])
-        if settings.atlas_allow_rotation:
-            command.append("--atlas-allow-rotation")
-    if settings.engine_exports:
-        command.extend(["--engine-exports", ",".join(settings.engine_exports)])
-
-    command.append(str(settings.input_path))
-    return command
-
-
-def settings_to_preset_dict(settings: CutterUiSettings) -> dict[str, object]:
-    return {
-        "out_name": settings.out_name,
-        "auto_detect_all": settings.auto_detect_all,
-        "include_archives": settings.include_archives,
-        "mode": settings.mode,
-        "animation_names": settings.animation_names,
-        "animation_frame_mode": settings.animation_frame_mode,
-        "animation_anchor": settings.animation_anchor,
-        "animation_min_frames": settings.animation_min_frames,
-        "animation_fps": settings.animation_fps,
-        "pivot_debug": settings.pivot_debug,
-        "pack_atlases": settings.pack_atlases,
-        "atlas_size": settings.atlas_size,
-        "atlas_padding": settings.atlas_padding,
-        "atlas_allow_rotation": settings.atlas_allow_rotation,
-        "engine_exports": settings.engine_exports,
-        "alpha_threshold": settings.alpha_threshold,
-        "white_threshold": settings.white_threshold,
-        "white_tolerance": settings.white_tolerance,
-        "dark_artifact_threshold": settings.dark_artifact_threshold,
-        "min_sprite_pixels": settings.min_sprite_pixels,
-        "min_sprite_width": settings.min_sprite_width,
-        "min_sprite_height": settings.min_sprite_height,
-        "crop_padding": settings.crop_padding,
-        "on_error": settings.on_error,
-    }
-
-
-def settings_from_preset_dict(data: dict[str, object], input_path: Path) -> CutterUiSettings:
-    exports = data.get("engine_exports", [])
-    if isinstance(exports, str):
-        engine_exports = [part.strip() for part in exports.split(",") if part.strip()]
-    elif isinstance(exports, list):
-        engine_exports = [str(part) for part in exports]
-    else:
-        engine_exports = []
-
-    return CutterUiSettings(
-        input_path=input_path,
-        auto_detect_all=bool(data.get("auto_detect_all", False)),
-        include_archives=bool(data.get("include_archives", False)),
-        out_name=str(data.get("out_name", "_organized_sprites")),
-        mode=str(data.get("mode", "auto")),
-        animation_names=str(data.get("animation_names", "")),
-        animation_frame_mode=str(data.get("animation_frame_mode", "fixed")),
-        animation_anchor=str(data.get("animation_anchor", "bottom-center")),
-        animation_min_frames=int(data.get("animation_min_frames", 3)),
-        animation_fps=int(data.get("animation_fps", 8)),
-        pivot_debug=bool(data.get("pivot_debug", False)),
-        pack_atlases=bool(data.get("pack_atlases", False)),
-        atlas_size=int(data.get("atlas_size", 2048)),
-        atlas_padding=int(data.get("atlas_padding", 2)),
-        atlas_allow_rotation=bool(data.get("atlas_allow_rotation", False)),
-        engine_exports=engine_exports,
-        alpha_threshold=int(data.get("alpha_threshold", 10)),
-        white_threshold=int(data.get("white_threshold", 250)),
-        white_tolerance=int(data.get("white_tolerance", 8)),
-        dark_artifact_threshold=int(data.get("dark_artifact_threshold", 45)),
-        min_sprite_pixels=int(data.get("min_sprite_pixels", 24)),
-        min_sprite_width=int(data.get("min_sprite_width", 3)),
-        min_sprite_height=int(data.get("min_sprite_height", 3)),
-        crop_padding=int(data.get("crop_padding", 1)),
-        on_error=str(data.get("on_error", "skip")),
-    )
-
-
-def save_preset_file(settings: CutterUiSettings, path: Path) -> None:
-    path.write_text(json.dumps(settings_to_preset_dict(settings), indent=2), encoding="utf-8")
-
-
-def load_preset_file(path: Path, input_path: Path) -> CutterUiSettings:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError("Preset file must contain a JSON object.")
-    return settings_from_preset_dict(data, input_path)
-
-
-def builtin_preset_names() -> list[str]:
-    return sorted(BUILT_IN_PRESETS)
-
-
-def settings_from_builtin_preset(name: str, input_path: Path) -> CutterUiSettings:
-    if name not in BUILT_IN_PRESETS:
-        raise ValueError(f"Unknown built-in preset: {name}")
-    return settings_from_preset_dict(dict(BUILT_IN_PRESETS[name]), input_path)
-
-
-def output_targets_from_cli_line(line: str) -> RunOutputTargets | None:
-    if not line.startswith("OUTPUT="):
-        return None
-    output_text = line.split("=", 1)[1].strip()
-    if not output_text:
-        return None
-    output_dir = Path(output_text.replace("\\", "/"))
-    return RunOutputTargets(
-        output_dir=output_dir,
-        report_path=output_dir / "manifest" / "report.html",
-        project_path=output_dir / "project.spritecut.json",
-    )
-
-
-def summarize_cli_output_line(line: str) -> list[str]:
-    targets = output_targets_from_cli_line(line)
-    if targets is None:
-        return [line]
-    return [
-        line,
-        f"Report: {targets.report_path}",
-        f"Open output folder: {targets.output_dir}",
-    ]
-
-
-def render_detection_preview(image_path: Path, boxes: list[tuple[int, int, int, int]], max_size: tuple[int, int] = (760, 620)) -> Image.Image:
-    image = Image.open(image_path).convert("RGBA")
-    draw = ImageDraw.Draw(image)
-    for index, (x, y, width, height) in enumerate(boxes, start=1):
-        draw.rectangle((x, y, x + width - 1, y + height - 1), outline=(255, 90, 60, 255), width=2)
-        draw.text((x + 3, y + 3), str(index), fill=(255, 90, 60, 255))
-    image.thumbnail(max_size, Image.Resampling.NEAREST)
-    return image.copy()
-
-
-def apply_preview_accessibility_mode(image: Image.Image, mode: str) -> Image.Image:
-    if mode == "normal":
-        return image.copy()
-
-    rgba = image.convert("RGBA")
-    if mode == "grayscale":
-        return rgba.convert("LA").convert("RGBA")
-
-    import numpy as np
-
-    matrices = {
-        "protanopia": np.array(
-            [
-                [0.567, 0.433, 0.000],
-                [0.558, 0.442, 0.000],
-                [0.000, 0.242, 0.758],
-            ]
-        ),
-        "deuteranopia": np.array(
-            [
-                [0.625, 0.375, 0.000],
-                [0.700, 0.300, 0.000],
-                [0.000, 0.300, 0.700],
-            ]
-        ),
-        "tritanopia": np.array(
-            [
-                [0.950, 0.050, 0.000],
-                [0.000, 0.433, 0.567],
-                [0.000, 0.475, 0.525],
-            ]
-        ),
-    }
-    matrix = matrices.get(mode)
-    if matrix is None:
-        return image.copy()
-
-    pixels = np.array(rgba).astype(np.float32)
-    rgb = pixels[:, :, :3]
-    transformed = rgb @ matrix.T
-    pixels[:, :, :3] = np.clip(transformed, 0, 255)
-    return Image.fromarray(pixels.astype(np.uint8), "RGBA")
-
-
-def detection_settings_from_ui(settings: CutterUiSettings | None) -> DetectionSettings:
-    if settings is None:
-        return DetectionSettings()
-    return DetectionSettings(
-        alpha_threshold=max(0, settings.alpha_threshold),
-        white_threshold=max(0, min(255, settings.white_threshold)),
-        white_tolerance=max(0, settings.white_tolerance),
-        dark_artifact_threshold=max(0, settings.dark_artifact_threshold),
-        min_sprite_pixels=max(1, settings.min_sprite_pixels),
-        min_sprite_width=max(1, settings.min_sprite_width),
-        min_sprite_height=max(1, settings.min_sprite_height),
-        crop_padding=max(0, settings.crop_padding),
-    )
-
-
-def detect_preview_boxes(image_path: Path, settings: CutterUiSettings | None = None) -> list[tuple[int, int, int, int]]:
-    import numpy as np
-
-    image = Image.open(image_path).convert("RGBA")
-    rgba = np.array(image)
-    detection_settings = detection_settings_from_ui(settings)
-    background = detect_background(rgba[:, :, :3], rgba[:, :, 3], detection_settings)
-    foreground = ~background
-    labels, stats, num = grouped_components(foreground)
-    detections = extract_detections(foreground, labels, stats, num, detection_settings)
-    return [(detection.x, detection.y, detection.width, detection.height) for detection in detections]
-
-
-def parse_flags_text(value: str) -> list[str]:
-    return [part.strip() for part in re.split(r"[,|]", value) if part.strip()]
-
-
-def parse_bbox_fields(x: str, y: str, width: str, height: str) -> dict[str, int]:
-    bbox = {"x": int(x), "y": int(y), "width": int(width), "height": int(height)}
-    if bbox["width"] <= 0 or bbox["height"] <= 0:
-        raise ValueError("Bounding box width and height must be positive.")
-    return bbox
-
-
-def parse_pivot_fields(x: str, y: str) -> dict[str, float | str]:
-    pivot_x = float(x)
-    pivot_y = float(y)
-    if not 0.0 <= pivot_x <= 1.0 or not 0.0 <= pivot_y <= 1.0:
-        raise ValueError("Pivot x and y must be between 0.0 and 1.0.")
-    return {"x": pivot_x, "y": pivot_y, "method": "manual"}
-
-
-def format_project_sprite_label(sprite: dict[str, object]) -> str:
-    display_name = str(sprite.get("display_name") or sprite.get("id") or "sprite")
-    status = str(sprite.get("review_status", "unknown"))
-    confidence = float(sprite.get("confidence", 0.0))
-    flags = sprite.get("review_flags", [])
-    flags_text = ",".join(str(flag) for flag in flags) if isinstance(flags, list) and flags else "none"
-    return f"{display_name} | {status} | {confidence:.2f} | {flags_text}"
-
-
-def project_sprite_preview_path_text(sprite: dict[str, object]) -> str:
-    applied_output = str(sprite.get("applied_output_file") or "").strip()
-    if applied_output:
-        return applied_output
-    return str(sprite.get("output_file") or "").strip()
-
-
-def project_sprite_rows(project: dict[str, object], status_filter: str = "all", query: str = "") -> list[dict[str, object]]:
-    sprites = project.get("sprites", [])
-    if not isinstance(sprites, list):
-        return []
-    normalized_query = query.strip().lower()
-    rows: list[dict[str, object]] = []
-    for sprite in sprites:
-        if not isinstance(sprite, dict):
-            continue
-        status = str(sprite.get("review_status", "unknown"))
-        if status_filter != "all" and status != status_filter:
-            continue
-        haystack = " ".join(
-            [
-                str(sprite.get("id", "")),
-                str(sprite.get("display_name", "")),
-                str(sprite.get("category", "")),
-                " ".join(str(flag) for flag in sprite.get("review_flags", []) if isinstance(flag, str)),
-            ]
-        ).lower()
-        if normalized_query and normalized_query not in haystack:
-            continue
-        rows.append(sprite)
-    return rows
-
-
-def studio_default_taxonomy_rules(pattern: str) -> dict[str, object]:
-    normalized = pattern.strip() or "{category}_{source_sheet}_{index:03d}"
-    return {"display_name_pattern": normalized, "include_rejected": False}
-
-
-def studio_project_diff_text(old_project: dict[str, object], new_project: dict[str, object]) -> str:
-    diff = diff_projects(old_project, new_project)  # type: ignore[arg-type]
-    summary = diff.get("summary", {})
-    if not isinstance(summary, dict):
-        summary = {}
-    return (
-        "Diff "
-        f"added={int(summary.get('added', 0))} "
-        f"removed={int(summary.get('removed', 0))} "
-        f"changed={int(summary.get('changed', 0))}"
-    )
-
-
-def studio_dashboard_text(project: dict[str, object]) -> str:
-    health = batch_health_score(project)  # type: ignore[arg-type]
-    dashboard = build_review_dashboard(project)  # type: ignore[arg-type]
-    counts = health.get("counts", {})
-    if not isinstance(counts, dict):
-        counts = {}
-    return (
-        f"Health {health['grade']} {health['score']}/100 | "
-        f"queue={len(dashboard['queue'])} | "
-        f"approved={int(counts.get('approved', 0))} | "
-        f"needs_review={int(counts.get('needs_review', 0))} | "
-        f"rejected={int(counts.get('rejected', 0))}"
-    )
-
-
-def studio_queue_labels(project: dict[str, object], limit: int = 50) -> list[str]:
-    dashboard = build_review_dashboard(project)  # type: ignore[arg-type]
-    labels: list[str] = []
-    for item in dashboard.get("queue", [])[:limit]:
-        if not isinstance(item, dict):
-            continue
-        reasons = item.get("reasons", [])
-        reason_text = ", ".join(str(reason) for reason in reasons) if isinstance(reasons, list) else str(reasons)
-        labels.append(f"{item.get('sprite_id', '')} | p{item.get('priority', 0)} | {reason_text}")
-    return labels
-
-
-def studio_asset_rows(project: dict[str, object], query: str = "", status_filter: str = "all", category_filter: str = "all") -> list[dict[str, object]]:
-    status = None if status_filter == "all" else status_filter
-    category = None if category_filter == "all" else category_filter
-    index = asset_browser_index(project)  # type: ignore[arg-type]
-    return search_assets(index, query, status=status, category=category)  # type: ignore[return-value]
-
-
-def studio_asset_label(item: dict[str, object]) -> str:
-    flags = item.get("flags", [])
-    flags_text = ",".join(str(flag) for flag in flags) if isinstance(flags, list) and flags else "none"
-    return (
-        f"{item.get('display_name', item.get('sprite_id', 'sprite'))} | "
-        f"{item.get('category', 'sprites')} | "
-        f"{item.get('status', 'unknown')} | "
-        f"{flags_text}"
-    )
-
-
-def editor_palette_summary(image: Image.Image, max_colors: int = 8) -> str:
-    palette = extract_palette(image, max_colors=max_colors)
-    colors = ", ".join(f"{entry['hex']}:{entry['count']}" for entry in palette[:max_colors])
-    return f"colors={len(palette)} | {colors or 'empty'}"
-
-
-def editor_color_wheel_preview(base: str, harmony: str = "complementary") -> str:
-    wheel = color_wheel_palette(base, harmony=harmony, steps=5)
-    return f"{wheel['harmony']} | colors={', '.join(wheel['colors'])} | ramp={', '.join(wheel['ramp'])}"
-
-
-def _editor_numbers(text: str, expected: int, label: str) -> tuple[int, ...]:
-    parts = [part for part in re.split(r"[,\sxX]+", text.strip()) if part]
-    if len(parts) != expected:
-        raise ValueError(f"{label} must contain {expected} numbers.")
-    values = tuple(int(part) for part in parts)
-    if any(value < 0 for value in values):
-        raise ValueError(f"{label} cannot contain negative values.")
-    return values
-
-
-def editor_parse_rect_text(text: str) -> tuple[int, int, int, int]:
-    x, y, width, height = _editor_numbers(text, 4, "Crop rectangle")
-    if width < 1 or height < 1:
-        raise ValueError("Crop rectangle width and height must be at least 1.")
-    return x, y, width, height
-
-
-def editor_parse_size_text(text: str) -> tuple[int, int]:
-    width, height = _editor_numbers(text, 2, "Resize size")
-    if width < 1 or height < 1:
-        raise ValueError("Resize width and height must be at least 1.")
-    return width, height
-
-
-def editor_variant_package(
-    session: SpriteEditSession,
-    output_dir: Path,
-    *,
-    name: str,
-    base_color: str,
-    harmony: str,
-) -> dict[str, Any]:
-    wheel = color_wheel_palette(base_color, harmony=harmony, steps=5)
-    colors = [str(color) for color in wheel.get("colors", [])]
-    targets = colors[:2] if len(colors) >= 2 else colors
-    variants = [
-        {"name": f"{harmony}_{index + 1}", "swaps": {base_color: target}}
-        for index, target in enumerate(targets)
-    ]
-    return write_palette_variant_package(session.composite(), output_dir, name=name, variants=variants)
-
-
-def editor_callable_actions() -> list[str]:
-    return ["sprite.edit", "sprite.batch_edit", "palette.extract", "palette.swap", "palette.hue_shift", "palette.variants", "autotile.generate"]
-
-
-def default_recent_projects_state_path() -> Path:
-    return Path.home() / ".spritecut" / "recent_projects.json"
-
-
-def load_recent_projects(state_file: Path | None = None, *, limit: int = 8) -> list[Path]:
-    state_path = state_file or default_recent_projects_state_path()
-    if not state_path.exists():
-        return []
-    try:
-        data = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
-    raw_paths = data.get("projects", []) if isinstance(data, dict) else []
-    if not isinstance(raw_paths, list):
-        return []
-    projects: list[Path] = []
-    seen: set[str] = set()
-    for raw_path in raw_paths:
-        path = Path(str(raw_path))
-        key = str(path.resolve()).lower() if path.exists() else str(path).lower()
-        if key in seen or not path.exists():
-            continue
-        seen.add(key)
-        projects.append(path)
-        if len(projects) >= limit:
-            break
-    return projects
-
-
-def remember_recent_project(state_file: Path | None, project_path: Path, *, limit: int = 8) -> list[Path]:
-    state_path = state_file or default_recent_projects_state_path()
-    project = project_path.resolve()
-    existing = [path for path in load_recent_projects(state_path, limit=limit) if path.resolve() != project]
-    projects = [project, *existing][:limit]
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps({"projects": [str(path) for path in projects]}, indent=2), encoding="utf-8")
-    return projects
-
-
-def create_ui_sample_pack(output_root: Path) -> Path:
-    output_root.mkdir(parents=True, exist_ok=True)
-    expected_path = create_golden_pack(output_root)
-    alias_path = output_root / "expected.json"
-    if expected_path != alias_path:
-        alias_path.write_text(expected_path.read_text(encoding="utf-8"), encoding="utf-8")
-    return output_root
-
-
-def project_animation_clip_names(project: dict[str, object]) -> list[str]:
-    clips = project.get("animation_clips", [])
-    if not isinstance(clips, list):
-        return []
-    names: list[str] = []
-    for clip in clips:
-        if isinstance(clip, dict) and clip.get("name"):
-            names.append(str(clip["name"]))
-    return names
-
-
-def project_animation_clip_frames(project: dict[str, object], clip_name: str) -> list[dict[str, object]]:
-    clips = project.get("animation_clips", [])
-    if not isinstance(clips, list):
-        return []
-    for clip in clips:
-        if isinstance(clip, dict) and clip.get("name") == clip_name:
-            frames = clip.get("frames", [])
-            return [frame for frame in frames if isinstance(frame, dict)] if isinstance(frames, list) else []
-    return []
-
-
-def scale_bbox_for_canvas(bbox: dict[str, int], image_size: tuple[int, int], canvas_size: tuple[int, int]) -> dict[str, object]:
-    image_width, image_height = image_size
-    canvas_width, canvas_height = canvas_size
-    scale = min(canvas_width / max(1, image_width), canvas_height / max(1, image_height))
-    display_width = int(round(image_width * scale))
-    display_height = int(round(image_height * scale))
-    offset_x = (canvas_width - display_width) // 2
-    offset_y = (canvas_height - display_height) // 2
-    x0 = int(round(offset_x + bbox["x"] * scale))
-    y0 = int(round(offset_y + bbox["y"] * scale))
-    x1 = int(round(offset_x + (bbox["x"] + bbox["width"]) * scale))
-    y1 = int(round(offset_y + (bbox["y"] + bbox["height"]) * scale))
-    return {"rect": (x0, y0, x1, y1), "scale": scale, "offset": (offset_x, offset_y)}
-
-
-def translate_bbox_by_canvas_delta(bbox: dict[str, int], dx: int, dy: int, scale: float) -> dict[str, int]:
-    safe_scale = scale if scale > 0 else 1.0
-    return {
-        "x": int(round(bbox["x"] + dx / safe_scale)),
-        "y": int(round(bbox["y"] + dy / safe_scale)),
-        "width": int(bbox["width"]),
-        "height": int(bbox["height"]),
-    }
-
-
-def cancel_button_state(has_active_process: bool) -> str:
-    return "normal" if has_active_process else "disabled"
-
-
-class DpgValue:
-    def __init__(self, value: Any = None) -> None:
-        self._value = value
-        self.tag: str | int | None = None
-        self._callbacks: list[Callable[..., object]] = []
-
-    def bind(self, tag: str | int) -> "DpgValue":
-        self.tag = tag
-        if dpg is not None and dpg.does_item_exist(tag):
-            dpg.set_value(tag, self._value)
-        return self
-
-    def get(self) -> Any:
-        if dpg is not None and self.tag is not None and dpg.does_item_exist(self.tag):
-            self._value = dpg.get_value(self.tag)
-        return self._value
-
-    def set(self, value: Any) -> None:
-        self._value = value
-        if dpg is not None and self.tag is not None and dpg.does_item_exist(self.tag):
-            dpg.set_value(self.tag, value)
-        for callback in list(self._callbacks):
-            callback(None, None, None)
-
-    def trace_add(self, _mode: str, callback: Callable[..., object]) -> None:
-        self._callbacks.append(callback)
-
-
-class DpgSelectableList:
-    def __init__(self, parent: str | int, *, multi: bool = False, on_select: Callable[[], object] | None = None) -> None:
-        self.parent = parent
-        self.multi = multi
-        self.on_select = on_select
-        self.labels: list[str] = []
-        self.tags: list[str] = []
-        self.selected: set[int] = set()
-
-    def clear(self) -> None:
-        self.labels = []
-        self.tags = []
-        self.selected = set()
-        if dpg is not None and dpg.does_item_exist(self.parent):
-            dpg.delete_item(self.parent, children_only=True)
-
-    def set_items(self, labels: list[str], *, select_first: bool = False) -> None:
-        self.clear()
-        self.labels = labels
-        if dpg is None or not dpg.does_item_exist(self.parent):
-            return
-        for index, label in enumerate(labels):
-            tag = f"{self.parent}_item_{index}_{uuid4().hex}"
-            self.tags.append(tag)
-            dpg.add_selectable(
-                label=label,
-                tag=tag,
-                parent=self.parent,
-                callback=self._on_select,
-                user_data=index,
-                span_columns=True,
-            )
-        if select_first and labels:
-            self.select(0)
-
-    def _on_select(self, _sender: object, app_data: object, user_data: object) -> None:
-        index = int(user_data)
-        is_selected = bool(app_data)
-        if self.multi:
-            if is_selected:
-                self.selected.add(index)
-            else:
-                self.selected.discard(index)
-        else:
-            self.selected = {index} if is_selected else set()
-            if is_selected and dpg is not None:
-                for other_index, tag in enumerate(self.tags):
-                    if other_index != index and dpg.does_item_exist(tag):
-                        dpg.set_value(tag, False)
-        if self.on_select is not None:
-            self.on_select()
-
-    def select(self, index: int, *, additive: bool = False) -> None:
-        if index < 0 or index >= len(self.labels):
-            return
-        if not self.multi or not additive:
-            self.selected = {index}
-            if dpg is not None:
-                for other_index, tag in enumerate(self.tags):
-                    if dpg.does_item_exist(tag):
-                        dpg.set_value(tag, other_index == index)
-        else:
-            self.selected.add(index)
-            if dpg is not None and index < len(self.tags) and dpg.does_item_exist(self.tags[index]):
-                dpg.set_value(self.tags[index], True)
-
-    def selected_indices(self) -> list[int]:
-        return sorted(index for index in self.selected if 0 <= index < len(self.labels))
-
-
-class ToolTip:
-    def __init__(self, item: str | int, text: str) -> None:
-        self.item = item
-        self.text = text
-        if dpg is not None and dpg.does_item_exist(item):
-            with dpg.tooltip(item):
-                dpg.add_text(text, wrap=320)
-
-
-def attach_tooltip(item: str | int, key: str) -> str | int:
-    ToolTip(item, tooltip_text(key))
-    return item
-
-
-def _require_dearpygui() -> None:
-    if dpg is None:
-        raise RuntimeError("Dear PyGUI is required for the desktop UI. Install it with: pip install dearpygui")
-
-
-def _image_texture_data(image: Image.Image) -> tuple[int, int, list[float]]:
-    import numpy as np
-
-    rgba = image.convert("RGBA")
-    data = (np.asarray(rgba, dtype=np.float32) / 255.0).ravel().tolist()
-    return rgba.width, rgba.height, data
-
-
-class SpriteToolPanel:
-    def __init__(self, app: "SpriteSheetToolUi") -> None:
-        self.app = app
-
-    def build(self) -> None:
-        raise NotImplementedError
-
-
-class LeftInputPanel(SpriteToolPanel):
-    def build(self) -> None:
-        app = self.app
-        dpg.add_text("Input")
-        app._add_input_text("##input_path", app.input_path, "input_path", "input_path", width=-1)
-        app._add_button("Add Folder", app.choose_folder, "add_folder", width=-1)
-        app._add_button("Add File", app.choose_file, "add_file", width=-1)
-        app._add_button("Refresh", app.refresh_files, "refresh_files", width=-1)
-        app._add_button("Sample Pack", app.create_sample_pack_dialog, "create_sample_pack", width=-1)
-        dpg.add_spacer(height=8)
-        dpg.add_text("Sheets")
-        with dpg.child_window(tag="file_list_panel", width=-1, height=470, border=True):
-            pass
-        attach_tooltip("file_list_panel", "file_list")
-        app.file_list = DpgSelectableList("file_list_panel", on_select=app.update_preview)
-
-
-class CenterPreviewPanel(SpriteToolPanel):
-    def build(self) -> None:
-        app = self.app
-        with dpg.group(horizontal=True):
-            dpg.add_text("Preview")
-            dpg.add_spacer(width=330)
-            app._add_combo("##preview_accessibility", app.preview_accessibility_mode, PREVIEW_ACCESSIBILITY_MODES, "preview_accessibility", width=150, callback=lambda *_args: app.update_preview())
-        with dpg.child_window(tag="preview_panel", width=-1, height=520, border=True):
-            dpg.add_text("Choose a folder or file to preview sheets.", tag="preview_placeholder", wrap=620)
-        with dpg.group(horizontal=True):
-            dpg.add_text("Idle", tag="progress_text")
-            app._add_button("Process", app.process, "process", tag="process_button")
-            app._add_button("Reset Log", app.clear_log, "reset_log")
-            app._add_button("Cancel", app.cancel_process, "cancel", tag="cancel_button", enabled=False)
-        with dpg.group(horizontal=True):
-            app._add_button("Open Output", app.open_latest_output, "open_output", tag="open_output_button", enabled=False)
-            app._add_button("Open Report", app.open_latest_report, "open_report", tag="open_report_button", enabled=False)
-            app._add_button("Open Project", app.open_latest_project, "open_project", tag="open_project_button", enabled=False)
-        dpg.add_input_text(tag="log_text", multiline=True, readonly=True, width=-1, height=150, default_value="")
-
-
+    from tools.sprite_ui_settings import CutterUiSettings, RunOutputTargets, builtin_preset_names, build_cutter_command, discover_sheet_files, load_preset_file, output_targets_from_cli_line, save_preset_file, settings_from_builtin_preset, settings_from_preset_dict, settings_to_preset_dict, summarize_cli_output_line
+
+
+from tools.sprite_ui_helpers import (
+    VIEWPORT_SIZE,
+    LEFT_PANEL_WIDTH,
+    CENTER_PANEL_WIDTH,
+    RIGHT_PANEL_WIDTH,
+    PREVIEW_MAX_SIZE,
+    REVIEW_CANVAS_SIZE,
+    REVIEW_IMAGE_PREVIEW_SIZE,
+    UI_ACTION_ERRORS,
+    PROCESS_RUN_ERRORS,
+    TOOLTIP_TEXT,
+    tooltip_text,
+    render_detection_preview,
+    apply_preview_accessibility_mode,
+    detection_settings_from_ui,
+    detect_preview_boxes,
+    parse_flags_text,
+    parse_bbox_fields,
+    parse_pivot_fields,
+    format_project_sprite_label,
+    project_sprite_preview_path_text,
+    project_sprite_rows,
+    studio_default_taxonomy_rules,
+    studio_project_diff_text,
+    studio_dashboard_text,
+    studio_queue_labels,
+    studio_asset_rows,
+    studio_asset_label,
+    editor_palette_summary,
+    editor_color_wheel_preview,
+    editor_parse_rect_text,
+    editor_parse_size_text,
+    editor_variant_package,
+    editor_callable_actions,
+    default_recent_projects_state_path,
+    load_recent_projects,
+    remember_recent_project,
+    create_ui_sample_pack,
+    project_animation_clip_names,
+    project_animation_clip_frames,
+    scale_bbox_for_canvas,
+    translate_bbox_by_canvas_delta,
+    cancel_button_state,
+    request_process_stop,
+)
+from tools.sprite_ui_panels import (
+    CenterPreviewPanel,
+    DetectionSettingsPanel,
+    DpgSelectableList,
+    DpgValue,
+    LeftInputPanel,
+    OutputSettingsPanel,
+    RunSettingsPanel,
+    SpriteToolPanel,
+    ToolTip,
+    _image_texture_data,
+    _require_dearpygui,
+    attach_tooltip,
+)
+from tools.sprite_ui_controllers import (
+    ProcessingController,
+    ReviewProjectController,
+    SpriteEditorController,
+    StudioController,
+    UiController,
+)
 class SettingsTabsPanel(SpriteToolPanel):
     def build(self) -> None:
         app = self.app
@@ -998,65 +158,6 @@ class SettingsTabsPanel(SpriteToolPanel):
                 StudioSettingsPanel(app).build()
             with dpg.tab(label="Editor"):
                 EditorSettingsPanel(app).build()
-
-
-class RunSettingsPanel(SpriteToolPanel):
-    def build(self) -> None:
-        app = self.app
-        dpg.add_text("Output")
-        app._add_input_text("##out_name", app.out_name, "out_name", "out_name", width=-1)
-        app._add_checkbox("Auto detect all", app.auto_detect_all, "auto_detect_all")
-        app._add_checkbox("Include ZIP archives", app.include_archives, "include_archives")
-        dpg.add_text("Built-In Preset")
-        app._add_combo("##builtin_preset", app.builtin_preset, builtin_preset_names(), "builtin_preset", width=-1)
-        app._add_button("Apply Preset", app.apply_builtin_preset, "apply_preset", width=-1)
-        dpg.add_text("Mode")
-        app._add_combo("##mode", app.mode, ["auto", "tileset", "animation"], "mode", width=-1)
-        dpg.add_text("Animation Rows")
-        app._add_input_text("##animation_names", app.animation_names, "animation_names", "animation_names", width=-1)
-        dpg.add_text("Frame Mode")
-        app._add_combo("##animation_frame_mode", app.animation_frame_mode, ["fixed", "trimmed"], "animation_frame_mode", width=-1)
-        dpg.add_text("Anchor")
-        app._add_combo("##animation_anchor", app.animation_anchor, ["bottom-center", "center"], "animation_anchor", width=-1)
-        app._add_input_int("Min Frames", app.animation_min_frames, "animation_min_frames", "animation_min_frames", min_value=1, max_value=24)
-        app._add_input_int("FPS", app.animation_fps, "animation_fps", "animation_fps", min_value=1, max_value=60)
-        app._add_checkbox("Pivot debug previews", app.pivot_debug, "pivot_debug")
-
-
-class DetectionSettingsPanel(SpriteToolPanel):
-    def build(self) -> None:
-        app = self.app
-        controls = [
-            ("Alpha Threshold", app.alpha_threshold, 0, 255, "alpha_threshold"),
-            ("White Threshold", app.white_threshold, 0, 255, "white_threshold"),
-            ("White Tolerance", app.white_tolerance, 0, 64, "white_tolerance"),
-            ("Dark Artifact", app.dark_artifact_threshold, 0, 255, "dark_artifact_threshold"),
-            ("Min Pixels", app.min_sprite_pixels, 1, 10000, "min_sprite_pixels"),
-            ("Min Width", app.min_sprite_width, 1, 512, "min_sprite_width"),
-            ("Min Height", app.min_sprite_height, 1, 512, "min_sprite_height"),
-            ("Crop Padding", app.crop_padding, 0, 64, "crop_padding"),
-        ]
-        for label, variable, min_value, max_value, tooltip_key in controls:
-            app._add_input_int(label, variable, tooltip_key, tooltip_key, min_value=min_value, max_value=max_value)
-        dpg.add_text("On Error")
-        app._add_combo("##on_error", app.on_error, ["skip", "fail"], "on_error", width=-1)
-
-
-class OutputSettingsPanel(SpriteToolPanel):
-    def build(self) -> None:
-        app = self.app
-        app._add_checkbox("Pack atlases", app.pack_atlases, "pack_atlases")
-        app._add_input_int("Atlas Size", app.atlas_size, "atlas_size", "atlas_size", min_value=64, max_value=16384)
-        app._add_input_int("Padding", app.atlas_padding, "atlas_padding", "atlas_padding", min_value=0, max_value=128)
-        app._add_checkbox("Allow rotation", app.atlas_allow_rotation, "atlas_allow_rotation")
-        dpg.add_text("Exports")
-        attach_tooltip(dpg.last_item(), "engine_exports")
-        app._add_checkbox("Unity", app.export_unity, "export_unity")
-        app._add_checkbox("Godot", app.export_godot, "export_godot")
-        app._add_checkbox("Unreal", app.export_unreal, "export_unreal")
-        dpg.add_spacer(height=10)
-        app._add_button("Save Preset", app.save_preset, "save_preset", width=-1)
-        app._add_button("Load Preset", app.load_preset, "load_preset", width=-1)
 
 
 class ReviewSettingsPanel(SpriteToolPanel):
@@ -1077,7 +178,7 @@ class ReviewSettingsPanel(SpriteToolPanel):
             app._add_combo("##review_filter", app.review_status_filter, ["all", "needs_review", "approved", "rejected"], "review_filter", width=120, callback=lambda *_args: app.refresh_project_rows())
             app._add_input_text("##review_query", app.review_query, "review_query", "review_query", width=145, callback=lambda *_args: app.refresh_project_rows())
         with dpg.child_window(tag="review_list_panel", width=-1, height=130, border=True):
-            pass
+            dpg.add_spacer(height=1)
         attach_tooltip("review_list_panel", "review_list")
         app._review_list = DpgSelectableList("review_list_panel", multi=True, on_select=app.populate_review_editor)
         with dpg.child_window(tag="review_image_panel", width=-1, height=140, border=True):
@@ -1141,7 +242,7 @@ class StudioSettingsPanel(SpriteToolPanel):
         attach_tooltip("studio_dashboard_label", "studio_dashboard")
         dpg.add_text("Review Queue")
         with dpg.child_window(tag="studio_queue_panel", width=-1, height=100, border=True):
-            pass
+            dpg.add_spacer(height=1)
         attach_tooltip("studio_queue_panel", "studio_queue")
         app._studio_queue_list = DpgSelectableList("studio_queue_panel")
         dpg.add_text("Asset Browser")
@@ -1149,7 +250,7 @@ class StudioSettingsPanel(SpriteToolPanel):
             app._add_combo("##studio_status_filter", app.studio_status_filter, ["all", "needs_review", "approved", "rejected"], "studio_asset_query", width=120, callback=lambda *_args: app.refresh_studio_panel())
             app._add_input_text("##studio_query", app.studio_query, "studio_query", "studio_asset_query", width=130, callback=lambda *_args: app.refresh_studio_panel())
         with dpg.child_window(tag="studio_asset_panel", width=-1, height=140, border=True):
-            pass
+            dpg.add_spacer(height=1)
         attach_tooltip("studio_asset_panel", "studio_asset_list")
         app._studio_asset_list = DpgSelectableList("studio_asset_panel")
 
@@ -1174,49 +275,6 @@ class EditorSettingsPanel(SpriteToolPanel):
             attach_tooltip("editor_timeline_panel", "editor_timeline_panel")
             app._build_editor_timeline_panel()
         dpg.add_text(str(app.editor_status.get()), tag="editor_status_text", wrap=920)
-
-
-class UiController:
-    def __init__(self, app: "SpriteSheetToolUi") -> None:
-        self.app = app
-
-
-class ProcessingController(UiController):
-    def process(self, *args: object) -> None:
-        self.app._process_impl(*args)
-
-
-class ReviewProjectController(UiController):
-    def refresh_project_rows(self, *args: object) -> None:
-        self.app._refresh_project_rows_impl(*args)
-
-
-class StudioController(UiController):
-    def refresh_studio_panel(self, *args: object) -> None:
-        self.app._refresh_studio_panel_impl(*args)
-
-
-class SpriteEditorController(UiController):
-    def _load_editor_sprite_impl(self, path: Path) -> None:
-        self.app._load_editor_sprite_impl(path)
-
-    def apply_palette_swap(self, *args: object) -> None:
-        self.app._apply_editor_palette_swap_impl(*args)
-
-    def apply_hue_shift(self, *args: object) -> None:
-        self.app._apply_editor_hue_shift_impl(*args)
-
-    def apply_crop(self, *args: object) -> None:
-        self.app._apply_editor_crop_impl(*args)
-
-    def apply_resize(self, *args: object) -> None:
-        self.app._apply_editor_resize_impl(*args)
-
-    def apply_flip(self, *args: object) -> None:
-        self.app._apply_editor_flip_impl(*args)
-
-    def apply_rotate(self, *, clockwise: bool = True) -> None:
-        self.app._apply_editor_rotate_impl(clockwise=clockwise)
 
 
 class SpriteSheetToolUi:
@@ -1345,7 +403,7 @@ class SpriteSheetToolUi:
         dpg.create_context()
         self._build_theme()
         with dpg.texture_registry(tag=self._texture_registry):
-            pass
+            ...  # Textures are registered lazily by _make_texture().
         self._build_file_dialogs()
         self._build_layout()
         self._built = True
@@ -1538,6 +596,7 @@ class SpriteSheetToolUi:
                 self._tick_review_animation()
                 dpg.render_dearpygui_frame()
         finally:
+            self._shutdown_active_process()
             dpg.destroy_context()
             self._built = False
 
@@ -1606,7 +665,7 @@ class SpriteSheetToolUi:
             self.input_path.set(str(output))
             self.refresh_files()
             self.append_log(f"Created sample pack: {output}")
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Sample Pack", str(exc))
 
     def refresh_files(self, *_args: object) -> None:
@@ -1646,7 +705,7 @@ class SpriteSheetToolUi:
             preview = apply_preview_accessibility_mode(preview, str(self.preview_accessibility_mode.get()))
             self._show_image_in_panel("preview_panel", "preview", preview, fallback_text="")
             self.append_log(f"Preview detected {len(boxes)} region(s) in {path.name}.")
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_text_panel("preview_panel", f"Preview failed: {exc}")
             self.append_log(f"Preview failed for {path.name}: {exc}")
 
@@ -1727,7 +786,7 @@ class SpriteSheetToolUi:
             settings = settings_from_builtin_preset(str(self.builtin_preset.get()), input_path=input_path)
             self.apply_settings(settings)
             self.append_log(f"Applied built-in preset: {self.builtin_preset.get()}")
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Built-In Preset", str(exc))
 
     def save_preset(self, *_args: object) -> None:
@@ -1744,7 +803,7 @@ class SpriteSheetToolUi:
         try:
             save_preset_file(settings, path)
             self.append_log(f"Saved preset: {path}")
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Save Preset", str(exc))
 
     def load_preset(self, *_args: object) -> None:
@@ -1760,7 +819,7 @@ class SpriteSheetToolUi:
             settings = load_preset_file(path, input_path=input_path)
             self.apply_settings(settings)
             self.append_log(f"Loaded preset: {path}")
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Load Preset", str(exc))
 
     def load_project_dialog(self, *_args: object) -> None:
@@ -1780,7 +839,7 @@ class SpriteSheetToolUi:
             self.append_log(f"Loaded project: {path}")
             self.refresh_project_rows()
             self.refresh_project_animation_clips()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Load Project", str(exc))
 
     def _remember_recent_project(self, path: Path) -> None:
@@ -1825,7 +884,7 @@ class SpriteSheetToolUi:
             save_project(self.current_project, path)
             self.current_project_path = path
             self.append_log(f"Saved project: {path}")
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Save Project", str(exc))
 
     def apply_project_outputs(self, *_args: object) -> None:
@@ -1842,7 +901,7 @@ class SpriteSheetToolUi:
                 f"output={result['output_dir']}"
             )
             self.refresh_project_rows()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Apply Outputs", str(exc))
 
     def set_editor_fullscreen(self, enabled: bool) -> None:
@@ -2186,7 +1245,7 @@ class SpriteSheetToolUi:
             self.editor_autotile_name.set(path.stem)
             self.append_log(f"Loaded editor sprite: {path}")
             self.refresh_editor_preview()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Load Sprite", str(exc))
 
     def _load_editor_sprite_impl(self, path: Path) -> None:
@@ -2222,7 +1281,7 @@ class SpriteSheetToolUi:
         try:
             result = write_edit_package(self.editor_session, path)
             self.append_log(f"Saved editor package: {result['image']}")
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Save Package", str(exc))
 
     def _directory_action_callback(self, _sender: object, app_data: object, _user_data: object = None) -> None:
@@ -2241,7 +1300,7 @@ class SpriteSheetToolUi:
             self.editor_session.replace_color(source, target)
             self.append_log(f"Palette swap: {source} -> {target}")
             self.refresh_editor_preview()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Palette Swap", str(exc))
 
     def _apply_editor_hue_shift_impl(self, *_args: object) -> None:
@@ -2253,7 +1312,7 @@ class SpriteSheetToolUi:
             self.editor_session.hue_shift(degrees)
             self.append_log(f"Hue shift: {degrees:g} degrees")
             self.refresh_editor_preview()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Hue Shift", str(exc))
 
     def undo_editor_edit(self, *_args: object) -> None:
@@ -2264,7 +1323,7 @@ class SpriteSheetToolUi:
             self.editor_session.undo()
             self.append_log("Undo editor operation")
             self.refresh_editor_preview()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Undo", str(exc))
 
     def redo_editor_edit(self, *_args: object) -> None:
@@ -2275,7 +1334,7 @@ class SpriteSheetToolUi:
             self.editor_session.redo()
             self.append_log("Redo editor operation")
             self.refresh_editor_preview()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Redo", str(exc))
 
     def _apply_editor_crop_impl(self, *_args: object) -> None:
@@ -2287,7 +1346,7 @@ class SpriteSheetToolUi:
             self.editor_session.crop(rect)
             self.append_log(f"Crop: {rect[0]},{rect[1]},{rect[2]},{rect[3]}")
             self.refresh_editor_preview()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Crop", str(exc))
 
     def _apply_editor_resize_impl(self, *_args: object) -> None:
@@ -2299,7 +1358,7 @@ class SpriteSheetToolUi:
             self.editor_session.resize(size)
             self.append_log(f"Resize: {size[0]}x{size[1]}")
             self.refresh_editor_preview()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Resize", str(exc))
 
     def _apply_editor_flip_impl(self, *_args: object) -> None:
@@ -2316,7 +1375,7 @@ class SpriteSheetToolUi:
                 raise ValueError(f"Unsupported flip axis: {axis}")
             self.append_log(f"Flip: {axis}")
             self.refresh_editor_preview()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Flip", str(exc))
 
     def _apply_editor_rotate_impl(self, *, clockwise: bool = True) -> None:
@@ -2327,7 +1386,7 @@ class SpriteSheetToolUi:
             self.editor_session.rotate_90(clockwise=clockwise)
             self.append_log("Rotate: 90 degrees " + ("clockwise" if clockwise else "counter-clockwise"))
             self.refresh_editor_preview()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Rotate", str(exc))
 
     def preview_editor_color_wheel(self, *_args: object) -> None:
@@ -2335,7 +1394,7 @@ class SpriteSheetToolUi:
             base = str(self.editor_target_color.get()).strip() or "#ff0000"
             preview = editor_color_wheel_preview(base, str(self.editor_harmony.get()))
             self.append_log(f"Color wheel: {preview}")
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Color Wheel", str(exc))
 
     def generate_editor_palette_variants(self, *_args: object) -> None:
@@ -2358,7 +1417,7 @@ class SpriteSheetToolUi:
                 harmony=str(self.editor_harmony.get()),
             )
             self.append_log(f"Generated palette variants: {result['contact_sheet']}")
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Palette Variants", str(exc))
 
     def generate_editor_autotile(self, *_args: object) -> None:
@@ -2380,7 +1439,7 @@ class SpriteSheetToolUi:
                 engine=str(self.editor_engine.get()),
             )
             self.append_log(f"Generated auto-tile: {result['sheet']} rules={result['rules']}")
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Auto-Tile", str(exc))
 
     def show_editor_ide_actions(self, *_args: object) -> None:
@@ -2415,7 +1474,7 @@ class SpriteSheetToolUi:
             self.refresh_project_rows()
             if self.current_project_path is not None:
                 save_project(self.current_project, self.current_project_path)
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Auto Name", str(exc))
 
     def generate_studio_profiles(self, *_args: object) -> None:
@@ -2429,7 +1488,7 @@ class SpriteSheetToolUi:
                 save_project(self.current_project, self.current_project_path)
             self.append_log(f"Generated studio profiles: sprites={len(profiles)} engines={','.join(plans) or 'none'}")
             self.refresh_project_rows()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Profiles", str(exc))
 
     def train_studio_preset(self, *_args: object) -> None:
@@ -2442,7 +1501,7 @@ class SpriteSheetToolUi:
             output_path.write_text(json.dumps(preset, indent=2), encoding="utf-8")
             self.append_log(f"Trained preset: {output_path}")
             self.refresh_studio_panel()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Train Preset", str(exc))
 
     def diff_studio_project(self, *_args: object) -> None:
@@ -2463,7 +1522,7 @@ class SpriteSheetToolUi:
             output_path.write_text(json.dumps(diff, indent=2), encoding="utf-8")
             self.append_log(f"{studio_project_diff_text(baseline_project, self.current_project)} -> {output_path}")
             self.refresh_studio_panel()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Diff Project", str(exc))
 
     def review_apply_studio_project(self, *_args: object) -> None:
@@ -2492,7 +1551,7 @@ class SpriteSheetToolUi:
                 f"output={output_dir}"
             )
             self.refresh_project_rows()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Review + Apply", str(exc))
 
     def _refresh_project_rows_impl(self, *_args: object) -> None:
@@ -2600,11 +1659,11 @@ class SpriteSheetToolUi:
 
     def _show_review_image_path(self, path: Path) -> None:
         try:
-            image = Image.open(path).convert("RGBA")
+            with Image.open(path) as source_image:
+                image = source_image.convert("RGBA")
             image.thumbnail(REVIEW_IMAGE_PREVIEW_SIZE, Image.Resampling.NEAREST)
             self._show_image_in_panel("review_image_panel", "review", image.copy())
-            image.close()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_text_panel("review_image_panel", f"Preview failed: {exc}")
 
     def _update_review_source_canvas(self, sprite: dict[str, object]) -> None:
@@ -2619,14 +1678,14 @@ class SpriteSheetToolUi:
             self._draw_canvas_text("Missing source")
             return
         try:
-            image = Image.open(path).convert("RGBA")
+            with Image.open(path) as source_image:
+                image = source_image.convert("RGBA")
             canvas_size = REVIEW_CANVAS_SIZE
             int_bbox = {"x": int(bbox["x"]), "y": int(bbox["y"]), "width": int(bbox["width"]), "height": int(bbox["height"])}
             scaled = scale_bbox_for_canvas(int_bbox, image.size, canvas_size)
             display_size = (int(round(image.width * float(scaled["scale"]))), int(round(image.height * float(scaled["scale"]))))
             image = image.resize(display_size, Image.Resampling.NEAREST)
             texture = self._make_texture("review_source", image.copy())
-            image.close()
             offset_x, offset_y = scaled["offset"]  # type: ignore[misc]
             self.review_canvas_scale = float(scaled["scale"])
             self.review_canvas_rect = scaled["rect"]  # type: ignore[assignment]
@@ -2634,7 +1693,7 @@ class SpriteSheetToolUi:
                 dpg.draw_image(texture, (int(offset_x), int(offset_y)), (int(offset_x) + display_size[0], int(offset_y) + display_size[1]), parent="review_source_canvas")
                 x0, y0, x1, y1 = scaled["rect"]  # type: ignore[misc]
                 dpg.draw_rectangle((int(x0), int(y0)), (int(x1), int(y1)), color=(255, 90, 60, 255), thickness=2, parent="review_source_canvas")
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._draw_canvas_text(f"Canvas failed: {exc}")
 
     def _draw_canvas_text(self, text: str) -> None:
@@ -2644,7 +1703,7 @@ class SpriteSheetToolUi:
     def _current_bbox_fields(self) -> dict[str, int] | None:
         try:
             return parse_bbox_fields(str(self.review_bbox_x.get()), str(self.review_bbox_y.get()), str(self.review_bbox_width.get()), str(self.review_bbox_height.get()))
-        except Exception:
+        except (TypeError, ValueError):
             return None
 
     def _review_canvas_mouse_pos(self) -> tuple[int, int] | None:
@@ -2654,7 +1713,8 @@ class SpriteSheetToolUi:
             mouse_x, mouse_y = dpg.get_mouse_pos(local=False)
             rect_min = dpg.get_item_rect_min("review_source_canvas")
             return int(mouse_x - rect_min[0]), int(mouse_y - rect_min[1])
-        except Exception:
+        except UI_ACTION_ERRORS as exc:
+            self.append_log(f"Review canvas mouse position failed: {exc}")
             return None
 
     def _on_review_canvas_press(self, *_args: object) -> None:
@@ -2758,7 +1818,7 @@ class SpriteSheetToolUi:
             )
             self.append_log(f"Edited sprite: {sprite['id']}")
             self.refresh_project_rows()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Apply Edit", str(exc))
 
     def approve_review_sprite(self, *_args: object) -> None:
@@ -2779,7 +1839,7 @@ class SpriteSheetToolUi:
             action(self.current_project, str(sprite["id"]))  # type: ignore[operator]
             self.append_log(f"{label}: {sprite['id']}")
             self.refresh_project_rows()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error(label, str(exc))
 
     def undo_project_edit(self, *_args: object) -> None:
@@ -2796,7 +1856,7 @@ class SpriteSheetToolUi:
             action(self.current_project)  # type: ignore[operator]
             self.append_log(f"{label} project edit")
             self.refresh_project_rows()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error(label, str(exc))
 
     def _parse_split_boxes(self) -> list[dict[str, int]]:
@@ -2822,7 +1882,7 @@ class SpriteSheetToolUi:
             split_sprite(self.current_project, str(sprite["id"]), self._parse_split_boxes())
             self.append_log(f"Split sprite: {sprite['id']}")
             self.refresh_project_rows()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Split Sprite", str(exc))
 
     def merge_review_sprites(self, *_args: object) -> None:
@@ -2838,7 +1898,7 @@ class SpriteSheetToolUi:
             merge_sprites(self.current_project, sprite_ids, merged_id=merged_id, display_name=merged_id)
             self.append_log(f"Merged sprites: {', '.join(sprite_ids)}")
             self.refresh_project_rows()
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Merge Sprites", str(exc))
 
     def _process_impl(self, *_args: object) -> None:
@@ -2867,7 +1927,7 @@ class SpriteSheetToolUi:
                     self.log_queue.put(summary_line)
             return_code = process.wait()
             self.log_queue.put(f"Process exited with code {return_code}")
-        except Exception as exc:
+        except PROCESS_RUN_ERRORS as exc:
             self.log_queue.put(f"Process failed: {exc}")
         finally:
             self.active_process = None
@@ -2880,7 +1940,18 @@ class SpriteSheetToolUi:
             self._set_processing(False)
             return
         self.append_log("Cancel requested.")
-        process.terminate()
+        outcome = request_process_stop(process)
+        if outcome == "killed":
+            self.append_log("Process did not exit after terminate; killed it.")
+        elif outcome == "kill requested":
+            self.append_log("Process did not exit after kill request; waiting for worker cleanup.")
+
+    def _shutdown_active_process(self) -> None:
+        process = self.active_process
+        if process is None or process.poll() is not None:
+            return
+        outcome = request_process_stop(process)
+        self.append_log(f"Stopped active process during UI shutdown: {outcome}.")
 
     def _drain_log_queue(self) -> None:
         while True:
@@ -2936,7 +2007,7 @@ class SpriteSheetToolUi:
                 subprocess.Popen(["open", str(path)])
             else:
                 subprocess.Popen(["xdg-open", str(path)])
-        except Exception as exc:
+        except UI_ACTION_ERRORS as exc:
             self._show_error("Open Output", str(exc))
 
     def append_log(self, text: str) -> None:
@@ -2957,14 +2028,23 @@ class SpriteSheetToolUi:
         if dpg is not None and self._built and dpg.does_item_exist(tag):
             dpg.set_value(tag, text)
 
+    def _delete_dpg_item(self, tag: str, *, children_only: bool = False, context: str = "item cleanup") -> bool:
+        if dpg is None or not self._built or not dpg.does_item_exist(tag):
+            return False
+        try:
+            dpg.delete_item(tag, children_only=children_only)
+            return True
+        except UI_ACTION_ERRORS as exc:
+            self.append_log(f"{context} failed for {tag}: {exc}")
+            return False
+
     def _clear_item_children(self, tag: str) -> None:
-        if dpg is not None and self._built and dpg.does_item_exist(tag):
-            dpg.delete_item(tag, children_only=True)
+        self._delete_dpg_item(tag, children_only=True, context="Panel cleanup")
 
     def _show_text_panel(self, panel_tag: str, text: str) -> None:
         if dpg is None or not self._built or not dpg.does_item_exist(panel_tag):
             return
-        dpg.delete_item(panel_tag, children_only=True)
+        self._delete_dpg_item(panel_tag, children_only=True, context="Text panel cleanup")
         dpg.add_text(text, parent=panel_tag, wrap=520)
 
     def _make_texture(self, key: str, image: Image.Image) -> str:
@@ -2972,7 +2052,7 @@ class SpriteSheetToolUi:
             raise RuntimeError("Dear PyGUI is not available.")
         existing = self._texture_tags.get(key)
         if existing and dpg.does_item_exist(existing):
-            dpg.delete_item(existing)
+            self._delete_dpg_item(existing, context="Texture cleanup")
         width, height, data = _image_texture_data(image)
         tag = f"texture_{key}_{uuid4().hex}"
         dpg.add_static_texture(width=width, height=height, default_value=data, tag=tag, parent=self._texture_registry)
@@ -2982,7 +2062,7 @@ class SpriteSheetToolUi:
     def _show_image_in_panel(self, panel_tag: str, key: str, image: Image.Image, *, fallback_text: str = "") -> None:
         if dpg is None or not self._built or not dpg.does_item_exist(panel_tag):
             return
-        dpg.delete_item(panel_tag, children_only=True)
+        self._delete_dpg_item(panel_tag, children_only=True, context="Image panel cleanup")
         texture = self._make_texture(key, image)
         dpg.add_image(texture, parent=panel_tag)
         if fallback_text:

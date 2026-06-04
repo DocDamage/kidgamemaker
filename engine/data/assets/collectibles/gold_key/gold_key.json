@@ -4,15 +4,22 @@
   "asset_name": "Gold Key",
   "category": "collectibles",
   "runtime_template": "key_collectible",
-  "visual": "🔑",
-  "visual_tags": ["key", "unlock", "gold"],
+  "visual": "gold_key.svg",
+  "visual_tags": [
+    "key",
+    "unlock",
+    "gold"
+  ],
   "placement_logic": {
     "snapping_type": "free_float",
     "parallax_bucket": "play_layer"
   },
   "collision": {
     "shape": "rectangle",
-    "size": [20, 20]
+    "size": [
+      20,
+      20
+    ]
   },
   "gameplay_logic": {
     "on_pickup": "collect_key",

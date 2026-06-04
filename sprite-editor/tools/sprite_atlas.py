@@ -160,11 +160,11 @@ def pack_records_into_atlases(records: Sequence[Any], out_dir: Path, options: Ru
             frames: list[dict[str, object]] = []
 
             for record, placed in placements:
-                sprite = Image.open(record.output_file).convert("RGBA")
+                with Image.open(record.output_file) as source_sprite:
+                    sprite = source_sprite.convert("RGBA")
                 if placed.rotated:
                     sprite = sprite.rotate(90, expand=True)
                 atlas_image.alpha_composite(sprite, (placed.x, placed.y))
-                sprite.close()
 
                 rect = {"x": placed.x, "y": placed.y, "width": placed.width, "height": placed.height}
                 record.atlas = {
@@ -212,5 +212,4 @@ def pack_records_into_atlases(records: Sequence[Any], out_dir: Path, options: Ru
     with (manifest_dir / "atlases.json").open("w", encoding="utf-8") as handle:
         json.dump({"atlases": atlas_summaries}, handle, indent=2)
     return atlas_summaries
-
 
