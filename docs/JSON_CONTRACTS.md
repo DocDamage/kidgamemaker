@@ -70,7 +70,8 @@
       "is_camera_target": true,
       "modifiers": {
         "variant": "default",
-        "scale_multiplier": 1.0
+        "scale_multiplier": 1.0,
+        "physics_preset": "kidfriendly"
       }
     }
   ]

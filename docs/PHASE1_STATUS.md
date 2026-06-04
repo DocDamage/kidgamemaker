@@ -46,3 +46,8 @@ All Phase 1 requirements have been verified on the workspace locally:
    - The Player (`PlayerController.gd`) implements full movement controls, collision with static floor tiles, camera smoothing, and gravity physics.
    - The Enemy (`SmartEnemy.gd`) implements patrol logic and ledge-turn checks.
    - The Collectible (`Collectible.gd`) implements active pick-up score triggers.
+6. **Subsequent Gameplay Mechanics Enhancements**:
+   - Added visual customizer dropdown `🏃 Movement Feel (Physics)` in Svelte editor supporting Mario, Sonic, Celeste, Hollow Knight, and Kirby physics parameters.
+   - Built platformer forgiveness systems in Godot (Variable Jump Cuts, Ceiling Corner Correction, Auto-Edge jump triggers).
+   - Designed and integrated `RuntimeRuleExecutor.gd` resolving logical switches/button triggers and automatically resolving proximity rules for nearby doors/gates within 128px at room load.
+   - Structured and integrated coordinate-based `RuntimeTutorialWhisperer.gd` death tracking with dynamic assists (lowering enemy speeds and extending player jump windows on repeated failures).

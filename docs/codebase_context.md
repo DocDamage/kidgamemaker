@@ -38,9 +38,11 @@ graph TD
   * [`slicer.rs`](file:///g:/kidgamemaker/editor/src-tauri/src/slicer.rs) — Procedural sprite sheets slicing based on alpha threshold component scans.
 * `engine/` — Godot 4 project directory.
   * [`scripts/Main.gd`](file:///g:/kidgamemaker/engine/scripts/Main.gd) — Core runner. Spawns entities, runs the chemistry tick spreading fire, freezing water, and propagating shock chains. Welds adjacent blocks and devices using a connected components BFS algorithm, creating a single dynamic `RigidBody2D` contraption. Instantiates CanvasLayer overlays for Backpack grid inventory, Crafting benches, and BBQ spits.
-  * [`scripts/PlayerController.gd`](file:///g:/kidgamemaker/engine/scripts/PlayerController.gd) — Character movement physics. Handles job class multipliers, trail CPUParticles2D, shocked/burning status effects, slippery ice sliding physics, emote wheels, keyboard keys (`Tab` for backpack, `F` for throwing Pikmin, `Q` for whistling), and the 4x4 inventory insertion grid arrays.
+  * [`scripts/PlayerController.gd`](file:///g:/kidgamemaker/engine/scripts/PlayerController.gd) — Character movement physics. Handles job class multipliers, physics presets (Mario, Sonic, Celeste, Hollow Knight, Kirby), variable jump cuts, ceiling corner correction, auto-edge jumping, trail CPUParticles2D, shocked/burning status effects, slippery ice sliding physics, emote wheels, keyboard keys (`Tab` for backpack, `F` for throwing Pikmin, `Q` for whistling), and the 4x4 inventory insertion grid arrays.
   * [`scripts/SmartEnemy.gd`](file:///g:/kidgamemaker/engine/scripts/SmartEnemy.gd) — Patrolling/chasing enemy AI. Handles boss phases, custom health displays, shocked/frozen/burning status tick effects, and register hooks for latched Pikmin helpers (cutting patrol speeds in half).
   * [`scripts/Collectible.gd`](file:///g:/kidgamemaker/engine/scripts/Collectible.gd) — Handles coin rewards, health points restoration, alchemy potions, and pop-up tween animations.
+  * [`scripts/RuntimeRuleExecutor.gd`](file:///g:/kidgamemaker/engine/scripts/RuntimeRuleExecutor.gd) — Logic rule execution engine. Resolves trigger-action mapping (e.g. toggles, spawns, sound triggers) and dynamically binds unlinked triggers to nearest doors/gates within 128px at level load.
+  * [`scripts/RuntimeTutorialWhisperer.gd`](file:///g:/kidgamemaker/engine/scripts/RuntimeTutorialWhisperer.gd) — Tutorial helper and dynamic assist assessor. Tracks coordinates of repeated player deaths to output contextual helpful hints and triggers a dynamic assist mode to aid players on tricky segments.
   * `data/assets/` — Category-routed assets and sidecar descriptors.
 
 ---
@@ -49,6 +51,16 @@ graph TD
 
 ### 🕹️ Runner Gameplay Mechanics
 * **Costume Wardrobe**: Multi-colored player tints (Storm Ninja, Fire Knight) that shift modulate colors and sync runner trail colors.
+* **🏃 Movement Feel (Physics) Presets**: Custom presets selectable in the Hero Customizer:
+  * **Cozy Jumper 🧸** (Default kid-friendly movement configuration)
+  * **Bouncy Plumber 🍄** (Mario-style high acceleration and snappy gravity)
+  * **Super Speedster 🦔** (Sonic-style speed runs and low friction momentum)
+  * **Snappy Knight 🪲** (Hollow Knight-style crisp responsive ground controls)
+  * **Floaty Puff 🎈** (Kirby-style low gravity float/falls)
+* **💨 Platformer Forgiveness**: Control adjustments designed for kids:
+  * **Variable Jump Cuts**: Early jump button release dampens or cuts velocity.
+  * **Ceiling Corner Correction**: Glides player around ceiling corner edges using horizontal nudging (up to 8px).
+  * **Auto-Edge Jump**: Walk off ledges safely triggering a minor assist bounce when in Calm/Mellow difficulty.
 * **Ambient Lighting & Lanterns**: Toggleable day/night cycles (sunset orange, night dark). Equipping the **Lantern tool** projects a round light mask.
 * **Toy Hammer & Bricks**: Destructible stone/ice tiles that shatter when struck by the hammer.
 * **Conveyor Belts**: Left/right moving tracks sliding overlapping players/enemies.
@@ -91,10 +103,12 @@ Helping hands follow you on your quest:
 Children link action triggers dynamically inside the editor. Supported rule maps:
 * **IF Triggers**: `button_step` (Floor Button), `lever_flip` (Wall Lever), `target_hit` (Spinning Target), `coins_5` (Collected 5 Rubies), `coins_10` (Collected 10 Rubies).
 * **THEN Actions**: `toggle_gate` (Opens/Closes barrier tiles), `spawn_sparkles` (Magic particles), `heal_player` (Restores HP), `play_sfx_chime` (Sound effect trigger).
+* **🔌 Proximity Auto-Solver**: Links unlinked triggers (buttons, levers, pressure plates) within 128px of gates/doors automatically.
 
 ### ⚙️ Automation & Magic Polish
 * **Calm Mode**: Makes enemies friendly and replaces the Game Over screen with immediate respawns.
 * **Creative Mode**: Invincible player health bar (renders crowns `👑`) and enables flying movement.
+* **🤖 Dynamic Assists**: Tracks coordinates of player failures. Repeated deaths (3+) in a single region reduce enemy speed by 30% and boost coyote time / jump buffer tolerances to 0.22s.
 * **Surprise Me Level Builder**: Single-click procedural builder constructing randomized theme setups.
 * **Level Length Tags**: Footer tag analyzer analyzing canvas spans: `🎈 Short Adventure`, `🚀 Medium Adventure`, `🏰 Long Quest`, `👑 Epic Quest!`.
 * **Rising Danger Hazards**: Slow lava/water level overlay that deals periodic threat damage.

@@ -32,6 +32,7 @@ graph TD
 * **Bookshelf Room Picker**: An interface to manage multiple rooms complete with mini-map rendering preview cards.
 * **Undo/Redo History Stack**: Save/restore canvas states on the fly to undo mistakes.
 * **Toybox Favorites**: Star (`🤍`/`❤️`) toys to pin them on a quick-select favorites ribbon. Persisted via browser `localStorage`.
+* **🏃 Movement Feel (Physics) Preset Selector**: Customize player physics directly on the Hero Customizer panel. Choose from presets like **Cozy Jumper 🧸** (Default), **Bouncy Plumber 🍄** (Mario-style), **Super Speedster 🦔** (Sonic-style), **Snappy Knight 🪲** (Hollow Knight-style snappiness), and **Floaty Puff 🎈** (Kirby-style floatiness).
 * **🎲 Surprise Me! Generator**: Create complete, playable rooms procedural platform loops, rubies, patrolling enemies, and exit portals with a single tap.
 
 ### 💨 Magic Custom Rules Engine (No-Code If/Then Logic)
@@ -46,6 +47,7 @@ Create rules to trigger actions on in-game events without coding:
   * ✨ `spawn_sparkles` (Fires magic particle flares)
   * 💖 `heal_player` (Heals 20 HP)
   * 🔔 `play_sfx_chime` (Plays retro sound sweeps)
+* **🔌 Proximity Auto-Rules Solver**: At room load, any unlinked triggers (buttons, levers, pressure plates) within 128px of gates or doors are automatically connected. Walking off pressure plates auto-closes the connected gates.
 
 ### 🔥 Elemental Chemistry Engine
 Systemic interactions between elements and materials spread dynamically:
@@ -79,6 +81,15 @@ Helping hands follow you on your quest:
 * **Normal Mode**: Standard baseline challenge.
 * **Creative Mode**: Invincible player mode displaying crowns (`👑`) on the health bar. Bypasses gravity limits to fly freely.
 * **Calm Mode**: Disables enemy damage and swaps game over screens with immediate, healthy checkpoint respawns.
+* **💨 Platformer Forgiveness Mechanics**: Built-in player controls to ensure a smooth, frustration-free experience:
+  * **Variable Jump Cuts**: Releasing the jump button early cuts upward jump velocity (by 100% for Snappy Knight, by 50% for others) for fine jump control.
+  * **Ceiling Corner Correction**: Automatically tests horizontal offsets (up to 8px) and nudges the player around corners when rising to prevent head-bonking on platform edges.
+  * **Auto-Edge Jump**: When in Calm or Mellow mode, walking off a ledge triggers a micro-jump to prevent accidental falls.
+* **🤖 Dynamic Assist System**: Tracks player failures at specific coordinates. On repeated deaths (3 or more) in the same area:
+  * Reduces enemy speeds by 30% dynamically.
+  * Boosts player coyote time and jump buffer windows to 0.22 seconds.
+  * Displays a visual floating notification: `"🛠️ ASSIST ACTIVE: Slow Enemies & Easy Jumps!"`.
+
 
 ### 🌋 Atmosphere & Polish
 * **Rising Hazards**: Global rules toggle to trigger slowly rising **🌊 Water** (drown damage) or **🌋 Lava** (lava burn damage).

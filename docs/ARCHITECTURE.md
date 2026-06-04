@@ -53,7 +53,9 @@ Responsibilities:
 
 - Read `game_state.json` or a command-line `--level-json` path.
 - Resolve each entity's sidecar metadata.
-- Spawn physical objects.
+- Spawn physical objects and apply dynamic physics configurations (like presets) on spawn.
+- Evaluate runtime game rules and execute custom events (via `RuntimeRuleExecutor.gd`), automatically connecting nearby unlinked switches to gates/doors on load.
+- Track and assist player progress, reducing threat levels dynamically when repeated failures occur at a single coordinate (via `RuntimeTutorialWhisperer.gd`).
 - Apply gravity, collision, camera, baseline behaviors, and later parallax/lighting/weather/audio.
 
 ## Asset Sidecars
