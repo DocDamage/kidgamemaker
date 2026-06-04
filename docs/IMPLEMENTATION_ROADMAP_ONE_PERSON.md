@@ -26,3 +26,9 @@
 
 ## Phase 9 — Export & Advanced Customizations
 - **Status**: [COMPLETED] Project package share exporter (.ktoy), auto-ingestion watching, warning-free builds, paint brush symmetry/rainbow modes, destructible tiles with Hammer tool, dynamic light masks with Lantern, NPC shopkeepers, and HUD minimap drawing.
+
+## Phase 10 — Forgiveness Depth & Assist
+- **Status**: [COMPLETED] Three-age mode architecture (Mellow/Growing/Creator), adaptive struggle slowdown (88% timescale), invisible platform safety nets, and enemy sleep state.
+
+## Phase 11 — Visual Progression & Diegetic Features
+- **Status**: [COMPLETED] Visual progression system (scale growth, particle aura, color evolution), diegetic compass navigation, and stamp adjacency weapon combining (explosive boomerang, paint bomb).
