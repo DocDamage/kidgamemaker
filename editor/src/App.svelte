@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import CanvasWorkspace from './CanvasWorkspace.svelte';
   import EditorModals from './EditorModals.svelte';
@@ -18,8 +18,6 @@
   import {
     calculateLevelLengthLabel,
     generateRoomThumbnail,
-    getCanvasCoords as toCanvasCoords,
-    getSnappedPosition as snapCanvasPosition,
     getStoredThumbnail
   } from './lib/canvasView';
   import { playUiSound as playEditorUiSound } from './lib/editorAudio';
@@ -66,8 +64,6 @@
   import {
     eraseEntity,
     fallbackInventory,
-    snapPosition,
-    stampEntity,
     toRoomPayload,
     type AssetInventory,
     type PlacedEntity,
@@ -129,12 +125,7 @@
     beatComposerOpen = false;
   }
 
-  onDestroy(() => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-  });
+
 
   function addNewRule() {
     worldSettings.room_rules = addRoomRule(worldSettings.room_rules);
@@ -246,27 +237,12 @@
   // --- Feature: Kid-friendly Room Naming ---
   let themeDraft = createDefaultThemeDraft();
 
-  // --- Feature: Drag-to-Reposition ---
-  let draggingEntity: PlacedEntity | null = null;
-  let dragOffset = { x: 0, y: 0 };
-  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-  let longPressTriggered = false;
-
   // Multi-room state
   let rooms: string[] = ['test_chamber_01'];
   let activeRoomId = 'test_chamber_01';
 
-  // Viewport Pan/Zoom state
+  // Viewport Zoom state
   let zoom = 1.0;
-  let offsetX = 100;
-  let offsetY = 100;
-  let isPanning = false;
-  let panStart = { x: 0, y: 0 };
-  
-  // Drag-to-paint and hover guide state
-  let isDrawing = false;
-  let hoverPos = { x: 0, y: 0 };
-  let isHovering = false;
 
   $: quickRibbon = quickInventoryItems(inventory);
   $: favoritesItems = favoriteInventoryItems(inventory, favorites);
@@ -374,222 +350,7 @@
     }
   }
 
-  function getCanvasCoords(clientX: number, clientY: number, rect: DOMRect) {
-    return toCanvasCoords(clientX, clientY, rect, offsetX, offsetY, zoom);
-  }
 
-  function getSnappedPosition(rawCoords: { x: number; y: number }, asset: ToyboxAsset): { x: number; y: number } {
-    return snapCanvasPosition(rawCoords, asset, placed, snapEnabled);
-  }
-
-  function handleCanvasClick(event: MouseEvent) {
-    selectedPlacedEntity = null;
-    const target = event.currentTarget as HTMLDivElement;
-    const rect = target.getBoundingClientRect();
-    const rawCoords = getCanvasCoords(event.clientX, event.clientY, rect);
-    const position = getSnappedPosition(rawCoords, activeAsset);
-
-    if (eraserMode) {
-      const hit = [...placed].reverse().find((item) => {
-        const dx = item.position.x - position.x;
-        const dy = item.position.y - position.y;
-        return Math.sqrt(dx * dx + dy * dy) < 36 / zoom;
-      });
-
-      if (hit) {
-        placed = eraseEntity(placed, hit.instance_id);
-        playUiSound('squeak');
-      }
-      return;
-    }
-
-    const exists = placed.some(
-      (ent) => ent.asset_id === activeAsset.id && 
-               Math.abs(ent.position.x - position.x) < 4 && 
-               Math.abs(ent.position.y - position.y) < 4
-    );
-    if (!exists) {
-      if (activeAsset.category === 'portals' || activeAsset.type === 'portal') {
-        handlePortalPlacement(position, activeAsset);
-      } else {
-        placed = stampEntity(placed, activeAsset, position);
-      }
-      playUiSound('pop');
-    }
-  }
-
-  function paintStamp(event: MouseEvent) {
-    const target = event.currentTarget as HTMLDivElement;
-    const rect = target.getBoundingClientRect();
-    const rawCoords = getCanvasCoords(event.clientX, event.clientY, rect);
-    const position = getSnappedPosition(rawCoords, activeAsset);
-
-    const spacingThreshold = activeAsset.category === 'terrain' ? 48 : 24;
-
-    const exists = placed.some(
-      (ent) => ent.asset_id === activeAsset.id && 
-               Math.abs(ent.position.x - position.x) < spacingThreshold && 
-               Math.abs(ent.position.y - position.y) < 8
-    );
-    if (!exists) {
-      if (activeAsset.category === 'portals' || activeAsset.type === 'portal') {
-        handlePortalPlacement(position, activeAsset);
-      } else {
-        placed = stampEntity(placed, activeAsset, position);
-      }
-      playUiSound('pop');
-    }
-  }
-
-  function startDrawing(event: MouseEvent) {
-    if (event.button === 0) {
-      isDrawing = true;
-      handleCanvasClick(event);
-    }
-  }
-
-  function stopDrawing(event: MouseEvent) {
-    if (event.button === 0) {
-      isDrawing = false;
-      saveLevelState();
-      saveCurrentRoom();
-    }
-  }
-
-  function handleWheel(event: WheelEvent) {
-    event.preventDefault();
-    const zoomFactor = 0.08;
-    let newZoom = zoom;
-    if (event.deltaY < 0) {
-      newZoom += zoomFactor;
-    } else {
-      newZoom -= zoomFactor;
-    }
-    zoom = Math.max(0.5, Math.min(2.0, newZoom));
-  }
-
-  function handleMouseDown(event: MouseEvent) {
-    if (event.button === 1 || event.button === 2) {
-      isPanning = true;
-      panStart = { x: event.clientX - offsetX, y: event.clientY - offsetY };
-      event.preventDefault();
-    }
-  }
-
-  function handleMouseMove(event: MouseEvent) {
-    if (isPanning) {
-      offsetX = event.clientX - panStart.x;
-      offsetY = event.clientY - panStart.y;
-    } else {
-      const target = event.currentTarget as HTMLDivElement;
-      const rect = target.getBoundingClientRect();
-      const rawCoords = getCanvasCoords(event.clientX, event.clientY, rect);
-      hoverPos = getSnappedPosition(rawCoords, activeAsset);
-      isHovering = true;
-
-      if (isDrawing && !eraserMode) {
-        paintStamp(event);
-      }
-    }
-  }
-
-  function handleMouseUp(event: MouseEvent) {
-    if (event.button === 1 || event.button === 2) {
-      isPanning = false;
-    } else if (event.button === 0) {
-      handleStampLongPressEnd();
-    }
-  }
-
-  function handleCanvasLeave() {
-    isHovering = false;
-    isDrawing = false;
-    handleStampLongPressEnd();
-  }
-
-  function handlePlacedStampClick(item: PlacedEntity) {
-    if (longPressTriggered) {
-      longPressTriggered = false;
-      return;
-    }
-
-    if (eraserMode) {
-      placed = eraseEntity(placed, item.instance_id);
-      playUiSound('squeak');
-    } else {
-      selectEntity(item);
-    }
-  }
-
-  async function handlePortalPlacement(position: { x: number; y: number }, asset: ToyboxAsset) {
-    let targetRoomId = '';
-    do {
-      targetRoomId = `room_${Math.random().toString(36).substring(2, 8)}`;
-    } while (rooms.includes(targetRoomId));
-
-    const thisPortalId = `portal_${Math.random().toString(36).substring(2, 8)}`;
-    const targetPortalId = `portal_${Math.random().toString(36).substring(2, 8)}`;
-
-    const newPortal: PlacedEntity = {
-      instance_id: thisPortalId,
-      asset_id: asset.id,
-      category: asset.category,
-      type: asset.type ?? asset.category,
-      position,
-      modifiers: {
-        variant: 'default',
-        scale_multiplier: 1.0,
-        target_room: targetRoomId,
-        target_portal: targetPortalId
-      }
-    };
-
-    placed = [...placed, newPortal];
-    saveLevelState();
-    status = `Placed portal ${thisPortalId} linking to room ${targetRoomId}`;
-
-    try {
-      const returnPortal: PlacedEntity = {
-        instance_id: targetPortalId,
-        asset_id: asset.id,
-        category: asset.category,
-        type: asset.type ?? asset.category,
-        position: { x: position.x, y: position.y },
-        modifiers: {
-          variant: 'default',
-          scale_multiplier: 1.0,
-          target_room: activeRoomId,
-          target_portal: thisPortalId
-        }
-      };
-
-      const terrainAsset = findAsset('stone_floor') ?? { id: 'stone_floor', name: 'Stone Floor', category: 'terrain', type: 'terrain' };
-      const floorUnderPortal: PlacedEntity = {
-        instance_id: `stone_floor_${Math.random().toString(36).substring(2, 8)}`,
-        asset_id: terrainAsset.id,
-        category: terrainAsset.category,
-        type: terrainAsset.type ?? terrainAsset.category,
-        position: { x: position.x, y: position.y + 48 },
-        modifiers: {
-          variant: 'default',
-          scale_multiplier: 1.0
-        }
-      };
-
-      const targetPayload = toRoomPayload(
-        [returnPortal, floorUnderPortal],
-        createDefaultWorldSettings(),
-        'demo_project',
-        targetRoomId
-      );
-
-      await saveRoomPayload(targetRoomId, targetPayload);
-      await loadRoomList();
-      status = `Placed portal linking to auto-created room ${targetRoomId}!`;
-    } catch (err) {
-      status = `Failed to auto-create target room: ${err}`;
-    }
-  }
 
   async function saveCurrentRoom() {
     if (!hasTauriHost()) {
@@ -798,55 +559,7 @@
     playUiSound('chime');
   }
 
-  // ── Feature: Drag-to-Reposition (long-press to grab a stamp) ──────────────
-  function handleStampLongPressStart(event: MouseEvent, item: PlacedEntity) {
-    if (eraserMode) return;
-    longPressTriggered = false;
-    longPressTimer = setTimeout(() => {
-      longPressTriggered = true;
-      draggingEntity = item;
-      const canvasEl = event.currentTarget as HTMLElement;
-      const canvasRect = canvasEl.closest('.canvas')?.getBoundingClientRect();
-      if (canvasRect) {
-        dragOffset = {
-          x: item.position.x - ((event.clientX - canvasRect.left - offsetX) / zoom),
-          y: item.position.y - ((event.clientY - canvasRect.top - offsetY) / zoom)
-        };
-      }
-      playUiSound('pop');
-    }, 400); // 400ms long press
-  }
 
-  function handleStampLongPressEnd() {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-    if (draggingEntity) {
-      draggingEntity = null;
-      saveLevelState();
-      saveCurrentRoom();
-      playUiSound('chime');
-    }
-  }
-
-  function handleDragMove(event: MouseEvent) {
-    if (!draggingEntity) return;
-    const canvasEl = (event.currentTarget as HTMLElement);
-    const canvasRect = canvasEl.getBoundingClientRect();
-    const rawX = (event.clientX - canvasRect.left - offsetX) / zoom + dragOffset.x;
-    const rawY = (event.clientY - canvasRect.top - offsetY) / zoom + dragOffset.y;
-
-    // Snap position
-    if (snapEnabled) {
-      draggingEntity.position.x = Math.round(rawX / 8) * 8;
-      draggingEntity.position.y = Math.round(rawY / 8) * 8;
-    } else {
-      draggingEntity.position.x = rawX;
-      draggingEntity.position.y = rawY;
-    }
-    placed = [...placed]; // trigger reactivity
-  }
 </script>
 
 <main class="app-shell">
@@ -929,27 +642,25 @@
 
     <CanvasWorkspace
       {worldSettings}
-      {placed}
+      bind:placed
       {activeAsset}
       {eraserMode}
-      {offsetX}
-      {offsetY}
-      {zoom}
-      {isHovering}
-      {hoverPos}
-      {draggingEntity}
+      bind:zoom
+      {snapEnabled}
+      {rooms}
+      {activeRoomId}
       {findAsset}
-      {startDrawing}
-      {stopDrawing}
-      {handleMouseMove}
-      {handleDragMove}
-      {handleWheel}
-      {handleMouseDown}
-      {handleMouseUp}
-      {handleCanvasLeave}
-      {handleStampLongPressStart}
-      {handleStampLongPressEnd}
-      {handlePlacedStampClick}
+      on:change={() => { saveLevelState(); saveCurrentRoom(); }}
+      on:selectEntity={(event) => {
+        if (event.detail) {
+          selectEntity(event.detail);
+        } else {
+          selectedPlacedEntity = null;
+        }
+      }}
+      on:playSound={(event) => playUiSound(event.detail)}
+      on:status={(event) => status = event.detail}
+      on:portalCreated={() => loadRoomList()}
     />
   {/if}
 
