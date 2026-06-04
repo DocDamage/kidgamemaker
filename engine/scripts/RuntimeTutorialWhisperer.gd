@@ -7,9 +7,6 @@ static func note_failure(
 	level_balance_report: Dictionary,
 	state: Dictionary
 ) -> Dictionary:
-	if float(state.get("hint_cooldown", 0.0)) > 0.0:
-		return {"state": state, "hint": ""}
-
 	var respawn_count := int(state.get("respawn_count", 0))
 	var last_respawn_position: Vector2 = state.get("last_respawn_position", Vector2.ZERO)
 	if last_respawn_position.distance_to(failure_position) <= 96.0:
@@ -19,20 +16,26 @@ static func note_failure(
 
 	state["respawn_count"] = respawn_count
 	state["last_respawn_position"] = failure_position
+
+	var trigger_assist := (respawn_count >= 3)
+
+	if float(state.get("hint_cooldown", 0.0)) > 0.0:
+		return {"state": state, "hint": "", "trigger_assist": trigger_assist}
+
 	if respawn_count < 2:
-		return {"state": state, "hint": ""}
+		return {"state": state, "hint": "", "trigger_assist": trigger_assist}
 
 	var last_hint_position: Vector2 = state.get("last_hint_position", Vector2(-99999, -99999))
 	if last_hint_position.distance_to(failure_position) <= 96.0 and respawn_count < 4:
-		return {"state": state, "hint": ""}
+		return {"state": state, "hint": "", "trigger_assist": trigger_assist}
 
 	var hint_text := _build_hint(failure_position, spawned_entities, level_balance_report)
 	if hint_text == "":
-		return {"state": state, "hint": ""}
+		return {"state": state, "hint": "", "trigger_assist": trigger_assist}
 
 	state["last_hint_position"] = failure_position
 	state["hint_cooldown"] = 12.0
-	return {"state": state, "hint": hint_text}
+	return {"state": state, "hint": hint_text, "trigger_assist": trigger_assist}
 
 
 static func _build_hint(failure_position: Vector2, spawned_entities: Array, level_balance_report: Dictionary) -> String:

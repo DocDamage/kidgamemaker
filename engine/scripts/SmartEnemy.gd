@@ -183,6 +183,9 @@ func _physics_process(delta: float) -> void:
 			velocity.y = 0.0
 	else:
 		var active_speed = patrol_speed
+		var main_node = get_tree().get_root().get_node_or_null("Main")
+		if main_node != null and "enemy_speed_multiplier" in main_node:
+			active_speed *= float(main_node.get("enemy_speed_multiplier"))
 		if latched_pikmin.size() > 0:
 			active_speed *= 0.5
 

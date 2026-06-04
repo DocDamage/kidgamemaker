@@ -119,3 +119,79 @@ func _find_action_node(action_id: String, method_name: String) -> Node:
 			return entity
 
 	return null
+
+
+func auto_connect_proximity_triggers(room_rules: Array) -> void:
+	if runtime == null or not is_instance_valid(runtime):
+		return
+
+	var spawned_entities: Array = runtime.get("spawned_entities")
+	var triggers: Array[Node2D] = []
+	var gates: Array[Node2D] = []
+
+	for entity in spawned_entities:
+		if not is_instance_valid(entity) or not (entity is Node2D):
+			continue
+		
+		var node = entity as Node2D
+		var asset_id = ""
+		if node.has_meta("asset_id"):
+			asset_id = str(node.get_meta("asset_id"))
+		
+		if asset_id in ["trigger_button", "trigger_lever", "trigger_pressure_plate"]:
+			triggers.append(node)
+		elif asset_id in ["gate_block", "locked_gate_red", "locked_gate_blue"] or node.has_method("toggle_gate"):
+			gates.append(node)
+
+	for trigger in triggers:
+		var trigger_id = trigger.name
+		var has_existing_rule = false
+		for rule in room_rules:
+			if typeof(rule) == TYPE_DICTIONARY and str(rule.get("trigger_id", "")) == trigger_id:
+				has_existing_rule = true
+				break
+		
+		if has_existing_rule:
+			continue
+
+		var closest_gate: Node2D = null
+		var min_dist := 128.0
+		for gate in gates:
+			var dist = trigger.global_position.distance_to(gate.global_position)
+			if dist < min_dist:
+				min_dist = dist
+				closest_gate = gate
+
+		if closest_gate != null:
+			var trigger_type := "button_step"
+			var asset_id = str(trigger.get_meta("asset_id")) if trigger.has_meta("asset_id") else ""
+			if asset_id == "trigger_lever":
+				trigger_type = "lever_flip"
+			elif asset_id == "trigger_pressure_plate":
+				trigger_type = "pressure_plate_on"
+			
+			if trigger_type == "pressure_plate_on":
+				var rule_on = {
+					"trigger_type": "pressure_plate_on",
+					"trigger_id": trigger_id,
+					"action_type": "toggle_gate",
+					"action_id": closest_gate.name
+				}
+				var rule_off = {
+					"trigger_type": "pressure_plate_off",
+					"trigger_id": trigger_id,
+					"action_type": "toggle_gate",
+					"action_id": closest_gate.name
+				}
+				room_rules.append(rule_on)
+				room_rules.append(rule_off)
+			else:
+				var auto_rule = {
+					"trigger_type": trigger_type,
+					"trigger_id": trigger_id,
+					"action_type": "toggle_gate",
+					"action_id": closest_gate.name
+				}
+				room_rules.append(auto_rule)
+			print("Proximity Auto-Connect: Created rules linking trigger ", trigger_id, " to gate ", closest_gate.name)
+

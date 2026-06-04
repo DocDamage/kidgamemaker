@@ -13,6 +13,13 @@ export function ensurePlacedEntityDefaults(item: PlacedEntity): void {
 
   const { modifiers } = item;
 
+  if (item.type === 'player' || item.category === 'heroes') {
+    setDefault(modifiers, 'physics_preset', 'kidfriendly');
+    setDefault(modifiers, 'costume_id', 'default');
+    setDefault(modifiers, 'hero_class', 'warrior');
+  }
+
+
   if (item.type === 'jelly') {
     setDefault(modifiers, 'bounce_force', 500);
   } else if (item.type === 'speed_pad') {

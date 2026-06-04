@@ -1,0 +1,160 @@
+Line   66: func _ready() -> void:
+Line   96: func _on_js_pause(args: Array) -> void:
+Line  102: func _on_js_restart(_args: Array) -> void:
+Line  109: func _on_js_mute(args: Array) -> void:
+Line  115: func _unhandled_input(event: InputEvent) -> void:
+Line  124: func _physics_process(delta: float) -> void:
+Line  247: func _resolve_level_path() -> String:
+Line  255: func load_level(file_path: String) -> void:
+Line  269: func load_level_from_string(json_string: String) -> void:
+Line  313: func _merge_terrain_entities(entities: Array) -> Array:
+Line  393: func spawn_entity(data: Dictionary) -> Node2D:
+Line  530: func _make_player(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
+Line  557: func _make_terrain(data: Dictionary, sidecar: Dictionary) -> CollisionObject2D:
+Line  606: func _ready() -> void:
+Line  609: func _on_body_entered(body: Node) -> void:
+Line  613: func _on_body_exited(body: Node) -> void:
+Line  629: func _make_enemy(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
+Line  669: func _make_collectible(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line  697: func _make_key_collectible(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line  734: func _make_checkpoint(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line  742: func _make_portal(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line  750: func _make_locked_door(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line  784: func _make_particles(data: Dictionary, sidecar: Dictionary) -> CPUParticles2D:
+Line  980: func spawn_floating_text(text: String, global_pos: Vector2, color: Color) -> void:
+Line 1011: func _make_decoration(data: Dictionary, sidecar: Dictionary) -> Node2D:
+Line 1018: func _read_position(value: Variant) -> Vector2:
+Line 1028: func _load_sidecar(asset_id: String, category_hint: String = "") -> Dictionary:
+Line 1067: func _collision_size(sidecar: Dictionary, fallback: Vector2, entity_data: Dictionary = {}) -> Vector2:
+Line 1081: func _add_box_collision(parent: Node, size: Vector2) -> void:
+Line 1089: func _add_placeholder_polygon(parent: Node2D, size: Vector2, color: Color) -> void:
+Line 1102: func _add_visuals(parent: Node2D, sidecar: Dictionary, size: Vector2, default_color: Color) -> void:
+Line 1197: func _load_texture_dynamic(path: String, sidecar_file_path: String) -> Texture2D:
+Line 1227: func _on_checkpoint_activated(pos: Vector2) -> void:
+Line 1232: func _respawn_player() -> void:
+Line 1255: func _spawn_ghost() -> void:
+Line 1280: func notify_trigger(trigger_id: String) -> void:
+Line 1299: func execute_rules(trigger_type: String, trigger_id: String = "") -> void:
+Line 1353: func _on_portal_entered(_portal_node: Node2D, portal_data: Dictionary) -> void:
+Line 1366: func _on_locked_door_entered(door_node: Node2D, door_data: Dictionary) -> void:
+Line 1397: func transition_to_room(target_room_name: String, target_portal_id: String) -> void:
+Line 1418: func check_victory_conditions() -> void:
+Line 1446: func trigger_victory() -> void:
+Line 1579: func trigger_game_over() -> void:
+Line 1681: func handle_player_death() -> void:
+Line 1692: func clear_spawned_entities() -> void:
+Line 1706: func on_collectible_picked_up(payload: Dictionary) -> void:
+Line 1752: func _configure_camera_limits() -> void:
+Line 1802: func _attach_camera(target: Node2D) -> void:
+Line 1811: func _placement_bucket(sidecar: Dictionary) -> String:
+Line 1816: func _z_index_for_bucket(bucket: String) -> int:
+Line 1830: func _apply_world_settings(settings: Dictionary) -> void:
+Line 1862: func _apply_lighting_if_needed(node: Node2D, sidecar: Dictionary) -> void:
+Line 1890: func _apply_weather_particles() -> void:
+Line 1931: func _apply_audio_if_needed(node: Node2D, sidecar: Dictionary) -> void:
+Line 1974: func _process(_delta: float) -> void:
+Line 1986: func _find_active_boss() -> Node2D:
+Line 1993: func _find_camera() -> Camera2D:
+Line 2001: func play_dramatic_boss_chord() -> void:
+Line 2009: func trigger_boss_intro(boss: Node2D) -> void:
+Line 2088: func _create_hud() -> void:
+Line 2239: func _update_hud() -> void:
+Line 2343: func _play_theme_bgm(theme: String) -> void:
+Line 2386: func _fill_audio_buffer() -> void:
+Line 2446: func play_sfx(type: String) -> void:
+Line 2476: func play_custom_sfx(asset_id: String, default_type: String = "") -> void:
+Line 2520: func _load_wav_file(path: String) -> AudioStreamWav:
+Line 2553: func _make_trigger(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 2587: func _make_pressure_plate(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 2633: func notify_pressure_plate(trigger_id: String, is_pressed: bool) -> void:
+Line 2639: func _make_gate(data: Dictionary, sidecar: Dictionary) -> AnimatableBody2D:
+Line 2671: func _make_jelly(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 2681: func _ready() -> void:
+Line 2683: func _on_body_entered(body: Node) -> void:
+Line 2703: func _make_speed_pad(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 2713: func _ready() -> void:
+Line 2715: func _on_body_entered(body: Node) -> void:
+Line 2732: func _make_speech_sign(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 2772: func _ready() -> void:
+Line 2775: func _on_body_entered(body: Node) -> void:
+Line 2784: func _on_body_exited(body: Node) -> void:
+Line 2795: func _make_water_block(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 2819: func _ready() -> void:
+Line 2822: func _on_body_entered(body: Node) -> void:
+Line 2831: func _on_body_exited(body: Node) -> void:
+Line 2842: func _make_crumbling_cloud(data: Dictionary, sidecar: Dictionary) -> StaticBody2D:
+Line 2862: func _ready() -> void:
+Line 2865: func _on_player_step(body: Node) -> void:
+Line 2896: func _make_hazard(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 2905: func _ready() -> void:
+Line 2907: func _on_body_entered(body: Node) -> void:
+Line 2918: func _make_conveyor(data: Dictionary, sidecar: Dictionary) -> StaticBody2D:
+Line 2939: func _ready() -> void:
+Line 2947: func _process(delta: float) -> void:
+Line 2956: func _update_text() -> void:
+Line 2970: func _make_mystery_box(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 2980: func _ready() -> void:
+Line 2982: func _on_body_entered(body: Node) -> void:
+Line 2987: func _play_reveal_sequence(player: Node2D) -> void:
+Line 3010: func _give_reward(player: Node2D, reward: String) -> void:
+Line 3040: func _fade_out() -> void:
+Line 3050: func _make_gravity_zone(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 3058: func _ready() -> void:
+Line 3061: func _on_body_entered(body: Node) -> void:
+Line 3068: func _on_body_exited(body: Node) -> void:
+Line 3081: func _make_pet(data: Dictionary, sidecar: Dictionary) -> Node2D:
+Line 3090: func _process(delta: float) -> void:
+Line 3143: func _make_shopkeeper(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 3180: func _make_destructible_terrain(data: Dictionary, sidecar: Dictionary) -> StaticBody2D:
+Line 3228: func open_shop_ui() -> void:
+Line 3361: func _check_and_spawn_rising_hazard(settings: Dictionary) -> void:
+Line 3368: func _spawn_rising_hazard(type: String, speed: float) -> void:
+Line 3399: func _ready() -> void:
+Line 3401: func _physics_process(delta: float) -> void:
+Line 3430: func _make_wind_zone(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 3468: func _ready() -> void:
+Line 3471: func _physics_process(delta: float) -> void:
+Line 3478: func _on_body_entered(body: Node) -> void:
+Line 3483: func _on_body_exited(body: Node) -> void:
+Line 3493: func _make_target_practice(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 3502: func _ready() -> void:
+Line 3505: func _process(delta: float) -> void:
+Line 3508: func _on_something_entered(node: Node) -> void:
+Line 3544: func _make_chemistry_block(data: Dictionary, sidecar: Dictionary, type: String) -> StaticBody2D:
+Line 3569: func _make_zonai_device(data: Dictionary, sidecar: Dictionary, type: String) -> StaticBody2D:
+Line 3704: func _direction_string_to_vector(dir: String) -> Vector2:
+Line 3712: func _make_pikmin(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
+Line 3735: func _ready() -> void:
+Line 3743: func is_following() -> bool:
+Line 3746: func throw(direction: float) -> void:
+Line 3752: func recall() -> void:
+Line 3759: func unlatch() -> void:
+Line 3767: func reparent_to_level() -> void:
+Line 3776: func _physics_process(delta: float) -> void:
+Line 3867: func _make_ghost(data: Dictionary, sidecar: Dictionary) -> Node2D:
+Line 3883: func _process(delta: float) -> void:
+Line 3924: func _make_crafting_bench(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 3961: func _make_bbq_spit(data: Dictionary, sidecar: Dictionary) -> Area2D:
+Line 3998: func _build_physics_contraptions() -> void:
+Line 4077: func _process_elemental_chemistry() -> void:
+Line 4218: func toggle_backpack_ui() -> void:
+Line 4269: func _ready() -> void:
+Line 4292: func _update_grid_ui() -> void:
+Line 4347: func _get_item_emoji(type: String) -> String:
+Line 4359: func _unhandled_input(event: InputEvent) -> void:
+Line 4431: func _remove_item_from_grid(player, item) -> void:
+Line 4439: func _use_item(item) -> void:
+Line 4470: func open_crafting_ui() -> void:
+Line 4509: func _ready() -> void:
+Line 4539: func _update_ui() -> void:
+Line 4561: func _unhandled_input(event: InputEvent) -> void:
+Line 4576: func _attempt_craft() -> void:
+Line 4618: func _has_in_backpack(player, item_type: String) -> bool:
+Line 4626: func _remove_from_backpack(player, item_type: String) -> void:
+Line 4644: func close_crafting_ui() -> void:
+Line 4651: func open_cooking_ui() -> void:
+Line 4695: func _ready() -> void:
+Line 4719: func _process(delta: float) -> void:
+Line 4744: func _unhandled_input(event: InputEvent) -> void:
+Line 4752: func _complete_cooking() -> void:
+Line 4782: func close_cooking_ui() -> void:

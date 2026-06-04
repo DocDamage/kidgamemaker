@@ -29,3 +29,19 @@ export const HERO_JOBS: HeroJobOption[] = [
 ];
 
 export const BOSS_PHASE_OPTIONS = [1, 2, 3] as const;
+
+export type PhysicsPresetOption = {
+  id: string;
+  name: string;
+  desc: string;
+  color: string;
+};
+
+export const PHYSICS_PRESETS: PhysicsPresetOption[] = [
+  { id: 'kidfriendly', name: 'Cozy Jumper 🧸', desc: 'Default kid-friendly movement with high assists', color: '#38bdf8' },
+  { id: 'mario', name: 'Bouncy Plumber 🍄', desc: 'High acceleration and snappy gravity drops', color: '#ef4444' },
+  { id: 'sonic', name: 'Super Speedster 🦔', desc: 'High top speed and low momentum friction', color: '#3b82f6' },
+  { id: 'hollow', name: 'Snappy Knight 🪲', desc: 'Instant stop/start, hard jump cancel cuts', color: '#94a3b8' },
+  { id: 'kirby', name: 'Floaty Puff 🎈', desc: 'Low gravity and slow terminal fall speed', color: '#f472b6' }
+];
+

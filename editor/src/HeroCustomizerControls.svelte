@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { HERO_COSTUMES, HERO_JOBS } from './lib/customizerOptions';
+  import { HERO_COSTUMES, HERO_JOBS, PHYSICS_PRESETS } from './lib/customizerOptions';
   import type { PlacedEntity } from './lib/canvasState';
 
   export let entity: PlacedEntity;
@@ -19,6 +19,11 @@
 
   function selectJob(id: string) {
     entity.modifiers.hero_class = id;
+    dispatch('saveRoom');
+  }
+
+  function selectPhysicsPreset(id: string) {
+    entity.modifiers.physics_preset = id;
     dispatch('saveRoom');
   }
 </script>
@@ -56,6 +61,23 @@
       {/each}
     </div>
   </div>
+
+  <div class="option-group physics-preset-group">
+    <span class="option-label-text">🏃 Movement Feel (Physics):</span>
+    <div class="physics-grid">
+      {#each PHYSICS_PRESETS as preset}
+        <button
+          type="button"
+          title={preset.desc}
+          class:active-option={entity.modifiers.physics_preset === preset.id || (!entity.modifiers.physics_preset && preset.id === 'kidfriendly')}
+          style:--option-color={preset.color}
+          on:click={() => selectPhysicsPreset(preset.id)}
+        >
+          {preset.name}
+        </button>
+      {/each}
+    </div>
+  </div>
 {/if}
 
 <style>
@@ -65,7 +87,8 @@
     gap: 6px;
   }
 
-  .hero-job-group {
+  .hero-job-group,
+  .physics-preset-group {
     margin-top: 16px;
   }
 
@@ -76,7 +99,8 @@
   }
 
   .costume-grid,
-  .class-grid {
+  .class-grid,
+  .physics-grid {
     display: grid;
     gap: 8px;
     margin-top: 8px;
@@ -86,7 +110,8 @@
     grid-template-columns: repeat(3, 1fr);
   }
 
-  .class-grid {
+  .class-grid,
+  .physics-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 
@@ -108,3 +133,4 @@
     color: #0f172a;
   }
 </style>
+

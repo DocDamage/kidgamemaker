@@ -96,6 +96,7 @@ var victory_rules: Dictionary = {"win_condition": "all_enemies", "celebration": 
 var loss_rules: Dictionary = {"lose_condition": "health_0", "action": "game_over"}
 var difficulty: String = "normal"
 var calm_mode: bool = false
+var enemy_speed_multiplier: float = 1.0
 var boss_intro_played: bool = false
 var current_boss_node: Node2D = null
 
@@ -380,6 +381,7 @@ func load_level_from_string(json_string: String) -> void:
 	last_respawn_position = Vector2.ZERO
 	last_hint_position = Vector2(-99999, -99999)
 	hint_cooldown = 0.0
+	enemy_speed_multiplier = 1.0
 	var json := JSON.new()
 	var error := json.parse(json_string)
 
@@ -407,6 +409,10 @@ func load_level_from_string(json_string: String) -> void:
 			spawn_entity(entity_data)
 
 	_build_physics_contraptions()
+
+	_ensure_rule_executor()
+	if rule_executor != null and is_instance_valid(rule_executor) and rule_executor.has_method("auto_connect_proximity_triggers"):
+		rule_executor.auto_connect_proximity_triggers(room_rules)
 
 	if target_spawn_portal_id != "" and found_spawn_portal_pos != null and active_player != null:
 		active_player.global_position = found_spawn_portal_pos
@@ -688,6 +694,15 @@ func _note_player_failure(failure_position: Vector2) -> void:
 	last_respawn_position = state.get("last_respawn_position", last_respawn_position)
 	last_hint_position = state.get("last_hint_position", last_hint_position)
 	hint_cooldown = float(state.get("hint_cooldown", hint_cooldown))
+
+	# Dynamic Assist: Slow down enemies and boost player parameters on repeated failures
+	if bool(result.get("trigger_assist", false)):
+		enemy_speed_multiplier = 0.7
+		if active_player != null and is_instance_valid(active_player):
+			active_player.set("coyote_time_duration", 0.22)
+			active_player.set("jump_buffer_duration", 0.22)
+			spawn_floating_text("🛠️ ASSIST ACTIVE: Slow Enemies & Easy Jumps!", failure_position + Vector2(0, -72), Color(0.4, 1.0, 0.4))
+			print("Dynamic Assist triggered: enemy_speed_multiplier=0.7, player assist duration=0.22")
 
 	var hint_text := str(result.get("hint", ""))
 	if hint_text == "":

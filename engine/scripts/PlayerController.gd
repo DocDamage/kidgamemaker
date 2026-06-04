@@ -28,6 +28,7 @@ var gravity: float = ProjectSettings.get_setting("physics/2d/default_gravity")
 var _invincible := false
 var trail_particles: CPUParticles2D = null
 var hero_class: String = "warrior"
+var physics_preset: String = "kidfriendly"
 var max_mana: float = 100.0
 var mana_points: float = 100.0
 var dashes_spent: int = 0
@@ -181,6 +182,8 @@ var weapon_level: int = 1
 
 
 func _ready() -> void:
+	_apply_physics_preset()
+
 	if hero_class == "warrior":
 		max_health += 30
 	elif hero_class == "rogue":
@@ -197,6 +200,41 @@ func _ready() -> void:
 	if collision_shape != null and collision_shape.shape is RectangleShape2D:
 		original_collision_height = collision_shape.shape.size.y
 		original_collision_y = collision_shape.position.y
+
+
+func _apply_physics_preset() -> void:
+	match physics_preset:
+		"mario":
+			movement_speed = 180.0
+			jump_force = -520.0
+			gravity_scale = 1.3
+			coyote_time_duration = 0.08
+			jump_buffer_duration = 0.12
+		"sonic":
+			movement_speed = 360.0
+			jump_force = -440.0
+			gravity_scale = 0.95
+			coyote_time_duration = 0.05
+			jump_buffer_duration = 0.08
+		"hollow":
+			movement_speed = 240.0
+			jump_force = -450.0
+			gravity_scale = 1.55
+			coyote_time_duration = 0.05
+			jump_buffer_duration = 0.05
+		"kirby":
+			movement_speed = 140.0
+			jump_force = -380.0
+			gravity_scale = 0.65
+			coyote_time_duration = 0.20
+			jump_buffer_duration = 0.20
+		_: # "kidfriendly"
+			movement_speed = 220.0
+			jump_force = -460.0
+			gravity_scale = 1.0
+			coyote_time_duration = 0.15
+			jump_buffer_duration = 0.15
+
 
 
 func _ready_trail_particles() -> void:
@@ -723,6 +761,55 @@ func _physics_process(delta: float) -> void:
 		if did_jump:
 			if main != null and main.has_method("play_custom_sfx"):
 				main.play_custom_sfx(asset_id, "jump")
+
+	# Variable jump cancel (jump cut on release)
+	if not is_on_floor() and ((velocity.y < 0.0 and not gravity_inverted) or (velocity.y > 0.0 and gravity_inverted)):
+		var jump_released := Input.is_action_just_released("ui_accept") or Input.is_action_just_released("ui_up")
+		if jump_released:
+			if physics_preset == "hollow":
+				velocity.y = 0.0
+			else:
+				velocity.y *= 0.5
+
+	# Auto-Edge Jump (Calm/Mellow mode only)
+	var is_mellow_or_calm := false
+	if main != null:
+		var diff = main.get("difficulty")
+		var calm = main.get("calm_mode")
+		if diff == "calm" or calm == true:
+			is_mellow_or_calm = true
+
+	if is_mellow_or_calm and is_on_floor() and input_dir != 0.0 and abs(velocity.x) > 10.0:
+		var ahead_offset = 12.0 * sign(velocity.x)
+		var ahead_transform = global_transform.translated(Vector2(ahead_offset, 0))
+		if not test_move(ahead_transform, Vector2(0, 20.0)):
+			velocity.y = jump_force * 0.65 if not gravity_inverted else -jump_force * 0.65
+			coyote_timer = 0.0
+			jump_buffer_timer = 0.0
+			if main != null and main.has_method("play_sfx"):
+				main.play_sfx("jump")
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("🎈 UP!", global_position, Color.SKY_BLUE)
+
+	# Ceiling Corner Correction
+	if (velocity.y < 0.0 and not gravity_inverted) or (velocity.y > 0.0 and gravity_inverted):
+		var up_motion = Vector2(0, velocity.y * delta)
+		if test_move(global_transform, up_motion):
+			var max_nudge := 8.0
+			var cleared := false
+			for nudge in range(1, int(max_nudge) + 1):
+				var test_transform = global_transform.translated(Vector2(-nudge, 0))
+				if not test_move(test_transform, up_motion):
+					global_position.x -= nudge
+					cleared = true
+					break
+			if not cleared:
+				for nudge in range(1, int(max_nudge) + 1):
+					var test_transform = global_transform.translated(Vector2(nudge, 0))
+					if not test_move(test_transform, up_motion):
+						global_position.x += nudge
+						cleared = true
+						break
 
 	move_and_slide()
 

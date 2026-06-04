@@ -23,6 +23,8 @@ static func create_player(app, data: Dictionary, sidecar: Dictionary, player_scr
 			body.set("costume_tint", str(modifiers.get("costume_tint")))
 		if modifiers.has("hero_class"):
 			body.set("hero_class", str(modifiers.get("hero_class")))
+		if modifiers.has("physics_preset"):
+			body.set("physics_preset", str(modifiers.get("physics_preset")))
 	return body
 
 
