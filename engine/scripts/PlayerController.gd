@@ -12,6 +12,9 @@ const PlayerLedgeGrab = preload("res://scripts/PlayerLedgeGrab.gd")
 const PlayerRopeClimb = preload("res://scripts/PlayerRopeClimb.gd")
 const PlayerGrapplingHook = preload("res://scripts/PlayerGrapplingHook.gd")
 const PlayerSpecialMoves = preload("res://scripts/PlayerSpecialMoves.gd")
+const PlayerCrouchSlide = preload("res://scripts/PlayerCrouchSlide.gd")
+const PlayerWallCeilingRun = preload("res://scripts/PlayerWallCeilingRun.gd")
+const PlayerCombat = preload("res://scripts/PlayerCombat.gd")
 
 @export var max_health: int = 100
 @export var movement_speed: float = 220.0
@@ -292,59 +295,11 @@ func _physics_process(delta: float) -> void:
 	if PlayerSpecialMoves.process_spindash_roll(self, delta):
 		return
 
-	# Wall Run detection
+	# Wall / Ceiling Run mechanics
 	var input_dir := Input.get_axis("ui_left", "ui_right")
-	if is_on_wall() and velocity.y > -100.0 and input_dir != 0.0 and not is_on_floor() and not is_wall_running and not is_ceiling_running:
-		var on_wall_run_tile := false
-		if main != null:
-			for child in main.get_children():
-				if child.name.contains("wall_run_surface") or (child.has_meta("asset_id") and child.get_meta("asset_id") == "wall_run_surface"):
-					if global_position.distance_to(child.global_position) < 48.0:
-						on_wall_run_tile = true
-						break
-		if on_wall_run_tile:
-			is_wall_running = true
-			magnet_meter = 3.0
-			if main != null and main.has_method("spawn_floating_text"):
-				main.spawn_floating_text("⚡ WALL RUN!", global_position, Color.CHARTREUSE)
-
-	if is_wall_running:
-		magnet_meter -= delta
-		velocity.y = -movement_speed * 1.3
-		velocity.x = 0.0
-		modulate = Color.CHARTREUSE if Engine.get_physics_frames() % 4 < 2 else Color.WHITE
-		if magnet_meter <= 0.0 or not is_on_wall() or Input.get_axis("ui_left", "ui_right") * get_wall_normal().x > 0.0:
-			is_wall_running = false
-		if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
-			is_wall_running = false
-			velocity = Vector2(get_wall_normal().x * 250.0, jump_force * 0.9)
-			if main != null and main.has_method("play_sfx"): main.play_sfx("jump")
-		move_and_slide()
+	if PlayerWallCeilingRun.process_wall_run(self, delta, input_dir):
 		return
-
-	# Ceiling Run detection
-	if is_on_ceiling() and velocity.x != 0.0 and not is_ceiling_running and not is_wall_running:
-		var on_ceiling_run_tile := false
-		if main != null:
-			for child in main.get_children():
-				if child.name.contains("ceiling_run_surface") or (child.has_meta("asset_id") and child.get_meta("asset_id") == "ceiling_run_surface"):
-					if global_position.distance_to(child.global_position) < 48.0:
-						on_ceiling_run_tile = true
-						break
-		if on_ceiling_run_tile:
-			is_ceiling_running = true
-			magnet_meter = 3.0
-			if main != null and main.has_method("spawn_floating_text"):
-				main.spawn_floating_text("🌀 CEILING RUN!", global_position, Color.CYAN)
-
-	if is_ceiling_running:
-		magnet_meter -= delta
-		velocity.y = -30.0
-		velocity.x = input_dir * movement_speed * 1.2
-		modulate = Color.CYAN if Engine.get_physics_frames() % 4 < 2 else Color.WHITE
-		if magnet_meter <= 0.0 or not is_on_ceiling() or input_dir == 0.0:
-			is_ceiling_running = false
-		move_and_slide()
+	if PlayerWallCeilingRun.process_ceiling_run(self, delta, input_dir):
 		return
 
 	# Ledge Grab check
@@ -428,47 +383,8 @@ func _physics_process(delta: float) -> void:
 			return
 
 	# Crouching, Sliding & Squid Form Logic
+	PlayerCrouchSlide.update_crouch_slide(self, delta)
 	var down_input_pressed := Input.is_action_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S)
-	var on_paint := false
-	if has_paint_gun:
-		for i in get_slide_collision_count():
-			var col = get_slide_collision(i)
-			var collider = col.get_collider()
-			if collider != null and collider.has_meta("paint_color") and collider.get_meta("paint_color") == "green":
-				on_paint = true
-				break
-
-	if has_paint_gun and on_paint and down_input_pressed:
-		if not is_squid_form:
-			is_squid_form = true
-			is_crouching = true
-			PlayerVisualEffects.toggle_squid_visuals(self, true)
-	elif is_squid_form and (not down_input_pressed or not on_paint):
-		if set_crouch_state(false):
-			is_squid_form = false
-			is_crouching = false
-			PlayerVisualEffects.toggle_squid_visuals(self, false)
-
-	if not is_squid_form:
-		if is_on_floor() and down_input_pressed:
-			if not is_crouching:
-				is_crouching = true
-				set_crouch_state(true)
-				if abs(velocity.x) > movement_speed * 0.8:
-					is_sliding = true
-					slide_boost_timer = 0.6
-					if main != null and main.has_method("spawn_floating_text"):
-						main.spawn_floating_text("💨 SLIDE!", global_position, Color.AQUAMARINE)
-		elif not down_input_pressed:
-			if is_crouching:
-				if set_crouch_state(false):
-					is_crouching = false
-					is_sliding = false
-
-	if is_sliding:
-		slide_boost_timer -= delta
-		if slide_boost_timer <= 0.0:
-			is_sliding = false
 
 	# Speed Booster & Shinespark mechanics
 	PlayerSpecialMoves.update_speed_booster(self, input_dir, down_input_pressed, delta)
@@ -865,54 +781,7 @@ func show_emote(emoji: String) -> void:
 
 
 func _execute_melee_strike(step: int) -> void:
-	var main = get_tree().get_root().get_node_or_null("Main")
-	var text = "⚔️ SWING!"
-	var dmg = 15
-	var kback = 200.0
-	if step == 2:
-		text = "⚔️ SLASH!"
-		dmg = 15
-		kback = 220.0
-	elif step == 3:
-		text = "🔥 FINISHER!"
-		dmg = 30
-		kback = 450.0
-
-	if hero_class == "warrior":
-		dmg = int(dmg * 1.2)
-
-	if main != null and main.has_method("play_sfx"):
-		main.play_sfx("hit")
-	if main != null and main.has_method("spawn_floating_text"):
-		main.spawn_floating_text(text, global_position + Vector2(facing_direction * 24, -20), Color.RED if step == 3 else Color.WHITE)
-
-	# Visual Slash effect: create a small ColorRect arc in front of player
-	var slash := ColorRect.new()
-	slash.color = Color(1.0, 1.0, 1.0, 0.7) if step < 3 else Color(1.0, 0.3, 0.1, 0.8)
-	slash.size = Vector2(36, 12) if step < 3 else Vector2(48, 20)
-	slash.position = Vector2(facing_direction * 16 - slash.size.x * 0.5, -12)
-	add_child(slash)
-
-	var tween = create_tween()
-	tween.tween_property(slash, "scale:y", 0.0, 0.15)
-	tween.chain().tween_callback(slash.queue_free)
-
-	# Check collision with enemies on common layer (layer 1)
-	var space_state = get_world_2d().direct_space_state
-	var query = PhysicsShapeQueryParameters2D.new()
-	var rect = RectangleShape2D.new()
-	rect.size = Vector2(48, 36) if step < 3 else Vector2(64, 48)
-	query.shape = rect
-	query.transform = Transform2D(0, global_position + Vector2(facing_direction * 28, 0))
-	query.collision_mask = 1 # hits enemies
-
-	var hits = space_state.intersect_shape(query)
-	for hit in hits:
-		var node = hit.get("collider")
-		if node != null and node != self and node.has_method("take_damage"):
-			node.take_damage(dmg)
-			if "velocity" in node:
-				node.velocity += Vector2(facing_direction * kback, -100.0)
+	PlayerCombat.execute_melee_strike(self, step)
 
 
 func _configure_linear_projectile(
@@ -961,22 +830,7 @@ func _stun_closest_enemy() -> void:
 
 
 func _execute_ground_pound_damage() -> void:
-	var main = get_tree().get_root().get_node_or_null("Main")
-	var space_state = get_world_2d().direct_space_state
-	var query = PhysicsShapeQueryParameters2D.new()
-	var rect = RectangleShape2D.new()
-	rect.size = Vector2(96, 32)
-	query.shape = rect
-	query.transform = Transform2D(0, global_position + Vector2(0, 10))
-	query.collision_mask = 1 # hits enemies
-
-	var hits = space_state.intersect_shape(query)
-	for hit in hits:
-		var node = hit.get("collider")
-		if node != null and node != self and node.has_method("take_damage"):
-			node.take_damage(30)
-			if "velocity" in node:
-				node.velocity += Vector2(sign(node.global_position.x - global_position.x) * 300.0, -150.0)
+	PlayerCombat.execute_ground_pound_damage(self)
 
 
 func _fire_archer_arrow() -> void:
@@ -1016,42 +870,7 @@ func add_to_backpack(item_type: String) -> bool:
 
 
 func set_crouch_state(crouch: bool) -> bool:
-	if collision_shape == null or not collision_shape.shape is RectangleShape2D:
-		return true
-
-	if crouch:
-		collision_shape.shape.size.y = original_collision_height * 0.5
-		collision_shape.position.y = original_collision_y + original_collision_height * 0.25
-		for child in get_children():
-			if child is CollisionShape2D or child.name.contains("Particles") or child.name.contains("Emote") or child.name.contains("Light"):
-				continue
-			child.scale.y = 0.5
-			if "position" in child:
-				child.position.y = original_collision_height * 0.25
-		return true
-	else:
-		var space_state := get_world_2d().direct_space_state
-		var query := PhysicsShapeQueryParameters2D.new()
-		var test_shape := RectangleShape2D.new()
-		test_shape.size = Vector2(24, original_collision_height)
-		query.shape = test_shape
-		query.transform = Transform2D(0, global_position + Vector2(0, original_collision_y - original_collision_height * 0.25))
-		query.collision_mask = 1 # solid layers
-		query.exclude = [self]
-
-		var results = space_state.intersect_shape(query, 1)
-		if results.is_empty():
-			collision_shape.shape.size.y = original_collision_height
-			collision_shape.position.y = original_collision_y
-			for child in get_children():
-				if child is CollisionShape2D or child.name.contains("Particles") or child.name.contains("Emote") or child.name.contains("Light"):
-					continue
-				child.scale.y = 1.0
-				if "position" in child:
-					child.position.y = 0.0
-			return true
-		else:
-			return false
+	return PlayerCrouchSlide.set_crouch_state(self, crouch)
 
 
 func _draw() -> void:
