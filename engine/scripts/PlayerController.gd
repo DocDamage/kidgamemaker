@@ -8,6 +8,10 @@ const PlayerPowerups = preload("res://scripts/PlayerPowerups.gd")
 const PlayerDamage = preload("res://scripts/PlayerDamage.gd")
 const PlayerStatusEffects = preload("res://scripts/PlayerStatusEffects.gd")
 const PlayerInputActions = preload("res://scripts/PlayerInputActions.gd")
+const PlayerLedgeGrab = preload("res://scripts/PlayerLedgeGrab.gd")
+const PlayerRopeClimb = preload("res://scripts/PlayerRopeClimb.gd")
+const PlayerGrapplingHook = preload("res://scripts/PlayerGrapplingHook.gd")
+const PlayerSpecialMoves = preload("res://scripts/PlayerSpecialMoves.gd")
 
 @export var max_health: int = 100
 @export var movement_speed: float = 220.0
@@ -274,129 +278,18 @@ func _physics_process(delta: float) -> void:
 			if main != null and main.has_method("spawn_floating_text"):
 				main.spawn_floating_text("TIME NORMAL", global_position, Color.CYAN)
 
-	# Shinespark Flight Mode Override
-	if is_shinesparking:
-		velocity = shinespark_direction * 800.0
-		shinespark_flight_timer -= delta
-		if main != null and main.has_method("spawn_floating_text") and randf() < delta * 15.0:
-			main.spawn_floating_text("✨", global_position + Vector2(randf_range(-12,12), randf_range(-12,12)), Color.YELLOW)
-		modulate = Color.YELLOW if Engine.get_physics_frames() % 4 < 2 else Color.ORANGE
-		var hit_something := false
-		if is_on_wall() or is_on_ceiling() or is_on_floor() or shinespark_flight_timer <= 0.0:
-			hit_something = true
-		for i in get_slide_collision_count():
-			var col = get_slide_collision(i)
-			var collider = col.get_collider()
-			if collider != null and collider.has_method("take_damage") and not collider.name.begins_with("Player"):
-				collider.take_damage(60)
-				hit_something = true
-			if collider != null and (collider.has_meta("is_speed_block") or collider.has_meta("is_destructible")):
-				collider.call_deferred("shatter")
-		if hit_something:
-			is_shinesparking = false
-			velocity = Vector2.ZERO
-			if main != null:
-				if main.has_method("trigger_screen_shake"): main.trigger_screen_shake(15.0, 0.4)
-				if main.has_method("play_sfx"): main.play_sfx("hit")
-				if main.has_method("spawn_floating_text"): main.spawn_floating_text("💥 SHOCKWAVE!", global_position, Color.RED)
-				_execute_ground_pound_damage()
-		move_and_slide()
+	# Traversal and Special Moves Overrides
+	if PlayerSpecialMoves.process_shinespark(self, delta):
 		return
-
-	# Grappling hook Override
-	if is_grappling:
-		var dir = (grapple_target_pos - global_position).normalized()
-		velocity = dir * 580.0
-		queue_redraw()
-		for i in get_slide_collision_count():
-			var col = get_slide_collision(i)
-			var collider = col.get_collider()
-			if collider != null and (collider.has_meta("is_destructible") or collider.has_meta("is_speed_block")):
-				collider.call_deferred("shatter")
-		if global_position.distance_to(grapple_target_pos) < 25.0 or not Input.is_physical_key_pressed(KEY_E):
-			is_grappling = false
-			velocity = velocity * 0.45
-			queue_redraw()
-		move_and_slide()
+	if PlayerGrapplingHook.process_grapple(self, delta):
 		return
-
-	# Rope swing / climb Override
-	if is_rope_climbing:
-		if not is_instance_valid(current_rope):
-			is_rope_climbing = false
-		else:
-			velocity = Vector2.ZERO
-			queue_redraw()
-			var rope_anchor = current_rope.global_position
-			if Input.is_action_pressed("ui_up"):
-				rope_length = max(30.0, rope_length - 120.0 * delta)
-			elif Input.is_action_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S):
-				rope_length = min(300.0, rope_length + 120.0 * delta)
-			var h_input = Input.get_axis("ui_left", "ui_right")
-			swing_speed += h_input * delta * 5.0
-			swing_speed = lerp(swing_speed, 0.0, delta * 0.3)
-			swing_angle += swing_speed * delta
-			swing_angle = clamp(swing_angle, -deg_to_rad(65), deg_to_rad(65))
-			global_position = rope_anchor + Vector2(sin(swing_angle), cos(swing_angle)) * rope_length
-			if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
-				is_rope_climbing = false
-				velocity = Vector2(sin(swing_angle) * 350.0 + h_input * 120.0, -320.0)
-				current_rope = null
-				if main != null and main.has_method("play_sfx"): main.play_sfx("jump")
-			move_and_slide()
-			return
-
-	# Ledge Grab hanging Override
-	if is_ledge_hanging:
-		velocity = Vector2.ZERO
-		global_position = ledge_pos
-		if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
-			is_ledge_hanging = false
-			velocity = Vector2(facing_direction * 150.0, jump_force * 0.8)
-			if main != null and main.has_method("play_sfx"): main.play_sfx("jump")
-		elif Input.is_action_just_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S):
-			is_ledge_hanging = false
-		move_and_slide()
+	if PlayerRopeClimb.process_climb(self, delta):
 		return
-
-	# Spin Dash charge Override
-	if is_spindashing:
-		velocity = Vector2.ZERO
-		spindash_charge = min(spindash_charge + delta * 2.5, 3.0)
-		position.x += randf_range(-1.2, 1.2)
-		scale = Vector2(1.1, 0.7)
-		var down_held = Input.is_action_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S)
-		if not down_held:
-			is_spindashing = false
-			is_spindash_rolling = true
-			spindash_roll_timer = 1.2
-			scale = Vector2(1.0, 1.0)
-			velocity.x = facing_direction * movement_speed * (1.8 + spindash_charge * 0.7)
-			if main != null and main.has_method("play_sfx"): main.play_sfx("jump")
-			if main != null and main.has_method("spawn_floating_text"):
-				main.spawn_floating_text("🌀 SPIN DASH!", global_position, Color.CYAN)
-		else:
-			move_and_slide()
-			return
-
-	# Spin Dash roll Override
-	if is_spindash_rolling:
-		spindash_roll_timer -= delta
-		velocity.x = facing_direction * movement_speed * (1.8 + spindash_charge * 0.7)
-		rotation += facing_direction * 25.0 * delta
-		velocity.y += gravity * delta
-		for i in get_slide_collision_count():
-			var col = get_slide_collision(i)
-			var collider = col.get_collider()
-			if collider != null and collider.has_method("take_damage") and not collider.name.begins_with("Player"):
-				collider.take_damage(25)
-			if collider != null and (collider.has_meta("is_destructible") or collider.has_meta("is_speed_block")):
-				collider.call_deferred("shatter")
-				if main != null and main.has_method("play_sfx"): main.play_sfx("hit")
-		if spindash_roll_timer <= 0.0 or is_on_wall():
-			is_spindash_rolling = false
-			rotation = 0.0
-		move_and_slide()
+	if PlayerLedgeGrab.process_ledge_grab(self, delta):
+		return
+	if PlayerSpecialMoves.process_spindash(self, delta):
+		return
+	if PlayerSpecialMoves.process_spindash_roll(self, delta):
 		return
 
 	# Wall Run detection
@@ -455,65 +348,17 @@ func _physics_process(delta: float) -> void:
 		return
 
 	# Ledge Grab check
-	if not is_on_floor() and not is_ledge_hanging and not is_rope_climbing and not is_grappling and not is_shinesparking:
-		var is_falling_y = velocity.y > 0.0 if not gravity_inverted else velocity.y < 0.0
-		if is_falling_y:
-			var space_state := get_world_2d().direct_space_state
-			var chest_query = PhysicsRayQueryParameters2D.create(global_position, global_position + Vector2(facing_direction * 22, 0))
-			chest_query.collision_mask = 1
-			chest_query.exclude = [self]
-			var chest_hit = space_state.intersect_ray(chest_query)
-			var head_query = PhysicsRayQueryParameters2D.create(global_position + Vector2(0, -32 if not gravity_inverted else 32), global_position + Vector2(facing_direction * 22, -32 if not gravity_inverted else 32))
-			head_query.collision_mask = 1
-			head_query.exclude = [self]
-			var head_hit = space_state.intersect_ray(head_query)
-			if not chest_hit.is_empty() and head_hit.is_empty():
-				is_ledge_hanging = true
-				ledge_pos = Vector2(chest_hit.position.x - facing_direction * 14.0, chest_hit.position.y + 12.0)
-				global_position = ledge_pos
-				velocity = Vector2.ZERO
-				if main != null and main.has_method("spawn_floating_text"):
-					main.spawn_floating_text("🧗 LEDGE GRAB!", global_position, Color.CHARTREUSE)
+	PlayerLedgeGrab.check_ledge_grab(self)
 
 	# Rope swing / climb detection trigger
-	var climb_input = Input.is_action_pressed("ui_up") or Input.is_action_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S)
-	if climb_input and not is_rope_climbing and not is_ledge_hanging and not is_grappling:
-		var near_rope: Node2D = null
-		if main != null:
-			for child in main.get_children():
-				if child.name.contains("climbable_vine") or child.name.contains("climbable_rope") or (child.has_meta("asset_id") and (child.get_meta("asset_id") == "climbable_vine" or child.get_meta("asset_id") == "climbable_rope")):
-					if global_position.distance_to(child.global_position) < 32.0:
-						near_rope = child
-						break
-		if near_rope != null:
-			is_rope_climbing = true
-			current_rope = near_rope
-			swing_angle = 0.0
-			swing_speed = 0.0
-			rope_length = clamp(global_position.distance_to(current_rope.global_position), 30.0, 300.0)
-			if main != null and main.has_method("spawn_floating_text"):
-				main.spawn_floating_text("🧗 CLIMB!", global_position, Color.GREEN)
+	PlayerRopeClimb.check_climb_trigger(self)
 
 	# Clear Pipe Entrance Check
 	if PlayerClearPipe.try_enter(self):
 		return
 
 	# Grapple ring target check E key
-	if Input.is_physical_key_pressed(KEY_E) and not is_grappling and not is_shinesparking and not is_rope_climbing:
-		var closest_anchor: Node2D = null
-		var min_dist = current_grapple_range
-		if main != null:
-			for child in main.get_children():
-				if child.name.contains("grapple_ring") or (child.has_meta("asset_id") and child.get_meta("asset_id") == "grapple_ring"):
-					var dist = global_position.distance_to(child.global_position)
-					if dist < min_dist:
-						min_dist = dist
-						closest_anchor = child
-		if closest_anchor != null:
-			is_grappling = true
-			grapple_target_pos = closest_anchor.global_position
-			if main != null and main.has_method("play_sfx"): main.play_sfx("jump")
-			queue_redraw()
+	PlayerGrapplingHook.check_grapple_trigger(self)
 
 	# Coyote Time & Jump Buffer ticks
 	if is_on_floor() or inside_water:
@@ -625,44 +470,8 @@ func _physics_process(delta: float) -> void:
 		if slide_boost_timer <= 0.0:
 			is_sliding = false
 
-	# Speed Booster running charge
-	if is_on_floor() and abs(velocity.x) > movement_speed * 0.85 and input_dir != 0.0 and not is_crouching:
-		run_timer += delta
-		if run_timer >= 2.0 and not speed_booster_active:
-			speed_booster_active = true
-			if main != null and main.has_method("spawn_floating_text"):
-				main.spawn_floating_text("⚡ SPEED BOOSTER ACTIVE! ⚡", global_position, Color.GOLD)
-	else:
-		if not is_on_floor() or input_dir == 0.0 or is_crouching:
-			run_timer = 0.0
-			if not shinespark_stored:
-				speed_booster_active = false
-
-	# Shinespark store
-	if speed_booster_active and down_input_pressed and is_on_floor():
-		shinespark_stored = true
-		shinespark_store_timer = 4.0
-		speed_booster_active = false
-		run_timer = 0.0
-		if main != null and main.has_method("spawn_floating_text"):
-			main.spawn_floating_text("✨ SHINESPARK STORED! ✨", global_position, Color.GOLD)
-
-	if shinespark_stored:
-		shinespark_store_timer -= delta
-		if shinespark_store_timer <= 0.0:
-			shinespark_stored = false
-		if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
-			shinespark_stored = false
-			is_shinesparking = true
-			shinespark_flight_timer = 1.5
-			var vertical_in = Input.get_axis("ui_up", "ui_down")
-			var horizontal_in = Input.get_axis("ui_left", "ui_right")
-			shinespark_direction = Vector2(horizontal_in, -1.0 if vertical_in == 0.0 else vertical_in).normalized()
-			if shinespark_direction.length_squared() < 0.1:
-				shinespark_direction = Vector2.UP
-			velocity = shinespark_direction * 800.0
-			if main != null and main.has_method("spawn_floating_text"):
-				main.spawn_floating_text("🚀 SHINESPARK!!!", global_position, Color.GOLD)
+	# Speed Booster & Shinespark mechanics
+	PlayerSpecialMoves.update_speed_booster(self, input_dir, down_input_pressed, delta)
 
 	# Configure up direction dynamically
 	if gravity_inverted:

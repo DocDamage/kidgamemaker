@@ -64,6 +64,8 @@ const RUNTIME_GAMEPLAY_OBJECT_FACTORY_SCRIPT := preload("res://scripts/RuntimeGa
 const RUNTIME_SPAWN_ENTITY_FACTORY_SCRIPT := preload("res://scripts/RuntimeSpawnEntityFactory.gd")
 const RUNTIME_ENTITY_SPAWNER_SCRIPT := preload("res://scripts/RuntimeEntitySpawner.gd")
 const RUNTIME_PARTICLE_FACTORY_SCRIPT := preload("res://scripts/RuntimeParticleFactory.gd")
+const RUNTIME_PROGRESSION_FLOW_SCRIPT := preload("res://scripts/RuntimeProgressionFlow.gd")
+const RUNTIME_COMBAT_TRAVERSAL_GLUE_SCRIPT := preload("res://scripts/RuntimeCombatTraversalGlue.gd")
 
 const CATEGORY_SEARCH_ORDER := [
 	"heroes",
@@ -114,11 +116,6 @@ var physics_tick_counter: int = 0
 var room_rules: Array = []
 var collectibles_collected: int = 0
 
-var shake_amplitude: float = 0.0
-var shake_duration: float = 0.0
-var hit_stop_timer: float = 0.0
-var original_time_scale: float = 1.0
-
 var camera_autoscroll_enabled: bool = false
 var camera_autoscroll_direction: String = "right"
 var camera_autoscroll_speed: float = 40.0
@@ -128,6 +125,8 @@ var floating_text_manager: Node = null
 var end_game_overlay_manager: Node = null
 var rule_executor: Node = null
 var autoscroll_camera_node: Camera2D = null
+var progression_flow: Node = null
+var combat_traversal_glue: Node = null
 
 var level_balancer_enabled: bool = true
 var tutorial_whisperer_enabled: bool = true
@@ -148,6 +147,8 @@ func _ready() -> void:
 	_ensure_floating_text_manager()
 	_ensure_end_game_overlay_manager()
 	_ensure_rule_executor()
+	_ensure_progression_flow()
+	_ensure_combat_traversal_glue()
 	if OS.has_feature("web"):
 		var window = JavaScriptBridge.get_interface("window")
 		if window != null:
@@ -245,6 +246,24 @@ func _ensure_rule_executor() -> void:
 	add_child(rule_executor)
 	if rule_executor.has_method("configure"):
 		rule_executor.configure(self)
+
+
+func _ensure_progression_flow() -> void:
+	if progression_flow != null and is_instance_valid(progression_flow):
+		return
+	progression_flow = RUNTIME_PROGRESSION_FLOW_SCRIPT.new()
+	progression_flow.name = "ProgressionFlow"
+	add_child(progression_flow)
+	progression_flow.configure(self)
+
+
+func _ensure_combat_traversal_glue() -> void:
+	if combat_traversal_glue != null and is_instance_valid(combat_traversal_glue):
+		return
+	combat_traversal_glue = RUNTIME_COMBAT_TRAVERSAL_GLUE_SCRIPT.new()
+	combat_traversal_glue.name = "CombatTraversalGlue"
+	add_child(combat_traversal_glue)
+	combat_traversal_glue.configure(self)
 
 
 func _sync_hud_refs() -> void:
@@ -640,43 +659,13 @@ func _load_texture_dynamic(path: String, sidecar_file_path: String) -> Texture2D
 
 
 func _on_checkpoint_activated(pos: Vector2) -> void:
-	spawn_point = pos
-	print("Checkpoint activated at: ", spawn_point)
+	_ensure_progression_flow()
+	progression_flow.checkpoint_activated(pos)
 
 
 func _respawn_player() -> void:
-	print("Player fell! Respawning at: ", spawn_point)
-	if active_player != null and is_instance_valid(active_player):
-		_note_player_failure(active_player.global_position)
-
-	if not calm_mode and active_player != null and is_instance_valid(active_player):
-		var lost_coins := int(score * 0.5)
-		if lost_coins > 0:
-			score -= lost_coins
-			_update_hud()
-			_spawn_recovery_ghost(active_player.global_position, lost_coins)
-
-	if camera_autoscroll_enabled and is_instance_valid(autoscroll_camera_node):
-		autoscroll_camera_node.global_position = spawn_point
-
-	# Save run recording to static memory if it is long enough
-	if current_run.size() > 20:
-		run_record = current_run
-	current_run = []
-	physics_tick_counter = 0
-
-	# Clean up old ghost and spawn a new one
-	if is_instance_valid(ghost_player_node):
-		ghost_player_node.queue_free()
-		ghost_player_node = null
-
-	_spawn_ghost()
-
-	active_player.global_position = spawn_point
-	if active_player.has_method("set_velocity"):
-		active_player.set("velocity", Vector2.ZERO)
-	elif "velocity" in active_player:
-		active_player.velocity = Vector2.ZERO
+	_ensure_progression_flow()
+	progression_flow.respawn_player()
 
 
 func _note_player_failure(failure_position: Vector2) -> void:
@@ -754,108 +743,39 @@ func execute_rules(trigger_type: String, trigger_id: String = "") -> void:
 		rule_executor.execute_rules(room_rules, trigger_type, trigger_id)
 
 
-func _on_portal_entered(_portal_node: Node2D, portal_data: Dictionary) -> void:
-	if victory_rules.get("win_condition", "all_enemies") == "portal":
-		trigger_victory()
-		return
-
-	var modifiers: Dictionary = portal_data.get("modifiers", {}) if portal_data.has("modifiers") else {}
-	var target_room = str(modifiers.get("target_room", ""))
-	var target_portal = str(modifiers.get("target_portal", ""))
-
-	if target_room != "":
-		call_deferred("transition_to_room", target_room, target_portal)
+func _on_portal_entered(portal_node: Node2D, portal_data: Dictionary) -> void:
+	_ensure_progression_flow()
+	progression_flow.portal_entered(portal_node, portal_data)
 
 
 func _on_locked_door_entered(door_node: Node2D, door_data: Dictionary) -> void:
-	var key_color := str(door_node.get_meta("key_color", "gold"))
-	var count: int = keys_collected.get(key_color, 0)
-
-	if count <= 0:
-		print("Locked door requires a '%s' key!" % key_color)
-		# Flash door red to signal locked
-		var tween := create_tween()
-		tween.tween_property(door_node, "modulate", Color(2.0, 0.2, 0.2), 0.08)
-		tween.tween_property(door_node, "modulate", Color(1, 1, 1), 0.2)
-		return
-
-	# Consume the key and unlock
-	keys_collected[key_color] = count - 1
-	print("Unlocked door with '%s' key! Remaining: %d" % [key_color, keys_collected[key_color]])
-
-	# Flash open
-	var tween := create_tween()
-	tween.tween_property(door_node, "modulate", Color(0.3, 2.0, 0.3), 0.1)
-	tween.tween_property(door_node, "scale", Vector2(0, 1), 0.25).set_ease(Tween.EASE_IN)
-	tween.tween_callback(door_node.queue_free)
-
-	# Optionally transition if the door has a target_room modifier
-	var modifiers: Dictionary = door_data.get("modifiers", {}) if door_data.has("modifiers") else {}
-	var target_room := str(modifiers.get("target_room", ""))
-	var target_portal := str(modifiers.get("target_portal", ""))
-	if target_room != "":
-		call_deferred("transition_to_room", target_room, target_portal)
-
+	_ensure_progression_flow()
+	progression_flow.locked_door_entered(door_node, door_data)
 
 
 func transition_to_room(target_room_name: String, target_portal_id: String) -> void:
-	print("Transitioning to room: ", target_room_name, " spawning at portal: ", target_portal_id)
-
-	var room_path := "res://data/rooms/" + target_room_name + ".json"
-
-	if not FileAccess.file_exists(room_path):
-		var alternate_path := "res://data/" + target_room_name + ".json"
-		if FileAccess.file_exists(alternate_path):
-			room_path = alternate_path
-		else:
-			push_error("Room JSON file not found: " + room_path)
-			return
-
-	clear_spawned_entities()
-	active_player = null
-	sidecar_cache.clear()
-
-	target_spawn_portal_id = target_portal_id
-	load_level(room_path)
+	_ensure_progression_flow()
+	progression_flow.transition_to_room(target_room_name, target_portal_id)
 
 
 func check_victory_conditions() -> void:
-	var result: Dictionary = RUNTIME_VICTORY_CONDITIONS_SCRIPT.should_trigger_victory(victory_rules, spawned_entities)
-	print("Checking victory conditions... win_cond: ", result.get("win_condition", ""))
-	if str(result.get("metric_name", "")) != "":
-		print(str(result.get("metric_name", "")), ": ", int(result.get("metric_value", 0)))
-	if bool(result.get("should_trigger", false)):
-		trigger_victory()
+	_ensure_progression_flow()
+	progression_flow.check_victory_conditions()
 
 
 func trigger_victory() -> void:
-	if get_tree().paused:
-		return
-	print("VICTORY TRIGGERED!")
-	play_sfx("coin")
-	_ensure_end_game_overlay_manager()
-	if end_game_overlay_manager != null and is_instance_valid(end_game_overlay_manager) and end_game_overlay_manager.has_method("show_victory"):
-		end_game_overlay_manager.show_victory(str(victory_rules.get("celebration", "confetti")))
+	_ensure_progression_flow()
+	progression_flow.trigger_victory()
 
 
 func trigger_game_over() -> void:
-	if get_tree().paused:
-		return
-	print("GAME OVER TRIGGERED!")
-	_ensure_end_game_overlay_manager()
-	if end_game_overlay_manager != null and is_instance_valid(end_game_overlay_manager) and end_game_overlay_manager.has_method("show_game_over"):
-		end_game_overlay_manager.show_game_over()
+	_ensure_progression_flow()
+	progression_flow.trigger_game_over()
 
 
 func handle_player_death() -> void:
-	var action = loss_rules.get("action", "game_over")
-	print("handle_player_death called. loss action rule: ", action, " calm_mode: ", calm_mode)
-	if calm_mode or action == "respawn":
-		if active_player != null and is_instance_valid(active_player) and "max_health" in active_player:
-			active_player.set("current_health", active_player.get("max_health"))
-		_respawn_player()
-	else:
-		trigger_game_over()
+	_ensure_progression_flow()
+	progression_flow.handle_player_death()
 
 
 func clear_spawned_entities() -> void:
@@ -900,69 +820,13 @@ func _handle_collectible_reward_event(event: Dictionary) -> void:
 
 
 func _configure_camera_limits() -> void:
-	if active_player == null:
-		return
-
-	var camera: Camera2D = null
-	for child in active_player.get_children():
-		if child is Camera2D:
-			camera = child
-			break
-
-	if camera == null:
-		return
-
-	var min_x := 999999.0
-	var max_x := -999999.0
-	var min_y := 999999.0
-	var max_y := -999999.0
-
-	var found_terrain := false
-	for child in get_children():
-		if child.name.begins_with("stone_floor") or child.name.begins_with("floor") or child is StaticBody2D:
-			var child_node2d := child as Node2D
-			if child_node2d != null:
-				found_terrain = true
-				var pos: Vector2 = child_node2d.global_position
-				var size: Vector2 = Vector2(128, 32)
-
-				if child_node2d.has_meta("collision_size"):
-					size = child_node2d.get_meta("collision_size")
-
-				min_x = min(min_x, pos.x - size.x * 0.5)
-				max_x = max(max_x, pos.x + size.x * 0.5)
-				min_y = min(min_y, pos.y - size.y * 0.5)
-				max_y = max(max_y, pos.y + size.y * 0.5)
-
-	if not found_terrain:
-		min_x = active_player.global_position.x - 1000
-		max_x = active_player.global_position.x + 1000
-		min_y = active_player.global_position.y - 1000
-		max_y = active_player.global_position.y + 1000
-
-	camera.limit_left = int(min_x - 400)
-	camera.limit_right = int(max_x + 400)
-	camera.limit_top = int(min_y - 600)
-	camera.limit_bottom = int(max_y + 400)
-
-	death_y_threshold = camera.limit_bottom + 100
-	print("Camera limits configured: Left=", camera.limit_left, " Right=", camera.limit_right, " Bottom=", camera.limit_bottom, " DeathPlane=", death_y_threshold)
+	_ensure_combat_traversal_glue()
+	combat_traversal_glue.configure_camera_limits()
 
 
 func _attach_camera(target: Node2D) -> void:
-	var camera := Camera2D.new()
-	if camera_autoscroll_enabled:
-		camera.position_smoothing_enabled = false
-		add_child(camera)
-		camera.global_position = target.global_position
-		autoscroll_camera_node = camera
-	else:
-		camera.position_smoothing_enabled = true
-		camera.position_smoothing_speed = 8.0
-		target.add_child(camera)
-
-	camera.make_current()
-	print("Camera attached. Autoscroll active=", camera_autoscroll_enabled)
+	_ensure_combat_traversal_glue()
+	combat_traversal_glue.attach_camera(target)
 
 
 func _placement_bucket(sidecar: Dictionary) -> String:
@@ -1021,80 +885,28 @@ func _process(delta: float) -> void:
 			if dist < 350.0:
 				trigger_boss_intro(boss)
 
-	hit_stop_timer = RUNTIME_FRAME_EFFECTS_SCRIPT.update_hit_stop(hit_stop_timer, original_time_scale, delta)
-	shake_duration = RUNTIME_FRAME_EFFECTS_SCRIPT.update_screen_shake(_find_camera(), shake_duration, shake_amplitude, delta)
+	_ensure_combat_traversal_glue()
+	combat_traversal_glue.update_effects(delta)
 
 
 func _find_active_boss() -> Node2D:
-	for node in spawned_entities:
-		if is_instance_valid(node) and node.get("boss_mode") == true:
-			return node
-	return null
+	_ensure_combat_traversal_glue()
+	return combat_traversal_glue.find_active_boss()
 
 
 func _find_camera() -> Camera2D:
-	if active_player != null and is_instance_valid(active_player):
-		for child in active_player.get_children():
-			if child is Camera2D:
-				return child
-	return null
+	_ensure_combat_traversal_glue()
+	return combat_traversal_glue.find_camera()
 
 
 func play_dramatic_boss_chord() -> void:
-	for i in range(3):
-		var timer = get_tree().create_timer(i * 0.15)
-		timer.timeout.connect(func():
-			play_sfx("hit")
-		)
+	_ensure_combat_traversal_glue()
+	combat_traversal_glue.play_dramatic_boss_chord()
 
 
 func trigger_boss_intro(boss: Node2D) -> void:
-	boss_intro_played = true
-	current_boss_node = boss
-	print("🚨 BOSS INTRO TRIGGERED FOR: ", boss.name)
-
-	var camera = _find_camera()
-	if camera == null:
-		return
-
-	if active_player != null and is_instance_valid(active_player):
-		active_player.set_physics_process(false)
-		if "velocity" in active_player:
-			active_player.velocity = Vector2.ZERO
-	for entity in spawned_entities:
-		if is_instance_valid(entity) and entity != boss:
-			entity.set_physics_process(false)
-	boss.set_physics_process(false)
-
-	camera.top_level = true
-	var orig_zoom = camera.zoom
-	var target_pos = boss.global_position
-
-	var tween = create_tween().set_parallel(true)
-	tween.tween_property(camera, "global_position", target_pos, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(camera, "zoom", Vector2(1.6, 1.6), 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-
-	play_dramatic_boss_chord()
-	_show_boss_banner(boss)
-
-	var timer = get_tree().create_timer(2.2)
-	timer.timeout.connect(func():
-		var return_tween = create_tween().set_parallel(true)
-		if is_instance_valid(camera) and is_instance_valid(active_player):
-			return_tween.tween_property(camera, "global_position", active_player.global_position, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-			return_tween.tween_property(camera, "zoom", orig_zoom, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-
-		return_tween.chain().tween_callback(func():
-			if is_instance_valid(camera):
-				camera.top_level = false
-				camera.position = Vector2.ZERO
-			if is_instance_valid(active_player):
-				active_player.set_physics_process(true)
-			for entity in spawned_entities:
-				if is_instance_valid(entity):
-					entity.set_physics_process(true)
-		)
-	)
+	_ensure_combat_traversal_glue()
+	combat_traversal_glue.trigger_boss_intro(boss)
 
 
 func _create_hud() -> void:
@@ -1363,12 +1175,10 @@ func close_cooking_ui() -> void:
 
 
 func trigger_screen_shake(amplitude: float, duration: float) -> void:
-	shake_amplitude = amplitude
-	shake_duration = duration
+	_ensure_combat_traversal_glue()
+	combat_traversal_glue.trigger_screen_shake(amplitude, duration)
 
 
 func trigger_hit_stop(duration: float) -> void:
-	if hit_stop_timer <= 0.0:
-		original_time_scale = Engine.time_scale
-	hit_stop_timer = duration
-	Engine.time_scale = 0.02
+	_ensure_combat_traversal_glue()
+	combat_traversal_glue.trigger_hit_stop(duration)

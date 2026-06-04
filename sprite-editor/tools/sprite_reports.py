@@ -530,3 +530,46 @@ def write_visual_qa_report(records: Sequence[Any], out_dir: Path, manifest_dir: 
     report = render_visual_qa_html(before_after_cards, flagged_rows, palette_cards, autotile_cards)
     (manifest_dir / "visual_qa.html").write_text(report, encoding="utf-8")
 
+
+def render_checker(size: tuple[int, int], cell: int = 8) -> Image.Image:
+    return _render_checker(size, cell)
+
+
+def make_contact_sheet(records: list[Any], out_path: Path, max_thumb: int = 96) -> None:
+    if not records:
+        return
+
+    thumbs: list[tuple[Any, Image.Image]] = []
+    for record in records:
+        try:
+            with Image.open(record.output_file) as img:
+                image = img.convert("RGBA").copy()
+            image.thumbnail((max_thumb, max_thumb), Image.Resampling.NEAREST)
+            thumbs.append((record, image))
+        except (OSError, ValueError):
+            continue
+
+    columns = 6
+    label_height = 28
+    cell_w = max_thumb + 20
+    cell_h = max_thumb + label_height + 18
+    rows = (len(thumbs) + columns - 1) // columns
+    sheet = Image.new("RGBA", (columns * cell_w, rows * cell_h), (248, 248, 248, 255))
+    draw = ImageDraw.Draw(sheet)
+    font = ImageFont.load_default()
+
+    for index, (record, thumb) in enumerate(thumbs):
+        col = index % columns
+        row = index // columns
+        x = col * cell_w
+        y = row * cell_h
+        checker = render_checker((max_thumb, max_thumb))
+        sheet.alpha_composite(checker, (x + 10, y + 8))
+        px = x + 10 + (max_thumb - thumb.width) // 2
+        py = y + 8 + (max_thumb - thumb.height) // 2
+        sheet.alpha_composite(thumb, (px, py))
+        draw.text((x + 8, y + max_thumb + 12), record.id, fill=(24, 24, 24), font=font)
+
+    sheet.convert("RGB").save(out_path)
+
+
