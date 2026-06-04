@@ -99,6 +99,39 @@
       if (item.modifiers.wind_direction === undefined) item.modifiers.wind_direction = 'right';
       if (item.modifiers.wind_force === undefined) item.modifiers.wind_force = 300.0;
     }
+    if (item.type === 'zonai_fan') {
+      if (item.modifiers.zonai_direction === undefined) item.modifiers.zonai_direction = 'right';
+      if (item.modifiers.wind_force === undefined) item.modifiers.wind_force = 400.0;
+      if (item.modifiers.battery_drain === undefined) item.modifiers.battery_drain = 10.0;
+    }
+    if (item.type === 'zonai_rocket') {
+      if (item.modifiers.zonai_direction === undefined) item.modifiers.zonai_direction = 'up';
+      if (item.modifiers.thrust_force === undefined) item.modifiers.thrust_force = 800.0;
+      if (item.modifiers.duration === undefined) item.modifiers.duration = 2.5;
+    }
+    if (item.type === 'zonai_balloon') {
+      if (item.modifiers.lift_force === undefined) item.modifiers.lift_force = 250.0;
+    }
+    if (item.type === 'zonai_spring') {
+      if (item.modifiers.spring_force === undefined) item.modifiers.spring_force = 600.0;
+    }
+    if (item.type === 'zonai_beam') {
+      if (item.modifiers.zonai_direction === undefined) item.modifiers.zonai_direction = 'right';
+      if (item.modifiers.damage === undefined) item.modifiers.damage = 15.0;
+      if (item.modifiers.beam_range === undefined) item.modifiers.beam_range = 300.0;
+    }
+    if (item.type === 'zonai_battery') {
+      if (item.modifiers.battery_capacity === undefined) item.modifiers.battery_capacity = 100.0;
+    }
+    if (item.type === 'companion_pikmin') {
+      if (item.modifiers.pikmin_color === undefined) item.modifiers.pikmin_color = 'red';
+    }
+    if (item.type === 'companion_ghost') {
+      if (item.modifiers.drain_rate === undefined) item.modifiers.drain_rate = 10.0;
+    }
+    if (item.type === 'bbq_spit') {
+      if (item.modifiers.cook_difficulty === undefined) item.modifiers.cook_difficulty = 'medium';
+    }
     selectedPlacedEntity = item;
     playUiSound('chime');
   }
@@ -3073,6 +3106,114 @@
           <div class="option-group">
             <span class="option-label-text">Target Mode:</span>
             <span style="font-size: 0.85rem; color: #94a3b8;">🎯 Hit this target with projectiles, stomps, or a hammer to trigger magic rules!</span>
+          </div>
+        {:else if selectedPlacedEntity.type === 'zonai_fan'}
+          <div class="option-group">
+            <span class="option-label-text">Blow Direction:</span>
+            <select class="option-select" bind:value={selectedPlacedEntity.modifiers.zonai_direction} on:change={saveCurrentRoom}>
+              <option value="right">➡️ Right</option>
+              <option value="left">⬅️ Left</option>
+              <option value="up">⬆️ Up</option>
+              <option value="down">⬇️ Down</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <div class="option-label">
+              <span>Wind Force:</span>
+              <span>{selectedPlacedEntity.modifiers.wind_force ?? 400}</span>
+            </div>
+            <input type="range" min="100" max="800" step="50" class="option-slider" bind:value={selectedPlacedEntity.modifiers.wind_force} on:change={saveCurrentRoom} />
+          </div>
+        {:else if selectedPlacedEntity.type === 'zonai_rocket'}
+          <div class="option-group">
+            <span class="option-label-text">Thrust Direction:</span>
+            <select class="option-select" bind:value={selectedPlacedEntity.modifiers.zonai_direction} on:change={saveCurrentRoom}>
+              <option value="up">⬆️ Up</option>
+              <option value="right">➡️ Right</option>
+              <option value="left">⬅️ Left</option>
+              <option value="down">⬇️ Down</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <div class="option-label">
+              <span>Thrust Force:</span>
+              <span>{selectedPlacedEntity.modifiers.thrust_force ?? 800}</span>
+            </div>
+            <input type="range" min="300" max="1500" step="50" class="option-slider" bind:value={selectedPlacedEntity.modifiers.thrust_force} on:change={saveCurrentRoom} />
+          </div>
+          <div class="option-group">
+            <div class="option-label">
+              <span>Blast Duration (seconds):</span>
+              <span>{selectedPlacedEntity.modifiers.duration ?? 2.5}s</span>
+            </div>
+            <input type="range" min="0.5" max="5.0" step="0.5" class="option-slider" bind:value={selectedPlacedEntity.modifiers.duration} on:change={saveCurrentRoom} />
+          </div>
+        {:else if selectedPlacedEntity.type === 'zonai_balloon'}
+          <div class="option-group">
+            <div class="option-label">
+              <span>Lift Power:</span>
+              <span>{selectedPlacedEntity.modifiers.lift_force ?? 250}</span>
+            </div>
+            <input type="range" min="50" max="500" step="25" class="option-slider" bind:value={selectedPlacedEntity.modifiers.lift_force} on:change={saveCurrentRoom} />
+          </div>
+        {:else if selectedPlacedEntity.type === 'zonai_spring'}
+          <div class="option-group">
+            <div class="option-label">
+              <span>Spring Force:</span>
+              <span>{selectedPlacedEntity.modifiers.spring_force ?? 600}</span>
+            </div>
+            <input type="range" min="200" max="1200" step="50" class="option-slider" bind:value={selectedPlacedEntity.modifiers.spring_force} on:change={saveCurrentRoom} />
+          </div>
+        {:else if selectedPlacedEntity.type === 'zonai_beam'}
+          <div class="option-group">
+            <span class="option-label-text">Laser Direction:</span>
+            <select class="option-select" bind:value={selectedPlacedEntity.modifiers.zonai_direction} on:change={saveCurrentRoom}>
+              <option value="right">➡️ Right</option>
+              <option value="left">⬅️ Left</option>
+              <option value="up">⬆️ Up</option>
+              <option value="down">⬇️ Down</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <div class="option-label">
+              <span>Laser Damage:</span>
+              <span>{selectedPlacedEntity.modifiers.damage ?? 15}</span>
+            </div>
+            <input type="range" min="5" max="50" step="5" class="option-slider" bind:value={selectedPlacedEntity.modifiers.damage} on:change={saveCurrentRoom} />
+          </div>
+        {:else if selectedPlacedEntity.type === 'zonai_battery'}
+          <div class="option-group">
+            <div class="option-label">
+              <span>Battery Energy:</span>
+              <span>{selectedPlacedEntity.modifiers.battery_capacity ?? 100}</span>
+            </div>
+            <input type="range" min="50" max="500" step="25" class="option-slider" bind:value={selectedPlacedEntity.modifiers.battery_capacity} on:change={saveCurrentRoom} />
+          </div>
+        {:else if selectedPlacedEntity.type === 'companion_pikmin'}
+          <div class="option-group">
+            <span class="option-label-text">Pikmin Color 🌱:</span>
+            <select class="option-select" bind:value={selectedPlacedEntity.modifiers.pikmin_color} on:change={saveCurrentRoom}>
+              <option value="red">❤️ Red (Fireproof)</option>
+              <option value="blue">💙 Blue (Swim/Water)</option>
+              <option value="yellow">💛 Yellow (Electricproof)</option>
+            </select>
+          </div>
+        {:else if selectedPlacedEntity.type === 'companion_ghost'}
+          <div class="option-group">
+            <div class="option-label">
+              <span>Life Drain Rate:</span>
+              <span>{selectedPlacedEntity.modifiers.drain_rate ?? 10}</span>
+            </div>
+            <input type="range" min="5" max="30" step="5" class="option-slider" bind:value={selectedPlacedEntity.modifiers.drain_rate} on:change={saveCurrentRoom} />
+          </div>
+        {:else if selectedPlacedEntity.type === 'bbq_spit'}
+          <div class="option-group">
+            <span class="option-label-text">Cooking Difficulty 🍖:</span>
+            <select class="option-select" bind:value={selectedPlacedEntity.modifiers.cook_difficulty} on:change={saveCurrentRoom}>
+              <option value="easy">🟢 Easy (Slow color shifts)</option>
+              <option value="medium">🟡 Medium (Normal timing)</option>
+              <option value="hard">🔴 Hard (Rapid color shifts)</option>
+            </select>
           </div>
         {/if}
       </div>

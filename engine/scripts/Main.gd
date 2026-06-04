@@ -22,6 +22,10 @@ var active_player: Node2D = null
 var spawn_point: Vector2 = Vector2.ZERO
 var death_y_threshold: float = 2000.0
 var spawned_entities: Array = []
+var contraptions: Array = []
+var backpack_ui: CanvasLayer = null
+var crafting_ui: CanvasLayer = null
+var cooking_ui: CanvasLayer = null
 var target_spawn_portal_id: String = ""
 var found_spawn_portal_pos: Variant = null
 var current_weather: String = "clear"
@@ -138,6 +142,97 @@ func _physics_process(delta: float) -> void:
 			ghost_player_node.queue_free()
 			ghost_player_node = null
 
+	# Zonai Contraptions Battery and Physics Updates
+	for contraption in contraptions:
+		if not is_instance_valid(contraption): continue
+		
+		# Sum up battery energy
+		var total_energy := 0.0
+		var batteries := []
+		var active_consumers := []
+		
+		for child in contraption.get_children():
+			if child.has_meta("asset_id"):
+				var asset_id = child.get_meta("asset_id")
+				if asset_id == "zonai_battery":
+					total_energy += child.get("energy")
+					batteries.append(child)
+				elif asset_id in ["zonai_fan", "zonai_rocket", "zonai_beam"]:
+					if asset_id == "zonai_rocket":
+						if child.get("active"):
+							active_consumers.append(child)
+					else:
+						active_consumers.append(child)
+						
+		# Determine drain rate
+		var drain_rate := 0.0
+		for child in active_consumers:
+			var asset_id = child.get_meta("asset_id")
+			if asset_id == "zonai_fan":
+				drain_rate += 10.0 * delta
+			elif asset_id == "zonai_rocket":
+				drain_rate += 50.0 * delta
+			elif asset_id == "zonai_beam":
+				drain_rate += 15.0 * delta
+				
+		# Drain energy
+		if drain_rate > 0.0:
+			if total_energy > 0.0:
+				var to_drain = drain_rate
+				for b in batteries:
+					var e = b.get("energy")
+					var d = min(e, to_drain)
+					b.set("energy", e - d)
+					to_drain -= d
+					if to_drain <= 0.0: break
+				
+				for child in active_consumers:
+					child.set("powered", true)
+			else:
+				# Power out!
+				for child in active_consumers:
+					child.set("powered", false)
+					var p = child.get_node_or_null("WindParticles")
+					if p: p.emitting = false
+					var p2 = child.get_node_or_null("FireParticles")
+					if p2: p2.emitting = false
+		else:
+			for child in active_consumers:
+				child.set("powered", true)
+
+		# Apply forces
+		for child in contraption.get_children():
+			if child.has_meta("asset_id"):
+				var asset_id = child.get_meta("asset_id")
+				if asset_id == "zonai_fan" and child.get("powered"):
+					var dir = child.get("force_direction")
+					var mag = child.get("force_magnitude")
+					var offset = child.position.rotated(contraption.rotation)
+					var force_dir = dir.rotated(contraption.rotation)
+					contraption.apply_force(force_dir * mag, offset)
+					
+				elif asset_id == "zonai_rocket" and child.get("powered") and child.get("active"):
+					var dir = child.get("force_direction")
+					var mag = child.get("force_magnitude")
+					var offset = child.position.rotated(contraption.rotation)
+					var force_dir = dir.rotated(contraption.rotation)
+					contraption.apply_force(force_dir * mag, offset)
+					var rtime = child.get("active_time") - delta
+					child.set("active_time", rtime)
+					if rtime <= 0.0:
+						child.set("active", false)
+						var p = child.get_node_or_null("FireParticles")
+						if p: p.emitting = false
+						
+				elif asset_id == "zonai_balloon":
+					var mag = child.get("buoyancy_force")
+					var offset = child.position.rotated(contraption.rotation)
+					contraption.apply_force(Vector2.UP * mag, offset)
+
+	# Chemistry Engine Spreading (every 0.1s)
+	if physics_tick_counter % 6 == 0:
+		_process_elemental_chemistry()
+
 	# Sound-to-light beat pulse (approx. 120 BPM = 2.0 Hz sine wave)
 	_pulse_timer += delta
 	var beat_wave := (sin(_pulse_timer * PI * 4.0) + 1.0) * 0.5 # Pulses twice per second
@@ -197,6 +292,8 @@ func load_level_from_string(json_string: String) -> void:
 	for entity_data in processed_entities:
 		if typeof(entity_data) == TYPE_DICTIONARY:
 			spawn_entity(entity_data)
+
+	_build_physics_contraptions()
 
 	if target_spawn_portal_id != "" and found_spawn_portal_pos != null and active_player != null:
 		active_player.global_position = found_spawn_portal_pos
@@ -357,6 +454,32 @@ func spawn_entity(data: Dictionary) -> Node2D:
 			node = _make_wind_zone(data, sidecar)
 		"target_practice":
 			node = _make_target_practice(data, sidecar)
+		"wood_block":
+			node = _make_chemistry_block(data, sidecar, "wood")
+		"grass_block":
+			node = _make_chemistry_block(data, sidecar, "grass")
+		"metal_block":
+			node = _make_chemistry_block(data, sidecar, "metal")
+		"zonai_fan":
+			node = _make_zonai_device(data, sidecar, "zonai_fan")
+		"zonai_rocket":
+			node = _make_zonai_device(data, sidecar, "zonai_rocket")
+		"zonai_balloon":
+			node = _make_zonai_device(data, sidecar, "zonai_balloon")
+		"zonai_spring":
+			node = _make_zonai_device(data, sidecar, "zonai_spring")
+		"zonai_beam":
+			node = _make_zonai_device(data, sidecar, "zonai_beam")
+		"zonai_battery":
+			node = _make_zonai_device(data, sidecar, "zonai_battery")
+		"companion_pikmin":
+			node = _make_pikmin(data, sidecar)
+		"companion_ghost":
+			node = _make_ghost(data, sidecar)
+		"crafting_bench":
+			node = _make_crafting_bench(data, sidecar)
+		"bbq_spit":
+			node = _make_bbq_spit(data, sidecar)
 		_:
 			node = _make_decoration(data, sidecar)
 
@@ -1585,9 +1708,31 @@ func on_collectible_picked_up(payload: Dictionary) -> void:
 	if int(payload.get("score_value", 0)) > 0:
 		print("Score: ", score, "  (+", payload.get("score_value", 0), ")")
 
+	var asset_id_val := str(payload.get("asset_id", ""))
+
+	# Materials check
+	if asset_id_val in ["mat_metal_scrap", "mat_fire_powder", "mat_green_herb", "mat_sweet_honey"]:
+		if active_player != null and is_instance_valid(active_player):
+			var fits = active_player.add_to_backpack(asset_id_val)
+			if fits:
+				if asset_id_val == "mat_metal_scrap":
+					active_player.metal_scrap += 1
+					spawn_floating_text("+1 Metal Scrap 🔩", active_player.global_position, Color.LIGHT_GRAY)
+				elif asset_id_val == "mat_fire_powder":
+					active_player.fire_powder += 1
+					spawn_floating_text("+1 Fire Powder 🌶️", active_player.global_position, Color.ORANGE)
+				elif asset_id_val == "mat_green_herb":
+					active_player.green_herb += 1
+					spawn_floating_text("+1 Green Herb 🌿", active_player.global_position, Color.GREEN)
+				elif asset_id_val == "mat_sweet_honey":
+					active_player.sweet_honey += 1
+					spawn_floating_text("+1 Sweet Honey 🍯", active_player.global_position, Color.GOLD)
+			else:
+				spawn_floating_text("🎒 BACKPACK FULL!", active_player.global_position, Color.ORANGE)
+				return
+
 	# Rule checking for ruby collectibles count
-	var asset_id_val_temp := str(payload.get("asset_id", ""))
-	if not asset_id_val_temp.contains("key"):
+	if not asset_id_val.contains("key") and not asset_id_val.begins_with("mat_"):
 		collectibles_collected += 1
 		if collectibles_collected == 5:
 			execute_rules("coins_5")
@@ -1595,7 +1740,6 @@ func on_collectible_picked_up(payload: Dictionary) -> void:
 			execute_rules("coins_10")
 
 	# Key pickup
-	var asset_id_val := str(payload.get("asset_id", ""))
 	if asset_id_val.contains("key") or payload.has("key_color"):
 		var key_color := str(payload.get("key_color", "gold"))
 		keys_collected[key_color] = keys_collected.get(key_color, 0) + 1
@@ -3329,6 +3473,8 @@ func _physics_process(delta: float) -> void:
 		if body is CharacterBody2D:
 			if "velocity" in body:
 				body.velocity += force_vector * delta
+		elif body is RigidBody2D:
+			body.apply_central_force(force_vector)
 func _on_body_entered(body: Node) -> void:
 	if body is CharacterBody2D:
 		var main = get_tree().get_root().get_node_or_null("Main")
@@ -3393,5 +3539,1251 @@ func _on_something_entered(node: Node) -> void:
 	target_script.reload()
 	area.set_script(target_script)
 	return area
+
+
+func _make_chemistry_block(data: Dictionary, sidecar: Dictionary, type: String) -> StaticBody2D:
+	var body := StaticBody2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_box_collision(body, size)
+	
+	var color := Color(0.6, 0.4, 0.2)
+	if type == "grass":
+		color = Color(0.2, 0.7, 0.2)
+	elif type == "metal":
+		color = Color(0.7, 0.7, 0.8)
+	_add_visuals(body, sidecar, size, color)
+	
+	body.set_meta("chemistry_material", type)
+	body.set_meta("collision_size", size)
+	if type in ["wood", "grass"]:
+		body.set_meta("is_flammable", true)
+		body.set_meta("burn_timer", 4.0)
+		body.set_meta("is_burning", false)
+	elif type == "metal":
+		body.set_meta("is_conductive", true)
+		body.set_meta("shock_timer", 0.0)
+		body.set_meta("is_shocked", false)
+	return body
+
+
+func _make_zonai_device(data: Dictionary, sidecar: Dictionary, type: String) -> StaticBody2D:
+	var body := StaticBody2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_box_collision(body, size)
+	
+	var color := Color(0.1, 0.6, 0.4)
+	_add_visuals(body, sidecar, size, color)
+	
+	body.set_meta("asset_id", type)
+	body.set_meta("collision_size", size)
+	
+	var mods: Dictionary = data.get("modifiers", {})
+	
+	if type == "zonai_fan":
+		var direction = str(mods.get("zonai_direction", "right"))
+		body.set("force_direction", _direction_string_to_vector(direction))
+		body.set("force_magnitude", float(mods.get("wind_force", 400.0)))
+		body.set("powered", true)
+		
+		var p := CPUParticles2D.new()
+		p.name = "WindParticles"
+		p.amount = 8
+		p.lifetime = 0.5
+		p.direction = _direction_string_to_vector(direction)
+		p.spread = 15.0
+		p.gravity = Vector2.ZERO
+		p.initial_velocity_min = 100.0
+		p.initial_velocity_max = 200.0
+		p.color = Color(1.0, 1.0, 1.0, 0.3)
+		p.position = Vector2.ZERO
+		body.add_child(p)
+		
+	elif type == "zonai_rocket":
+		var direction = str(mods.get("zonai_direction", "up"))
+		body.set("force_direction", _direction_string_to_vector(direction))
+		body.set("force_magnitude", float(mods.get("thrust_force", 1000.0)))
+		body.set("active", true)
+		body.set("active_time", float(mods.get("duration", 2.0)))
+		body.set("powered", true)
+		
+		var p := CPUParticles2D.new()
+		p.name = "FireParticles"
+		p.amount = 15
+		p.lifetime = 0.4
+		p.direction = -_direction_string_to_vector(direction)
+		p.spread = 20.0
+		p.gravity = Vector2.ZERO
+		p.initial_velocity_min = 150.0
+		p.initial_velocity_max = 250.0
+		p.color = Color(1.0, 0.5, 0.1)
+		p.position = Vector2.ZERO
+		body.add_child(p)
+		
+	elif type == "zonai_balloon":
+		body.set("buoyancy_force", float(mods.get("lift_force", 300.0)))
+		var circle := ColorRect.new()
+		circle.color = Color(0.9, 0.2, 0.2, 0.7)
+		circle.size = Vector2(40, 40)
+		circle.position = Vector2(-20, -60)
+		body.add_child(circle)
+		
+	elif type == "zonai_spring":
+		var direction = str(mods.get("zonai_direction", "up"))
+		body.set("launch_direction", _direction_string_to_vector(direction))
+		body.set("launch_force", float(mods.get("spring_force", 600.0)))
+		var area := Area2D.new()
+		var col_shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = size + Vector2(8, 8)
+		col_shape.shape = rect
+		area.add_child(col_shape)
+		body.add_child(area)
+		
+		var spring_script := GDScript.new()
+		spring_script.source_code = "extends Area2D\n" + \
+			"func _ready() -> void:\n" + \
+			"\tbody_entered.connect(_on_body_entered)\n" + \
+			"func _on_body_entered(body: Node) -> void:\n" + \
+			"\tvar parent = get_parent()\n" + \
+			"\tvar launch_dir = parent.get('launch_direction')\n" + \
+			"\tvar launch_force = parent.get('launch_force')\n" + \
+			"\tif body is CharacterBody2D:\n" + \
+			"\t\tbody.velocity = launch_dir * launch_force\n" + \
+			"\t\tif 'is_ground_pounding' in body: body.is_ground_pounding = false\n" + \
+			"\t\tvar main = get_tree().get_root().get_node_or_null('Main')\n" + \
+			"\t\tif main != null:\n" + \
+			"\t\t\tif main.has_method('play_sfx'): main.play_sfx('jump')\n" + \
+			"\t\t\tif main.has_method('spawn_floating_text'):\n" + \
+			"\t\t\t\tmain.spawn_floating_text('BOING! 🌀', body.global_position, Color.SPRING_GREEN)\n"
+		spring_script.reload()
+		area.set_script(spring_script)
+		
+	elif type == "zonai_beam":
+		var direction = str(mods.get("zonai_direction", "right"))
+		body.set("force_direction", _direction_string_to_vector(direction))
+		body.set("laser_damage", float(mods.get("damage", 15.0)))
+		body.set("powered", true)
+		var line := Line2D.new()
+		line.name = "LaserLine"
+		line.points = PackedVector2Array([Vector2.ZERO, _direction_string_to_vector(direction) * float(mods.get("beam_range", 300.0))])
+		line.width = 4.0
+		line.default_color = Color.RED
+		body.add_child(line)
+		
+		var beam_script := GDScript.new()
+		beam_script.source_code = "extends StaticBody2D\n" + \
+			"var damage_timer := 0.0\n" + \
+			"func _physics_process(delta: float) -> void:\n" + \
+			"\tif not get('powered'):\n" + \
+			"\t\tvar l = get_node_or_null('LaserLine')\n" + \
+			"\t\tif l: l.visible = false\n" + \
+			"\t\treturn\n" + \
+			"\tvar l = get_node_or_null('LaserLine')\n" + \
+			"\tif l: l.visible = true\n" + \
+			"\tdamage_timer += delta\n" + \
+			"\tif damage_timer >= 0.5:\n" + \
+			"\t\tdamage_timer = 0.0\n" + \
+			"\t\tvar space_state = get_world_2d().direct_space_state\n" + \
+			"\t\tvar dir = get('force_direction')\n" + \
+			"\t\tvar query = PhysicsRayQueryParameters2D.create(global_position, global_position + dir * 300.0)\n" + \
+			"\t\tvar result = space_state.intersect_ray(query)\n" + \
+			"\t\tif result:\n" + \
+			"\t\t\tvar collider = result.collider\n" + \
+			"\t\t\tif collider.has_method('take_damage'):\n" + \
+			"\t\t\t\tcollider.take_damage(int(get('laser_damage')))\n"
+		beam_script.reload()
+		body.set_script(beam_script)
+		
+	elif type == "zonai_battery":
+		body.set("energy", float(mods.get("battery_capacity", 100.0)))
+		body.set("max_energy", float(mods.get("battery_capacity", 100.0)))
+
+	return body
+
+
+func _direction_string_to_vector(dir: String) -> Vector2:
+	match dir.to_lower():
+		"up": return Vector2.UP
+		"down": return Vector2.DOWN
+		"left": return Vector2.LEFT
+		_: return Vector2.RIGHT
+
+
+func _make_pikmin(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
+	var node := CharacterBody2D.new()
+	var size := _collision_size(sidecar, Vector2(32, 32), data)
+	_add_box_collision(node, size)
+	_add_visuals(node, sidecar, size, Color.RED)
+	node.set_meta("asset_id", "companion_pikmin")
+	node.set_meta("collision_size", size)
+	
+	var mods: Dictionary = data.get("modifiers", {})
+	var color = str(mods.get("pikmin_color", "red"))
+	
+	var pikmin_script := GDScript.new()
+	pikmin_script.source_code = """extends CharacterBody2D
+
+var pikmin_color: String = 'red'
+var state: String = 'follow'
+var latched_enemy: CharacterBody2D = null
+var carried_item: Area2D = null
+var gravity: float = 800.0
+var speed: float = 120.0
+var jump_force: float = -280.0
+var damage_cooldown: float = 0.0
+
+func _ready() -> void:
+	if pikmin_color == 'red':
+		modulate = Color(1.0, 0.3, 0.3)
+	elif pikmin_color == 'blue':
+		modulate = Color(0.3, 0.5, 1.0)
+	elif pikmin_color == 'yellow':
+		modulate = Color(1.0, 0.9, 0.3)
+
+func is_following() -> bool:
+	return state == 'follow' or state == 'carrying'
+
+func throw(direction: float) -> void:
+	if state == 'latched':
+		unlatch()
+	state = 'thrown'
+	velocity = Vector2(direction * 350.0, -320.0)
+
+func recall() -> void:
+	if state == 'latched':
+		unlatch()
+	if carried_item != null:
+		carried_item = null
+	state = 'follow'
+
+func unlatch() -> void:
+	if latched_enemy != null and is_instance_valid(latched_enemy):
+		if latched_enemy.has_method('unregister_pikmin_latch'):
+			latched_enemy.unregister_pikmin_latch(self)
+	latched_enemy = null
+	state = 'follow'
+	reparent_to_level()
+
+func reparent_to_level() -> void:
+	var main = get_tree().get_root().get_node_or_null('Main')
+	if main != null:
+		var old_pos = global_position
+		if get_parent() != null:
+			get_parent().remove_child(self)
+		main.add_child(self)
+		global_position = old_pos
+
+func _physics_process(delta: float) -> void:
+	var main = get_tree().get_root().get_node_or_null('Main')
+	if main == null or main.active_player == null: return
+	var player = main.active_player
+
+	if state != 'latched':
+		velocity.y += gravity * delta
+
+	match state:
+		'follow':
+			var dist = global_position.distance_to(player.global_position)
+			if dist > 300.0:
+				global_position = player.global_position + Vector2(-20, -10)
+			elif dist > 50.0:
+				var dir = sign(player.global_position.x - global_position.x)
+				velocity.x = dir * speed
+				if is_on_wall() and is_on_floor():
+					velocity.y = jump_force
+			else:
+				velocity.x = move_toward(velocity.x, 0.0, speed * 2.0 * delta)
+			
+			for ent in main.spawned_entities:
+				if is_instance_valid(ent) and ent.has_meta('is_collectible') and not ent.get('monitoring') == false:
+					if global_position.distance_to(ent.global_position) < 80.0:
+						carried_item = ent
+						state = 'carrying'
+						break
+
+		'carrying':
+			if carried_item == null or not is_instance_valid(carried_item):
+				state = 'follow'
+			else:
+				carried_item.global_position = global_position + Vector2(0, -20)
+				var dist = global_position.distance_to(player.global_position)
+				if dist > 20.0:
+					var dir = sign(player.global_position.x - global_position.x)
+					velocity.x = dir * speed
+					if is_on_wall() and is_on_floor():
+						velocity.y = jump_force
+				else:
+					if carried_item.has_method('_on_body_entered'):
+						carried_item._on_body_entered(player)
+					carried_item = null
+					state = 'follow'
+
+		'thrown':
+			for ent in main.spawned_entities:
+				if is_instance_valid(ent) and (ent.name.begins_with('slime_patrol') or ent.has_method('register_pikmin_latch')):
+					if global_position.distance_to(ent.global_position) < 40.0:
+						latched_enemy = ent
+						state = 'latched'
+						velocity = Vector2.ZERO
+						if ent.has_method('register_pikmin_latch'):
+							ent.register_pikmin_latch(self)
+						var old_pos = global_position
+						get_parent().remove_child(self)
+						ent.add_child(self)
+						global_position = old_pos
+						break
+			
+			if is_on_floor():
+				state = 'stay'
+				velocity.x = 0.0
+
+		'stay':
+			velocity.x = 0.0
+			var dist = global_position.distance_to(player.global_position)
+			if dist < 40.0:
+				state = 'follow'
+
+		'latched':
+			if latched_enemy == null or not is_instance_valid(latched_enemy):
+				unlatch()
+			else:
+				global_position = latched_enemy.global_position + Vector2(0, -15)
+				damage_cooldown -= delta
+				if damage_cooldown <= 0.0:
+					damage_cooldown = 1.0
+					latched_enemy.take_damage(5)
+					if main.has_method('spawn_floating_text'):
+						main.spawn_floating_text('🌱 TICK!', global_position, Color.GREEN)
+
+	if state != 'latched':
+		move_and_slide()
+"""
+	pikmin_script.reload()
+	node.set_script(pikmin_script)
+	node.set("pikmin_color", color)
+	return node
+
+
+func _make_ghost(data: Dictionary, sidecar: Dictionary) -> Node2D:
+	var node := Node2D.new()
+	var size := _collision_size(sidecar, Vector2(32, 32), data)
+	_add_visuals(node, sidecar, size, Color.PLUM)
+	node.set_meta("asset_id", "companion_ghost")
+	node.set_meta("collision_size", size)
+	
+	var mods: Dictionary = data.get("modifiers", {})
+	var drain = float(mods.get("drain_rate", 10.0))
+	
+	var ghost_script := GDScript.new()
+	ghost_script.source_code = """extends Node2D
+
+var drain_rate: float = 10.0
+var _timer: float = 0.0
+
+func _process(delta: float) -> void:
+	var main = get_tree().get_root().get_node_or_null('Main')
+	if main == null or main.active_player == null: return
+	var player = main.active_player
+
+	var target_pos = player.global_position + Vector2(24, -32)
+	global_position = global_position.lerp(target_pos, delta * 3.0)
+
+	_timer += delta
+	if _timer >= 1.5:
+		_timer = 0.0
+		var closest_enemy = null
+		var min_dist = 120.0
+		for child in get_parent().get_children():
+			if child != player and child.has_method('take_damage') and not child.name.begins_with('Player'):
+				var dist = global_position.distance_to(child.global_position)
+				if dist < min_dist:
+					min_dist = dist
+					closest_enemy = child
+		
+		if closest_enemy != null:
+			closest_enemy.take_damage(5)
+			player.heal(2)
+			if main.has_method('spawn_floating_text'):
+				main.spawn_floating_text('👻 DRAIN!', closest_enemy.global_position, Color.PURPLE)
+			var line = Line2D.new()
+			line.add_point(Vector2.ZERO)
+			line.add_point(closest_enemy.global_position - global_position)
+			line.width = 3.0
+			line.default_color = Color(0.6, 0.2, 0.8, 0.6)
+			add_child(line)
+			var t = create_tween()
+			t.tween_property(line, 'modulate:a', 0.0, 0.3)
+			t.chain().tween_callback(line.queue_free)
+"""
+	ghost_script.reload()
+	node.set_script(ghost_script)
+	node.set("drain_rate", drain)
+	return node
+
+
+func _make_crafting_bench(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color(0.6, 0.45, 0.3))
+	
+	var marker := Label.new()
+	marker.text = "🔨 CRAFT"
+	marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var settings := LabelSettings.new()
+	settings.font_size = 14
+	settings.outline_size = 3
+	settings.outline_color = Color.BLACK
+	marker.label_settings = settings
+	marker.size = Vector2(100, 20)
+	marker.position = Vector2(-50, -45)
+	area.add_child(marker)
+	
+	var shop_script := GDScript.new()
+	shop_script.source_code = "extends Area2D\n" + \
+		"var cooldown: float = 0.0\n" + \
+		"func _ready() -> void:\n" + \
+		"\tbody_entered.connect(_on_body_entered)\n" + \
+		"func _process(delta: float) -> void:\n" + \
+		"\tif cooldown > 0.0:\n" + \
+		"\t\tcooldown -= delta\n" + \
+		"func _on_body_entered(body: Node) -> void:\n" + \
+		"\tif cooldown <= 0.0 and body is CharacterBody2D and body.name.begins_with('Player'):\n" + \
+		"\t\tcooldown = 1.0\n" + \
+		"\t\tvar main = get_tree().get_root().get_node_or_null('Main')\n" + \
+		"\t\tif main != null and main.has_method('open_crafting_ui'):\n" + \
+		"\t\t\tmain.call_deferred('open_crafting_ui')\n"
+	shop_script.reload()
+	area.set_script(shop_script)
+	return area
+
+
+func _make_bbq_spit(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 48), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color(0.85, 0.3, 0.1))
+	
+	var marker := Label.new()
+	marker.text = "🍖 COOK"
+	marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var settings := LabelSettings.new()
+	settings.font_size = 14
+	settings.outline_size = 3
+	settings.outline_color = Color.BLACK
+	marker.label_settings = settings
+	marker.size = Vector2(100, 20)
+	marker.position = Vector2(-50, -45)
+	area.add_child(marker)
+	
+	var shop_script := GDScript.new()
+	shop_script.source_code = "extends Area2D\n" + \
+		"var cooldown: float = 0.0\n" + \
+		"func _ready() -> void:\n" + \
+		"\tbody_entered.connect(_on_body_entered)\n" + \
+		"func _process(delta: float) -> void:\n" + \
+		"\tif cooldown > 0.0:\n" + \
+		"\t\tcooldown -= delta\n" + \
+		"func _on_body_entered(body: Node) -> void:\n" + \
+		"\tif cooldown <= 0.0 and body is CharacterBody2D and body.name.begins_with('Player'):\n" + \
+		"\t\tcooldown = 1.0\n" + \
+		"\t\tvar main = get_tree().get_root().get_node_or_null('Main')\n" + \
+		"\t\tif main != null and main.has_method('open_cooking_ui'):\n" + \
+		"\t\t\tmain.call_deferred('open_cooking_ui')\n"
+	shop_script.reload()
+	area.set_script(shop_script)
+	return area
+
+
+func _build_physics_contraptions() -> void:
+	var glueables: Array = []
+	for ent in spawned_entities:
+		if is_instance_valid(ent):
+			var asset_id = ent.get_meta("asset_id") if ent.has_meta("asset_id") else ""
+			if asset_id.begins_with("zonai_") or ent.has_meta("chemistry_material"):
+				glueables.append(ent)
+	
+	if glueables.is_empty():
+		return
+
+	var visited := {}
+	var components := []
+	
+	for a in glueables:
+		if visited.has(a): continue
+		
+		var comp := []
+		var queue := [a]
+		visited[a] = true
+		
+		while not queue.is_empty():
+			var curr = queue.pop_front()
+			comp.append(curr)
+			
+			var size_curr = curr.get_meta("collision_size") if curr.has_meta("collision_size") else Vector2(48, 48)
+			var rect_curr := Rect2(curr.global_position - size_curr/2 - Vector2(2, 2), size_curr + Vector2(4, 4))
+			
+			for b in glueables:
+				if visited.has(b): continue
+				var size_b = b.get_meta("collision_size") if b.has_meta("collision_size") else Vector2(48, 48)
+				var rect_b := Rect2(b.global_position - size_b/2 - Vector2(2, 2), size_b + Vector2(4, 4))
+				
+				if rect_curr.intersects(rect_b):
+					visited[b] = true
+					queue.append(b)
+		
+		var has_zonai := false
+		for node in comp:
+			var asset_id = node.get_meta("asset_id") if node.has_meta("asset_id") else ""
+			if asset_id.begins_with("zonai_"):
+				has_zonai = true
+				break
+				
+		if has_zonai:
+			components.append(comp)
+
+	for comp in components:
+		var sum_pos := Vector2.ZERO
+		for node in comp:
+			sum_pos += node.global_position
+		var centroid = sum_pos / comp.size()
+		
+		var rigidbody := RigidBody2D.new()
+		rigidbody.name = "ZonaiContraption"
+		rigidbody.global_position = centroid
+		rigidbody.contact_monitor = true
+		rigidbody.max_contacts_reported = 4
+		
+		add_child(rigidbody)
+		contraptions.append(rigidbody)
+		
+		for node in comp:
+			var offset = node.global_position - centroid
+			
+			for child in node.get_children():
+				if child is CollisionShape2D or child is CollisionPolygon2D:
+					var child_global = child.global_position
+					node.remove_child(child)
+					rigidbody.add_child(child)
+					child.global_position = child_global
+			
+			node.get_parent().remove_child(node)
+			rigidbody.add_child(node)
+			node.position = offset
+			
+			spawned_entities.erase(node)
+
+
+func _process_elemental_chemistry() -> void:
+	var fires := []
+	var waters := []
+	var ices := []
+	var lightnings := []
+	var blocks := []
+	
+	for ent in get_children():
+		if is_instance_valid(ent) and ent.has_meta("asset_id"):
+			var asset_id = ent.get_meta("asset_id")
+			if asset_id == "chemistry_fire": fires.append(ent)
+			elif asset_id == "chemistry_water": waters.append(ent)
+			elif asset_id == "chemistry_ice": ices.append(ent)
+			elif asset_id == "chemistry_lightning": lightnings.append(ent)
+			
+	for ent in get_children():
+		if is_instance_valid(ent) and ent.has_meta("chemistry_material"):
+			blocks.append(ent)
+			if ent.get_meta("is_burning", false):
+				fires.append(ent)
+			if ent.get_meta("is_shocked", false):
+				lightnings.append(ent)
+
+	for ent in get_children():
+		if is_instance_valid(ent) and ent.name.begins_with("water_block"):
+			waters.append(ent)
+
+	for fire in fires:
+		for block in blocks:
+			if block.get_meta("is_flammable", false) and not block.get_meta("is_burning", false):
+				if fire.global_position.distance_to(block.global_position) < 64.0:
+					block.set_meta("is_burning", true)
+					block.modulate = Color.ORANGE_RED
+					var lbl := Label.new()
+					lbl.name = "FireEmoji"
+					lbl.text = "🔥"
+					lbl.size = Vector2(40, 40)
+					lbl.position = Vector2(-20, -35)
+					block.add_child(lbl)
+					spawn_floating_text("🔥 IGNITE!", block.global_position, Color.ORANGE)
+
+	for water in waters:
+		for fire_block in blocks:
+			if fire_block.get_meta("is_burning", false):
+				if water.global_position.distance_to(fire_block.global_position) < 80.0:
+					fire_block.set_meta("is_burning", false)
+					fire_block.set_meta("burn_timer", 4.0)
+					fire_block.modulate = Color.WHITE
+					var lbl = fire_block.get_node_or_null("FireEmoji")
+					if lbl: lbl.queue_free()
+					spawn_floating_text("💧 EXTINGUISHED", fire_block.global_position, Color.CYAN)
+
+	for ice in ices:
+		for water in waters:
+			if water.name.begins_with("water_block") and not water.get_meta("is_ice", false):
+				if ice.global_position.distance_to(water.global_position) < 120.0:
+					water.set_meta("is_ice", true)
+					spawn_floating_text("❄️ FROZEN!", water.global_position, Color.CYAN)
+					var ice_block := StaticBody2D.new()
+					ice_block.name = "FrozenIceBlock"
+					ice_block.global_position = water.global_position
+					ice_block.set_meta("is_ice", true)
+					var rect = water.get_node_or_null("ColorRect")
+					var w_size = rect.size if rect else Vector2(128, 128)
+					_add_box_collision(ice_block, w_size)
+					
+					var ice_rect := ColorRect.new()
+					ice_rect.color = Color(0.4, 0.8, 1.0, 0.8)
+					ice_rect.size = w_size
+					ice_rect.position = -w_size * 0.5
+					ice_block.add_child(ice_rect)
+					
+					add_child(ice_block)
+					water.visible = false
+					water.set_deferred("monitoring", false)
+					water.set_deferred("monitorable", false)
+
+	var shocked_nodes := []
+	var visited := {}
+	
+	for lt in lightnings:
+		for block in blocks:
+			if block.get_meta("is_conductive", false) and not visited.has(block):
+				if lt.global_position.distance_to(block.global_position) < 70.0:
+					shocked_nodes.append(block)
+					visited[block] = true
+
+	var index := 0
+	while index < shocked_nodes.size():
+		var curr = shocked_nodes[index]
+		index += 1
+		for block in blocks:
+			if block.get_meta("is_conductive", false) and not visited.has(block):
+				if curr.global_position.distance_to(block.global_position) < 64.0:
+					shocked_nodes.append(block)
+					visited[block] = true
+
+	for block in blocks:
+		if block.get_meta("is_conductive", false):
+			if visited.has(block):
+				if not block.get_meta("is_shocked", false):
+					block.set_meta("is_shocked", true)
+					block.set_meta("shock_timer", 1.5)
+					block.modulate = Color.YELLOW
+					var lbl := Label.new()
+					lbl.name = "ShockEmoji"
+					lbl.text = "⚡"
+					lbl.size = Vector2(40, 40)
+					lbl.position = Vector2(-20, -35)
+					block.add_child(lbl)
+					spawn_floating_text("⚡ CONDUCT!", block.global_position, Color.YELLOW)
+			else:
+				if block.get_meta("is_shocked", false):
+					block.set_meta("is_shocked", false)
+					block.modulate = Color.WHITE
+					var lbl = block.get_node_or_null("ShockEmoji")
+					if lbl: lbl.queue_free()
+
+	if active_player != null and is_instance_valid(active_player):
+		for block in blocks:
+			if block.get_meta("is_shocked", false):
+				if active_player.global_position.distance_to(block.global_position) < 48.0:
+					if active_player.has_method("set_shocked"):
+						active_player.set_shocked(1.5)
+
+	for ent in get_children():
+		if is_instance_valid(ent) and ent.has_method("set_shocked") and not ent.name.begins_with("Player"):
+			for block in blocks:
+				if block.get_meta("is_shocked", false):
+					if ent.global_position.distance_to(block.global_position) < 48.0:
+						ent.set_shocked(1.5)
+
+	for block in blocks:
+		if block.get_meta("is_burning", false):
+			var btime = block.get_meta("burn_timer") - 0.1
+			block.set_meta("burn_timer", btime)
+			if btime <= 0.0:
+				spawn_floating_text("🪵 ASH!", block.global_position, Color.DARK_GRAY)
+				block.queue_free()
+
+
+func toggle_backpack_ui() -> void:
+	if backpack_ui != null:
+		backpack_ui.queue_free()
+		backpack_ui = null
+		if active_player != null and is_instance_valid(active_player):
+			active_player.backpack_open = false
+		get_tree().paused = false
+	else:
+		if active_player != null and is_instance_valid(active_player):
+			active_player.backpack_open = true
+		get_tree().paused = true
+		
+		backpack_ui = CanvasLayer.new()
+		backpack_ui.layer = 150
+		backpack_ui.process_mode = Node.PROCESS_MODE_ALWAYS
+		add_child(backpack_ui)
+		
+		var panel := Panel.new()
+		panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.06, 0.08, 0.12, 0.95)
+		panel.add_theme_stylebox_override("panel", style)
+		backpack_ui.add_child(panel)
+		
+		var title := Label.new()
+		title.text = "🎒 4x4 Grid Inventory 🎒"
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var t_settings := LabelSettings.new()
+		t_settings.font_size = 28
+		title.label_settings = t_settings
+		title.position = Vector2(100, 20)
+		panel.add_child(title)
+		
+		var desc := Label.new()
+		desc.name = "DescLabel"
+		desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var d_settings := LabelSettings.new()
+		d_settings.font_size = 14
+		desc.label_settings = d_settings
+		desc.size = Vector2(400, 60)
+		desc.position = Vector2(100, 360)
+		panel.add_child(desc)
+		
+		var script := GDScript.new()
+		script.source_code = """extends Panel
+var cursor_r := 0
+var cursor_c := 0
+var selected_item_ref = null
+var main_ref = null
+var slots: Array = []
+
+func _ready() -> void:
+	main_ref = get_tree().get_root().get_node('Main')
+	for r in range(4):
+		var row := []
+		for c in range(4):
+			var slot_rect := ColorRect.new()
+			slot_rect.color = Color(0.12, 0.16, 0.24, 0.8)
+			slot_rect.custom_minimum_size = Vector2(60, 60)
+			slot_rect.size = Vector2(60, 60)
+			slot_rect.position = Vector2(100 + c * 70, 80 + r * 70)
+			add_child(slot_rect)
+			
+			var lbl := Label.new()
+			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			lbl.size = slot_rect.size
+			slot_rect.add_child(lbl)
+			
+			row.append({'rect': slot_rect, 'label': lbl})
+		slots.append(row)
+		
+	_update_grid_ui()
+
+func _update_grid_ui() -> void:
+	var player = main_ref.active_player
+	if player == null: return
+	var grid = player.backpack_grid
+	
+	for r in range(4):
+		for c in range(4):
+			var slot = slots[r][c]
+			slot.rect.color = Color(0.12, 0.16, 0.24, 0.8)
+			slot.label.text = ''
+			
+	var drawn_roots := {}
+	for r in range(4):
+		for c in range(4):
+			var item = grid[r][c]
+			if item != null:
+				var root_key = '%d_%d' % [item.root_r, item.root_c]
+				var slot = slots[r][c]
+				
+				if not drawn_roots.has(root_key):
+					drawn_roots[root_key] = true
+					slot.label.text = _get_item_emoji(item.type)
+					
+				if item.type == 'shield':
+					slot.rect.color = Color(0.1, 0.4, 0.5, 0.9)
+				elif item.type in ['sword', 'firesword']:
+					slot.rect.color = Color(0.5, 0.4, 0.1, 0.9)
+				elif item.type == 'potion':
+					slot.rect.color = Color(0.5, 0.1, 0.5, 0.9)
+				else:
+					slot.rect.color = Color(0.2, 0.3, 0.25, 0.9)
+					
+	var cur_slot = slots[cursor_r][cursor_c]
+	if selected_item_ref != null:
+		cur_slot.rect.color = Color(0.8, 0.4, 0.1, 0.9)
+	else:
+		cur_slot.rect.color = Color(0.9, 0.8, 0.2, 0.9)
+
+	var desc_lbl = get_parent().get_node_or_null('DescLabel')
+	if desc_lbl:
+		var item = grid[cursor_r][cursor_c]
+		if item != null:
+			var details = ''
+			if item.type == 'potion':
+				details = ' ( Heals 50 HP!)'
+			elif item.type == 'sword':
+				details = ' ( Equip to swing!)'
+			elif item.type == 'firesword':
+				details = ' ( Attacks ignite enemies!)'
+			elif item.type == 'shield':
+				details = ' ( Absorbs next hit!)'
+			desc_lbl.text = 'Cursor: ' + item.type.capitalize() + details + '\\n[E] Use/Equip | [Space] Move | [X] Discard'
+		else:
+			desc_lbl.text = 'Empty Slot\\n[W/A/S/D] Navigate | [Tab/Esc] Close'
+
+func _get_item_emoji(type: String) -> String:
+	match type:
+		'potion': return '🧪'
+		'shield': return '🛡️'
+		'sword': return '⚔️'
+		'firesword': return '🔥'
+		'mat_metal_scrap': return '🔩'
+		'mat_fire_powder': return '🌶️'
+		'mat_green_herb': return '🌿'
+		'mat_sweet_honey': return '🍯'
+		_: return '📦'
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_pressed(): return
+	
+	if event.is_action_pressed('ui_up') or event.is_physical_key_pressed(KEY_W):
+		cursor_r = posmod(cursor_r - 1, 4)
+		_update_grid_ui()
+	elif event.is_action_pressed('ui_down') or event.is_physical_key_pressed(KEY_S):
+		cursor_r = posmod(cursor_r + 1, 4)
+		_update_grid_ui()
+	elif event.is_action_pressed('ui_left') or event.is_physical_key_pressed(KEY_A):
+		cursor_c = posmod(cursor_c - 1, 4)
+		_update_grid_ui()
+	elif event.is_action_pressed('ui_right') or event.is_physical_key_pressed(KEY_D):
+		cursor_c = posmod(cursor_c + 1, 4)
+		_update_grid_ui()
+	elif event.is_physical_key_pressed(KEY_ESCAPE) or event.is_physical_key_pressed(KEY_TAB):
+		main_ref.toggle_backpack_ui()
+	elif event.is_physical_key_pressed(KEY_E):
+		var player = main_ref.active_player
+		if player != null:
+			var item = player.backpack_grid[cursor_r][cursor_c]
+			if item != null:
+				_use_item(item)
+	elif event.is_physical_key_pressed(KEY_X):
+		var player = main_ref.active_player
+		if player != null:
+			var item = player.backpack_grid[cursor_r][cursor_c]
+			if item != null:
+				_remove_item_from_grid(player, item)
+				main_ref.play_sfx('hit')
+				_update_grid_ui()
+	elif event.is_action_just_pressed('ui_accept') or event.is_physical_key_pressed(KEY_SPACE):
+		var player = main_ref.active_player
+		if player == null: return
+		var grid = player.backpack_grid
+		if selected_item_ref == null:
+			selected_item_ref = grid[cursor_r][cursor_c]
+			_update_grid_ui()
+		else:
+			var item = selected_item_ref
+			_remove_item_from_grid(player, item)
+			
+			var fits := true
+			for dr in range(item.h):
+				for dc in range(item.w):
+					var tr = cursor_r + dr
+					var tc = cursor_c + dc
+					if tr >= 4 or tc >= 4 or grid[tr][tc] != null:
+						fits = false
+						break
+				if not fits: break
+				
+			if fits:
+				for dr in range(item.h):
+					for dc in range(item.w):
+						grid[cursor_r + dr][cursor_c + dc] = {
+							'type': item.type,
+							'root_r': cursor_r,
+							'root_c': cursor_c,
+							'w': item.w,
+							'h': item.h
+						}
+				main_ref.play_sfx('coin')
+			else:
+				for dr in range(item.h):
+					for dc in range(item.w):
+						grid[item.root_r + dr][item.root_c + dc] = item
+				main_ref.play_sfx('hit')
+				
+			selected_item_ref = null
+			_update_grid_ui()
+
+func _remove_item_from_grid(player, item) -> void:
+	var grid = player.backpack_grid
+	for r in range(4):
+		for c in range(4):
+			var val = grid[r][c]
+			if val != null and val.root_r == item.root_r and val.root_c == item.root_c:
+				grid[r][c] = null
+
+func _use_item(item) -> void:
+	var player = main_ref.active_player
+	if player == null: return
+	
+	if item.type == 'potion':
+		player.heal(50)
+		_remove_item_from_grid(player, item)
+		main_ref.play_sfx('coin')
+		main_ref.spawn_floating_text('🧪 HEALED!', player.global_position, Color.GREEN)
+	elif item.type == 'sword':
+		player.has_sword = true
+		player.costume_tint = 'default'
+		main_ref.play_sfx('coin')
+		main_ref.spawn_floating_text('⚔️ SWORD EQUIPPED!', player.global_position, Color.GOLD)
+	elif item.type == 'firesword':
+		player.has_sword = true
+		player.costume_tint = 'orange'
+		main_ref.play_sfx('coin')
+		main_ref.spawn_floating_text('🔥 FIRE SWORD EQUIPPED!', player.global_position, Color.ORANGE)
+	elif item.type == 'shield':
+		player.shield_active = true
+		_remove_item_from_grid(player, item)
+		main_ref.play_sfx('coin')
+		main_ref.spawn_floating_text('🛡️ SHIELD EQUIPPED!', player.global_position, Color.CYAN)
+		
+	_update_grid_ui()
+"""
+		script.reload()
+		panel.set_script(script)
+
+
+func open_crafting_ui() -> void:
+	if crafting_ui != null: return
+	get_tree().paused = true
+	
+	crafting_ui = CanvasLayer.new()
+	crafting_ui.layer = 150
+	crafting_ui.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(crafting_ui)
+	
+	var panel := Panel.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.12, 0.2, 0.9)
+	panel.add_theme_stylebox_override("panel", style)
+	crafting_ui.add_child(panel)
+	
+	var title := Label.new()
+	title.text = "🔨 Dynamic Crafting Bench 🔨"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var t_settings := LabelSettings.new()
+	t_settings.font_size = 28
+	t_settings.font_color = Color.WHITE
+	title.label_settings = t_settings
+	title.position = Vector2(100, 20)
+	panel.add_child(title)
+	
+	var script := GDScript.new()
+	script.source_code = """extends Panel
+var selected_idx := 0
+var main_ref = null
+var recipes = [
+	{'name': 'Toy Sword ⚔️', 'result': 'sword', 'materials': {'mat_metal_scrap': 2, 'mat_green_herb': 1}},
+	{'name': 'Fire Sword 🔥', 'result': 'firesword', 'materials': {'sword': 1, 'mat_fire_powder': 2}},
+	{'name': 'Shield 🛡️', 'result': 'shield', 'materials': {'mat_metal_scrap': 3, 'mat_sweet_honey': 1}},
+	{'name': 'Potion 🧪', 'result': 'potion', 'materials': {'mat_green_herb': 2, 'mat_sweet_honey': 1}}
+]
+var recipe_labels: Array = []
+var mat_label: Label = null
+
+func _ready() -> void:
+	main_ref = get_tree().get_root().get_node('Main')
+	for i in range(recipes.size()):
+		var lbl := Label.new()
+		lbl.size = Vector2(500, 40)
+		lbl.position = Vector2(100, 90 + i * 50)
+		var settings = LabelSettings.new()
+		settings.font_size = 18
+		lbl.label_settings = settings
+		add_child(lbl)
+		recipe_labels.append(lbl)
+		
+	mat_label = Label.new()
+	mat_label.position = Vector2(100, 300)
+	var m_settings = LabelSettings.new()
+	m_settings.font_size = 16
+	m_settings.font_color = Color.GOLD
+	mat_label.label_settings = m_settings
+	add_child(mat_label)
+	
+	var help := Label.new()
+	help.text = '[W/S] Choose Recipe | [Space/Enter] Craft Item | [Esc/Tab] Close'
+	help.position = Vector2(100, 350)
+	var h_settings = LabelSettings.new()
+	h_settings.font_size = 14
+	help.label_settings = h_settings
+	add_child(help)
+	
+	_update_ui()
+
+func _update_ui() -> void:
+	var p = main_ref.active_player
+	if p == null: return
+	
+	mat_label.text = 'Materials: 🔩 Scrap: %d | 🌶️ Fire Powder: %d | 🌿 Green Herb: %d | 🍯 Sweet Honey: %d' % [
+		p.metal_scrap, p.fire_powder, p.green_herb, p.sweet_honey
+	]
+	
+	for i in range(recipes.size()):
+		var recipe = recipes[i]
+		var req_text = ''
+		for mat in recipe.materials:
+			var needed = recipe.materials[mat]
+			req_text += ' ' + mat.replace('mat_', '').capitalize() + ' x' + str(needed)
+			
+		var prefix = '👉 ' if i == selected_idx else '   '
+		recipe_labels[i].text = prefix + recipe.name + ' (Requires:' + req_text + ')'
+		if i == selected_idx:
+			recipe_labels[i].label_settings.font_color = Color.YELLOW
+		else:
+			recipe_labels[i].label_settings.font_color = Color.WHITE
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_pressed(): return
+	if event.is_action_pressed('ui_up') or event.is_physical_key_pressed(KEY_W):
+		selected_idx = posmod(selected_idx - 1, recipes.size())
+		_update_ui()
+		main_ref.play_sfx('pop')
+	elif event.is_action_pressed('ui_down') or event.is_physical_key_pressed(KEY_S):
+		selected_idx = posmod(selected_idx + 1, recipes.size())
+		_update_ui()
+		main_ref.play_sfx('pop')
+	elif event.is_physical_key_pressed(KEY_ESCAPE) or event.is_physical_key_pressed(KEY_TAB):
+		main_ref.close_crafting_ui()
+	elif event.is_action_just_pressed('ui_accept') or event.is_physical_key_pressed(KEY_SPACE):
+		_attempt_craft()
+
+func _attempt_craft() -> void:
+	var p = main_ref.active_player
+	if p == null: return
+	var recipe = recipes[selected_idx]
+	
+	var has_mats := true
+	for mat in recipe.materials:
+		var needed = recipe.materials[mat]
+		if mat == 'sword':
+			if not _has_in_backpack(p, 'sword'):
+				has_mats = false
+				break
+		else:
+			var inventory_field = mat.replace('mat_', '')
+			if p.get(inventory_field) < needed:
+				has_mats = false
+				break
+				
+	if not has_mats:
+		main_ref.play_sfx('hit')
+		main_ref.spawn_floating_text('❌ MISSING MATERIALS!', p.global_position, Color.RED)
+		return
+		
+	if p.has_method('add_to_backpack'):
+		var ok = p.add_to_backpack(recipe.result)
+		if not ok:
+			main_ref.play_sfx('hit')
+			main_ref.spawn_floating_text('🎒 BACKPACK FULL!', p.global_position, Color.ORANGE)
+			return
+			
+	for mat in recipe.materials:
+		var needed = recipe.materials[mat]
+		if mat == 'sword':
+			_remove_from_backpack(p, 'sword')
+		else:
+			var inventory_field = mat.replace('mat_', '')
+			p.set(inventory_field, p.get(inventory_field) - needed)
+			
+	main_ref.play_sfx('coin')
+	main_ref.spawn_floating_text('🔨 CRAFTED ' + recipe.name, p.global_position, Color.GOLD)
+	_update_ui()
+
+func _has_in_backpack(player, item_type: String) -> bool:
+	for r in range(4):
+		for c in range(4):
+			var item = player.backpack_grid[r][c]
+			if item != null and item.type == item_type:
+				return true
+	return false
+
+func _remove_from_backpack(player, item_type: String) -> void:
+	for r in range(4):
+		for c in range(4):
+			var item = player.backpack_grid[r][c]
+			if item != null and item.type == item_type:
+				var root_r = item.root_r
+				var root_c = item.root_c
+				for row in range(4):
+					for col in range(4):
+						var slot = player.backpack_grid[row][col]
+						if slot != null and slot.root_r == root_r and slot.root_c == root_c:
+							player.backpack_grid[row][col] = null
+				return
+"""
+	script.reload()
+	panel.set_script(script)
+
+
+func close_crafting_ui() -> void:
+	if crafting_ui != null:
+		crafting_ui.queue_free()
+		crafting_ui = null
+		get_tree().paused = false
+
+
+func open_cooking_ui() -> void:
+	if cooking_ui != null: return
+	get_tree().paused = true
+	
+	cooking_ui = CanvasLayer.new()
+	cooking_ui.layer = 150
+	cooking_ui.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(cooking_ui)
+	
+	var panel := Panel.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.08, 0.08, 0.9)
+	panel.add_theme_stylebox_override("panel", style)
+	cooking_ui.add_child(panel)
+	
+	var title := Label.new()
+	title.text = "🍖 BBQ Spit Master Mini-game 🍖"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var t_settings := LabelSettings.new()
+	t_settings.font_size = 28
+	t_settings.font_color = Color.ORANGE
+	title.label_settings = t_settings
+	title.position = Vector2(100, 20)
+	panel.add_child(title)
+	
+	var meat := Label.new()
+	meat.text = "🥩"
+	meat.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var m_settings := LabelSettings.new()
+	m_settings.font_size = 72
+	meat.label_settings = m_settings
+	meat.size = Vector2(200, 100)
+	meat.position = Vector2(220, 120)
+	panel.add_child(meat)
+	
+	var script := GDScript.new()
+	script.source_code = """extends Panel
+var timer := 0.0
+var finished := false
+var main_ref = null
+var meat_lbl: Label = null
+var status_lbl: Label = null
+
+func _ready() -> void:
+	main_ref = get_tree().get_root().get_node('Main')
+	meat_lbl = get_child(1)
+	
+	status_lbl = Label.new()
+	status_lbl.text = 'Cooking...'
+	status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var s_settings = LabelSettings.new()
+	s_settings.font_size = 24
+	status_lbl.label_settings = s_settings
+	status_lbl.size = Vector2(400, 40)
+	status_lbl.position = Vector2(120, 240)
+	add_child(status_lbl)
+	
+	var help := Label.new()
+	help.text = 'Press [Space] at the perfect Golden Brown moment!\\n[Esc] Exit'
+	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var h_settings = LabelSettings.new()
+	h_settings.font_size = 16
+	help.label_settings = h_settings
+	help.size = Vector2(400, 50)
+	help.position = Vector2(120, 310)
+	add_child(help)
+
+func _process(delta: float) -> void:
+	if finished: return
+	timer += delta
+	meat_lbl.rotation = timer * 4.0
+	
+	if timer < 1.5:
+		meat_lbl.text = '🥩'
+		status_lbl.text = 'Raw (Keep cooking...)'
+		status_lbl.label_settings.font_color = Color.PINK
+	elif timer < 2.5:
+		meat_lbl.text = '🍖'
+		status_lbl.text = 'Cooking (Getting closer...)'
+		status_lbl.label_settings.font_color = Color.KHAKI
+	elif timer < 3.5:
+		meat_lbl.text = '✨🍖✨'
+		status_lbl.text = '⭐ PERFECT GOLDEN BROWN! ⭐'
+		status_lbl.label_settings.font_color = Color.YELLOW
+		var wave = sin(timer * 20.0) * 0.15 + 1.0
+		meat_lbl.scale = Vector2(wave, wave)
+	else:
+		meat_lbl.text = '💀'
+		status_lbl.text = 'BURNT! 💀'
+		status_lbl.label_settings.font_color = Color.DARK_SLATE_GRAY
+		meat_lbl.scale = Vector2(1.0, 1.0)
+		
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_pressed(): return
+	if event.is_physical_key_pressed(KEY_ESCAPE):
+		main_ref.close_cooking_ui()
+	elif event.is_action_just_pressed('ui_accept') or event.is_physical_key_pressed(KEY_SPACE):
+		if not finished:
+			_complete_cooking()
+
+func _complete_cooking() -> void:
+	finished = true
+	var player = main_ref.active_player
+	if player == null: return
+	
+	if timer >= 2.5 and timer < 3.5:
+		main_ref.play_sfx('coin')
+		status_lbl.text = '🍖 SO TASTY! (+20 Max HP!) 🍖'
+		status_lbl.label_settings.font_color = Color.GOLD
+		player.max_health += 20
+		player.heal(player.max_health)
+		main_ref.spawn_floating_text('🍖 SO TASTY! +20 Max HP', player.global_position, Color.GOLD)
+	else:
+		main_ref.play_sfx('hit')
+		if timer < 2.5:
+			status_lbl.text = '🤮 Raw steak! (Burnt tongue!)'
+			status_lbl.label_settings.font_color = Color.RED
+			main_ref.spawn_floating_text('🤮 RAW! 0 HP', player.global_position, Color.RED)
+		else:
+			status_lbl.text = '🤮 Charcoal burnt! (No HP)'
+			status_lbl.label_settings.font_color = Color.GRAY
+			main_ref.spawn_floating_text('🤮 BURNT! 0 HP', player.global_position, Color.DARK_GRAY)
+			
+	var t = get_tree().create_timer(1.8)
+	t.timeout.connect(main_ref.close_cooking_ui)
+"""
+	script.reload()
+	panel.set_script(script)
+
+
+func close_cooking_ui() -> void:
+	if cooking_ui != null:
+		cooking_ui.queue_free()
+		cooking_ui = null
+		get_tree().paused = false
+
 
 

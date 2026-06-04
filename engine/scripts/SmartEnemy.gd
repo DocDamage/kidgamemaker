@@ -23,6 +23,15 @@ var current_health: int = max_health
 var stun_timer: float = 0.0
 var knockback_timer: float = 0.0
 var _stun_spinner: Node2D = null
+
+# Chemistry and companion variables
+var is_burning: bool = false
+var burn_timer: float = 0.0
+var is_frozen: bool = false
+var freeze_timer: float = 0.0
+var is_shocked: bool = false
+var shock_timer: float = 0.0
+var latched_pikmin: Array = []
 var boss_hud_style: String = "retro"
 var boss_phases_count: int = 2
 var current_phase: int = 1
@@ -83,6 +92,35 @@ func _on_damage_area_body_entered(body: Node) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if is_frozen:
+		freeze_timer -= delta
+		velocity = Vector2.ZERO
+		modulate = Color.CYAN
+		if freeze_timer <= 0.0:
+			is_frozen = false
+			modulate = Color.WHITE
+		move_and_slide()
+		return
+
+	if is_shocked:
+		shock_timer -= delta
+		velocity = Vector2.ZERO
+		modulate = Color.YELLOW if Engine.get_physics_frames() % 4 < 2 else Color.WHITE
+		if shock_timer <= 0.0:
+			is_shocked = false
+			modulate = Color.WHITE
+		move_and_slide()
+		return
+
+	if is_burning:
+		burn_timer -= delta
+		modulate = Color.ORANGE_RED if Engine.get_physics_frames() % 6 < 3 else Color.WHITE
+		if int(burn_timer * 10) % 10 == 0:
+			take_damage(2)
+		if burn_timer <= 0.0:
+			is_burning = false
+			modulate = Color.WHITE
+
 	if _stun_spinner != null:
 		if stun_timer > 0.0:
 			_stun_spinner.visible = true
@@ -117,6 +155,10 @@ func _physics_process(delta: float) -> void:
 		if behavior_type == "fly":
 			velocity.y = 0.0
 	else:
+		var active_speed = patrol_speed
+		if latched_pikmin.size() > 0:
+			active_speed *= 0.5
+
 		match behavior_type:
 			"chase":
 				var main = get_tree().get_root().get_node_or_null("Main")
@@ -125,14 +167,14 @@ func _physics_process(delta: float) -> void:
 					var diff = player.global_position.x - global_position.x
 					if abs(diff) < 240.0:
 						direction = 1 if diff > 0 else -1
-						velocity.x = float(direction) * patrol_speed * 1.4
+						velocity.x = float(direction) * active_speed * 1.4
 					else:
-						velocity.x = float(direction) * patrol_speed
+						velocity.x = float(direction) * active_speed
 				else:
-					velocity.x = float(direction) * patrol_speed
+					velocity.x = float(direction) * active_speed
 
 			"jump":
-				velocity.x = float(direction) * patrol_speed
+				velocity.x = float(direction) * active_speed
 				if is_on_floor():
 					_jump_cooldown -= delta
 					if _jump_cooldown <= 0.0:
@@ -140,10 +182,10 @@ func _physics_process(delta: float) -> void:
 						_jump_cooldown = randf_range(1.5, 3.0)
 
 			"fly":
-				velocity.x = float(direction) * patrol_speed
+				velocity.x = float(direction) * active_speed
 
 			_: # patrol
-				velocity.x = float(direction) * patrol_speed
+				velocity.x = float(direction) * active_speed
 
 	# Apply conveyor belt movement to enemy velocity
 	var conveyor_velocity := Vector2.ZERO
@@ -357,6 +399,11 @@ func stun(duration: float) -> void:
 
 
 func die() -> void:
+	for p in latched_pikmin:
+		if is_instance_valid(p) and p.has_method("unlatch"):
+			p.unlatch()
+	latched_pikmin.clear()
+
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main != null and main.has_method("spawn_floating_text"):
 		main.spawn_floating_text("DEFEATED! 🏆", global_position, Color.GOLD)
@@ -380,3 +427,27 @@ func die() -> void:
 	queue_free()
 	if main != null and main.has_method("check_victory_conditions"):
 		main.call_deferred("check_victory_conditions")
+
+
+func register_pikmin_latch(pikmin: Node2D) -> void:
+	if not pikmin in latched_pikmin:
+		latched_pikmin.append(pikmin)
+
+
+func unregister_pikmin_latch(pikmin: Node2D) -> void:
+	latched_pikmin.erase(pikmin)
+
+
+func set_frozen(duration: float) -> void:
+	is_frozen = true
+	freeze_timer = max(freeze_timer, duration)
+
+
+func set_burning(duration: float) -> void:
+	is_burning = true
+	burn_timer = max(burn_timer, duration)
+
+
+func set_shocked(duration: float) -> void:
+	is_shocked = true
+	shock_timer = max(shock_timer, duration)

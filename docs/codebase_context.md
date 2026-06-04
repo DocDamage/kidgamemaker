@@ -28,18 +28,18 @@ graph TD
 ## 2. Core Directory Layout
 
 * `editor/src/` — Svelte editor source code.
-  * [`App.svelte`](file:///g:/kidgamemaker/editor/src/App.svelte) — The main single-page application combining canvas, toolbar, sidebar customizer, global rules wizard, and modal windows.
+  * [`App.svelte`](file:///g:/kidgamemaker/editor/src/App.svelte) — Main editor application workspace including settings controls for new Zonai devices, Pikmin colors, and BBQ difficulty levels.
   * [`ToyboxModal.svelte`](file:///g:/kidgamemaker/editor/src/ToyboxModal.svelte) — Inventory selection catalog supporting favorite heart tags.
-  * [`lib/canvasState.ts`](file:///g:/kidgamemaker/editor/src/lib/canvasState.ts) — TypeScript definitions for `PlacedEntity`, `WorldSettings`, `RoomPayload`, and the fallback toy catalog.
+  * [`lib/canvasState.ts`](file:///g:/kidgamemaker/editor/src/lib/canvasState.ts) — Shared TypeScript contracts, item types, and the fallback inventory defining all default toy configurations.
 * `editor/src-tauri/src/` — Rust Tauri application.
   * [`lib.rs`](file:///g:/kidgamemaker/editor/src-tauri/src/lib.rs) — App setup and registered command definitions.
-  * [`commands.rs`](file:///g:/kidgamemaker/editor/src-tauri/src/commands.rs) — FS operations (load/save/delete rooms, compile level configs, recursive programmatic directory zipping).
-  * [`inbox.rs`](file:///g:/kidgamemaker/editor/src-tauri/src/inbox.rs) — Active directory watcher on `_Inbox/` tracking `.zip`/`.ktoy` assets, unboxing entries with Zip Slip path validation, and generating JSON metadata sidecars.
+  * [`commands.rs`](file:///g:/kidgamemaker/editor/src-tauri/src/commands.rs) — File operations (save, load, compile room JSONs).
+  * [`inbox.rs`](file:///g:/kidgamemaker/editor/src-tauri/src/inbox.rs) — Inbox watching thread handling folder ingestion.
   * [`slicer.rs`](file:///g:/kidgamemaker/editor/src-tauri/src/slicer.rs) — Procedural sprite sheets slicing based on alpha threshold component scans.
 * `engine/` — Godot 4 project directory.
-  * [`scripts/Main.gd`](file:///g:/kidgamemaker/engine/scripts/Main.gd) — Core runner scene. Parses level JSON configurations, constructs platform colliders, overlays ambient lights, evaluates logic rules, and renders floating feedback labels.
-  * [`scripts/PlayerController.gd`](file:///g:/kidgamemaker/engine/scripts/PlayerController.gd) — Character movement physics (running, jumping, flying, double-jump boots, gliding, trail color modulation, and bouncy emojis wheel).
-  * [`scripts/SmartEnemy.gd`](file:///g:/kidgamemaker/engine/scripts/SmartEnemy.gd) — Patrolling, jumping, and chasing monster AI. Includes boss camera zooms, custom size modulators, and calm mode checks.
+  * [`scripts/Main.gd`](file:///g:/kidgamemaker/engine/scripts/Main.gd) — Core runner. Spawns entities, runs the chemistry tick spreading fire, freezing water, and propagating shock chains. Welds adjacent blocks and devices using a connected components BFS algorithm, creating a single dynamic `RigidBody2D` contraption. Instantiates CanvasLayer overlays for Backpack grid inventory, Crafting benches, and BBQ spits.
+  * [`scripts/PlayerController.gd`](file:///g:/kidgamemaker/engine/scripts/PlayerController.gd) — Character movement physics. Handles job class multipliers, trail CPUParticles2D, shocked/burning status effects, slippery ice sliding physics, emote wheels, keyboard keys (`Tab` for backpack, `F` for throwing Pikmin, `Q` for whistling), and the 4x4 inventory insertion grid arrays.
+  * [`scripts/SmartEnemy.gd`](file:///g:/kidgamemaker/engine/scripts/SmartEnemy.gd) — Patrolling/chasing enemy AI. Handles boss phases, custom health displays, shocked/frozen/burning status tick effects, and register hooks for latched Pikmin helpers (cutting patrol speeds in half).
   * [`scripts/Collectible.gd`](file:///g:/kidgamemaker/engine/scripts/Collectible.gd) — Handles coin rewards, health points restoration, alchemy potions, and pop-up tween animations.
   * `data/assets/` — Category-routed assets and sidecar descriptors.
 
@@ -56,9 +56,36 @@ graph TD
 * **Gravity Flip Zones & Potions**: Area bounds that dynamically invert player gravity vectors.
 * **Alchemy Potions**: Speed potions (cyan trail), Jump potions, and Growth potions (giant scales).
 * **Glide & Jetpack Gear**: Glider capes (drifts down slowly) and jetpack thrusters.
-* **NPC Shopkeepers**: Interactive traders selling tools for rubies.
+* **NPC Shopkeepers**: Interactive shop units selling tools for rubies.
 * **Stomp Mechanics**: Jumping on top of enemies deals stomp damage and bounces the player.
 * **Emote Wheel**: Numeric keys `1-5` show bouncy smiley overlays (`😊`, `😡`, `😱`, `🎉`, `💤`) above the player.
+
+### 🔥 Elemental Chemistry Engine
+Systemic interactions between elements and materials spread dynamically:
+* **Fire Spread**: Wood and grass blocks are flammable. Fire spreads across adjacent wood/grass, turning them into ash after 4 seconds.
+* **Water & Freezing**: Water pools extinguish fire. Spawning ice crystals nearby freezes water into solid, slippery ice blocks that player slides on.
+* **Electric Chains**: Metal blocks conduct electricity, chaining lightning through connected metal structures to stun characters on contact for 1.5 seconds.
+* **Wind Blows**: Wind zones apply physical force vectors to players, enemies, and physics contraptions.
+
+### 🚀 Zonai Device Contraptions & Physics Gluing
+Welding blocks and devices together to build vehicles or traps:
+* **Emergent Gluing**: Any touching Zonai devices (Fans, Rockets, Balloons, Springs, Lasers, Batteries) and blocks (wood/metal) weld into a single dynamic `RigidBody2D` contraption at startup using a BFS connected components solver.
+* **Zonai Fans**: Apply constant thrust in the stamped direction, complete with wind stream particles.
+* **Zonai Rockets**: Apply a massive short-burst thrust, then burn out.
+* **Zonai Balloons**: Apply upward buoyancy lift forces.
+* **Zonai Springs**: Launch characters on impact.
+* **Zonai Lasers**: Project a red raycast line that deals contact damage.
+* **Zonai Batteries**: Contain energy capacity to power active devices; when battery capacity drains to 0, devices shut off.
+
+### 🐝 AI Companion Swarm & Familiars
+Helping hands follow you on your quest:
+* **Pikmin Helper 🌱**: Follows and hops over walls. Can be thrown (`F` key) in a parabolic arc to latch onto enemies (halving speed and dealing tick damage) or press switches. Picks up nearby collectibles and carries them to the player. Can be recalled via whistle (`Q` key). Customizer options select element colors (Red = fire immune, Blue = swim, Yellow = electric immune).
+* **Spooky Ghost 👻**: Hovers and drains health from nearby enemies to heal the player, showing visual drain beams.
+
+### 🔨 Crafting, Cooking & Backpack UI
+* **4x4 Grid Backpack Inventory**: Pressing `Tab` opens a grid backpack. Move items (Shield is 2x2, Sword is 1x2, Potion is 1x1) inside slots using Arrow keys and `Space`. Press `E` to consume potions or equip swords/shields.
+* **Visual Crafting Bench**: Craft Swords, Fire Swords, Shields, and Potions from collected materials: **Metal Scrap 🔩**, **Fire Powder 🌶️**, **Green Herb 🌿**, and **Sweet Honey 🍯**.
+* **BBQ Spit Cooking**: A Monster Hunter-style mini-game. Press `Space` at the perfect golden-brown color moment to hear `"SO TASTY! 🍖"` and gain a permanent Max HP boost. Burnt steak heals nothing.
 
 ### 💨 Custom Rule Engine (No-Code If/Then Logic)
 Children link action triggers dynamically inside the editor. Supported rule maps:
@@ -154,6 +181,7 @@ If you want to implement new features, here is where to look:
 2. **Adding Custom Rule Actions or Triggers**:
    * Add new `<option>` tags inside the rule selectors of [`App.svelte`](file:///g:/kidgamemaker/editor/src/App.svelte).
    * Extend the evaluator checks in [`Main.gd`](file:///g:/kidgamemaker/engine/scripts/Main.gd) inside `execute_rules` or `notify_trigger`.
-3. **Enhancing Physics & Traps**:
-   * Extend [`PlayerController.gd`](file:///g:/kidgamemaker/engine/scripts/PlayerController.gd) for player-state transitions (e.g. wall climbing, swimming, sliding).
-   * Extend [`SmartEnemy.gd`](file:///g:/kidgamemaker/engine/scripts/SmartEnemy.gd) for new attack mechanics (e.g., throwing bombs, deploying shields).
+3. **Enhancing Physics, Contraptions, Chemistry, or Companions**:
+   * Extend [`PlayerController.gd`](file:///g:/kidgamemaker/engine/scripts/PlayerController.gd) for player-state transitions, backpack grid usage, and inputs.
+   * Extend [`SmartEnemy.gd`](file:///g:/kidgamemaker/engine/scripts/SmartEnemy.gd) for status effect modifiers, AI movement speeds, or new custom behavior states.
+   * Extend [`Main.gd`](file:///g:/kidgamemaker/engine/scripts/Main.gd) to process chemistry spreading or battery force additions.

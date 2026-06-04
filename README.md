@@ -24,7 +24,7 @@ graph TD
 
 ---
 
-## 🚀 Features
+## 🚀 Key Features
 
 ### 🛠️ Editor & Canvas
 * **Drag-Paint Placement**: Drag stamps smoothly across the canvas to paint platforms, hazards, or collectibles.
@@ -47,16 +47,32 @@ Create rules to trigger actions on in-game events without coding:
   * 💖 `heal_player` (Heals 20 HP)
   * 🔔 `play_sfx_chime` (Plays retro sound sweeps)
 
-### 🌟 Gameplay Mechanics & Alchemy Potions
-* **Wardrobe Costumes**: Swap player color templates (Storm Ninja, Void Wizard) that auto-modulate runner sprite colors and trail emissions.
-* **Conveyor Belts**: Moving platforms that slide players and enemies at custom speeds.
-* **Mystery Boxes**: Collision blocks that spin items, health, potion speed boosts, shields, or a surprise slime monster.
-* **Gravity Flip Zones**: Trigger boundaries that invert gravity physics on enter and normalize it on exit.
-* **Alchemy Potions**: Collectible potions for Speed boosts, Giant growth, High Jumps, and Gravity flips.
-* **Equipment Gear**: Fly using **Jetpack Thrusters** or float downwards with **Glider Capes**.
-* **NPC Shopkeepers**: Interactive shop units that sell tools in exchange for rubies.
-* **Lighting Masks**: Ambient dark zones (night/sunset) require equipping the **Lantern** tool to reveal pathways.
-* **Toy Hammer**: A tool to smash destructible brick/ice platforms.
+### 🔥 Elemental Chemistry Engine
+Systemic interactions between elements and materials spread dynamically:
+* **Fire Spread**: Wood and grass blocks are flammable. Fire spreads across adjacent wood/grass, turning them into ash after 4 seconds.
+* **Water & Freezing**: Water pools extinguish fire. Spawning ice crystals nearby freezes water into solid, slippery ice blocks that player slides on.
+* **Electric Chains**: Metal blocks conduct electricity, chaining lightning through connected metal structures to stun characters on contact for 1.5 seconds.
+* **Wind Blows**: Wind zones apply physical force vectors to players, enemies, and physics contraptions.
+
+### 🚀 Zonai Device Contraptions & Physics Gluing
+Welding blocks and devices together to build vehicles or traps:
+* **Emergent Gluing**: Any touching Zonai devices (Fans, Rockets, Balloons, Springs, Lasers, Batteries) and blocks (wood/metal) weld into a single dynamic `RigidBody2D` contraption at startup using a BFS connected components solver.
+* **Zonai Fans**: Apply constant thrust in the stamped direction, complete with wind stream particles.
+* **Zonai Rockets**: Apply a massive short-burst thrust, then burn out.
+* **Zonai Balloons**: Apply upward buoyancy lift forces.
+* **Zonai Springs**: Launch characters on impact.
+* **Zonai Lasers**: Project a red raycast line that deals contact damage.
+* **Zonai Batteries**: Contain energy capacity to power active devices; when battery capacity drains to 0, devices shut off.
+
+### 🐝 AI Companion Swarm & Familiars
+Helping hands follow you on your quest:
+* **Pikmin Helper 🌱**: Follows and hops over walls. Can be thrown (`F` key) in a parabolic arc to latch onto enemies (halving speed and dealing tick damage) or press switches. Picks up nearby collectibles and carries them to the player. Can be recalled via whistle (`Q` key). Customizer options select element colors (Red = fire immune, Blue = swim, Yellow = electric immune).
+* **Spooky Ghost 👻**: Hovers and drains health from nearby enemies to heal the player, showing visual drain beams.
+
+### 🔨 Crafting, Cooking & Backpack UI
+* **4x4 Grid Backpack Inventory**: Pressing `Tab` opens a grid backpack. Move items (Shield is 2x2, Sword is 1x2, Potion is 1x1) inside slots using Arrow keys and `Space`. Press `E` to consume potions or equip swords/shields.
+* **Visual Crafting Bench**: Craft Swords, Fire Swords, Shields, and Potions from collected materials: **Metal Scrap 🔩**, **Fire Powder 🌶️**, **Green Herb 🌿**, and **Sweet Honey 🍯**.
+* **BBQ Spit Cooking**: A Monster Hunter-style mini-game. Press `Space` at the perfect golden-brown color moment to hear `"SO TASTY! 🍖"` and gain a permanent Max HP boost. Burnt steak heals nothing.
 
 ### 🛡️ Difficulty Modes & Safety Options
 * **Easy Mode**: Halves enemy damage, doubles initial player health, and slows down monster patrols.
@@ -66,7 +82,6 @@ Create rules to trigger actions on in-game events without coding:
 
 ### 🌋 Atmosphere & Polish
 * **Rising Hazards**: Global rules toggle to trigger slowly rising **🌊 Water** (drown damage) or **🌋 Lava** (lava burn damage).
-* **Wind Zones**: Invisible push areas that project player velocity with particle stream lines and custom forces.
 * **Emote Wheel**: Tap number keys `1-5` during gameplay to display bouncing scaling emoji bubbles (`😊`, `😡`, `😱`, `🎉`, `💤`) that drift up and fade out.
 * **Level Length Indicator**: Shows size tags in the canvas footer based on horizontal terrain bounds (`🎈 Short Adventure`, `🚀 Medium Adventure`, `🏰 Long Quest`, `👑 Epic Quest!`).
 
@@ -89,9 +104,9 @@ Create rules to trigger actions on in-game events without coding:
 │       └── lib.rs             # Application runner & handlers
 ├── engine/                   # Godot 4 game runtime
 │   ├── scripts/
-│   │   ├── Main.gd            # Spawns components, compiles levels, manages BGM
-│   │   ├── PlayerController.gd # Player movement physics & emote overlays
-│   │   ├── SmartEnemy.gd      # Patrolling, shooting, and boss camera sweeps
+│   │   ├── Main.gd            # Spawns components, compiles levels, manages BGM, chemistry and contraptions
+│   │   ├── PlayerController.gd # Player movement physics, backpack grid, emotes
+│   │   ├── SmartEnemy.gd      # Patrolling, shooting, boss phases, elemental status effects
 │   │   └── Collectible.gd     # Potions, rubies, and animation tweens
 │   └── data/
 │       ├── game_state.json    # Transpiled level payload
@@ -125,17 +140,11 @@ The editor will compile, start, and locate your workspace directory.
   ```
 
 ### 3. Ingesting Custom Assets
-Drop `.png`, `.wav`, or `.zip` files into the `_Inbox/` folder. The background watcher daemon will:
-1. Parse the dimensions (connected-components grid scan for spritesheets).
-2. Generate target classifications based on name tags.
-3. Automatically compile a matching `.json` sidecar metadata descriptor.
-4. Relocate the files into the `engine/data/assets/` categories directory.
-5. Trigger the editor’s Svelte list to refresh automatically.
+Drop `.png`, `.wav`, or `.zip` files into the `_Inbox/` folder. The background watcher daemon will parse, classify, create JSON metadata sidecars, and sync them to the Svelte inventory modal.
 
 ---
 
 ## 🔒 Security & Code Verification
-
 * **PowerShell Escape Guards**: PowerShell process invocations are bypassed in favor of native Rust programmatic archiving using `zip::ZipWriter` and `zip::ZipArchive`, shielding the app from command injection.
 * **Zip Slip Path Controls**: Archive extraction inside `inbox.rs` validates entry paths, skipping items resolving outside the target directories.
 * **Content Security Policy (CSP)**: Tauri webview configuration strictly scopes script, image, and style protocols:

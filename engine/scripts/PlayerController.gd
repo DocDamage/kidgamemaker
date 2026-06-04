@@ -17,6 +17,27 @@ var mana_points: float = 100.0
 var dashes_spent: int = 0
 var archer_shoot_cooldown: float = 0.0
 
+# Subsystems inventory
+var metal_scrap: int = 0
+var fire_powder: int = 0
+var green_herb: int = 0
+var sweet_honey: int = 0
+
+# Chemistry states
+var is_burning: bool = false
+var burn_timer: float = 0.0
+var is_shocked: bool = false
+var shock_timer: float = 0.0
+
+# Backpack UI state
+var backpack_open: bool = false
+var backpack_grid: Array = [
+	[null, null, null, null],
+	[null, null, null, null],
+	[null, null, null, null],
+	[null, null, null, null]
+]
+
 # Powerup states
 var speed_boost_timer: float = 0.0
 var shield_active: bool = false
@@ -257,6 +278,25 @@ func take_damage(amount: int) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if is_shocked:
+		shock_timer -= delta
+		velocity = Vector2.ZERO
+		move_and_slide()
+		modulate = Color.YELLOW if Engine.get_physics_frames() % 4 < 2 else Color.WHITE
+		if shock_timer <= 0.0:
+			is_shocked = false
+			modulate = Color.WHITE
+		return
+
+	if is_burning:
+		burn_timer -= delta
+		modulate = Color.ORANGE_RED if Engine.get_physics_frames() % 6 < 3 else Color.WHITE
+		if int(burn_timer * 10) % 10 == 0:
+			take_damage(2)
+		if burn_timer <= 0.0:
+			is_burning = false
+			modulate = Color.WHITE
+
 	if hero_class == "mage":
 		mana_points = min(mana_points + 10.0 * delta, max_mana)
 	if archer_shoot_cooldown > 0.0:
@@ -445,15 +485,30 @@ func _physics_process(delta: float) -> void:
 			charge_timer = 0.0
 
 	# Apply Velocity
+	var standing_on_ice := false
+	if is_on_floor():
+		for i in get_slide_collision_count():
+			var col = get_slide_collision(i)
+			var collider = col.get_collider()
+			if collider != null and (collider.get_meta("is_ice", false) or collider.name.to_lower().contains("ice")):
+				standing_on_ice = true
+				break
+
 	if is_dashing:
 		velocity.x = dash_direction * movement_speed * 3.2
 		velocity.y = 0.0
 	elif is_blocking:
-		velocity.x = input_dir * active_speed
+		if standing_on_ice:
+			velocity.x = lerp(velocity.x, input_dir * active_speed, delta * 2.0)
+		else:
+			velocity.x = input_dir * active_speed
 	elif is_ground_pounding:
 		velocity.x = 0.0
 	else:
-		velocity.x = input_dir * active_speed + conveyor_velocity.x
+		if standing_on_ice:
+			velocity.x = lerp(velocity.x, input_dir * active_speed + conveyor_velocity.x, delta * 2.0)
+		else:
+			velocity.x = input_dir * active_speed + conveyor_velocity.x
 
 	# Apply speed boost pad impulse vector if active
 	if speed_pad_velocity.length_squared() > 10.0:
@@ -589,6 +644,32 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_3: emoji = "😱"
 			KEY_4: emoji = "🎉"
 			KEY_5: emoji = "💤"
+			KEY_TAB:
+				var main = get_tree().get_root().get_node_or_null("Main")
+				if main != null and main.has_method("toggle_backpack_ui"):
+					main.toggle_backpack_ui()
+			KEY_F:
+				var main = get_tree().get_root().get_node_or_null("Main")
+				if main != null:
+					var thrown = false
+					for child in get_parent().get_children():
+						if child.has_meta("asset_id") and child.get_meta("asset_id") == "companion_pikmin":
+							if child.has_method("is_following") and child.is_following():
+								child.throw(facing_direction)
+								thrown = true
+								break
+					if thrown:
+						if main.has_method("play_sfx"): main.play_sfx("jump")
+			KEY_Q:
+				var main = get_tree().get_root().get_node_or_null("Main")
+				if main != null:
+					if main.has_method("play_sfx"): main.play_sfx("coin")
+					if main.has_method("spawn_floating_text"):
+						main.spawn_floating_text("📢 WHISTLE!", global_position, Color.CHARTREUSE)
+					for child in get_parent().get_children():
+						if child.has_meta("asset_id") and child.get_meta("asset_id") == "companion_pikmin":
+							if child.has_method("recall"):
+								child.recall()
 		if emoji != "":
 			show_emote(emoji)
 
@@ -930,4 +1011,49 @@ func _fire_mage_magic_blast() -> void:
 		if is_instance_valid(bullet): bullet.queue_free()
 	)
 	main.add_child(bullet)
+
+
+func set_burning(duration: float) -> void:
+	is_burning = true
+	burn_timer = max(burn_timer, duration)
+
+
+func set_shocked(duration: float) -> void:
+	is_shocked = true
+	shock_timer = max(shock_timer, duration)
+
+
+func add_to_backpack(item_type: String) -> bool:
+	var w = 1
+	var h = 1
+	if item_type == "shield":
+		w = 2
+		h = 2
+	elif item_type in ["sword", "firesword"]:
+		w = 1
+		h = 2
+
+	for r in range(4 - h + 1):
+		for c in range(4 - w + 1):
+			var fits = true
+			for dr in range(h):
+				for dc in range(w):
+					if backpack_grid[r + dr][c + dc] != null:
+						fits = false
+						break
+				if not fits: break
+			if fits:
+				for dr in range(h):
+					for dc in range(w):
+						backpack_grid[r + dr][c + dc] = {
+							"type": item_type,
+							"root_r": r,
+							"root_c": c,
+							"w": w,
+							"h": h
+						}
+				print("Added ", item_type, " to backpack at ", r, ", ", c)
+				return true
+	print("Backpack is full! Cannot add: ", item_type)
+	return false
 
