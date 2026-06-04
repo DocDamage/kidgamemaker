@@ -23,6 +23,8 @@
   } from './lib/spriteGrid';
   import { SPRITE_EDITOR_COLORS, SPRITE_EDITOR_GRID_SIZE } from './lib/spriteEditorConfig';
   import { SPRITE_TEMPLATES, type SpriteTemplateName } from './lib/spriteTemplates';
+  import SpriteTemplatesPanel from './SpriteTemplatesPanel.svelte';
+  import SpriteEditorPalette from './SpriteEditorPalette.svelte';
 
   export let targetAssetId = '';
   export let category = 'decorations';
@@ -315,18 +317,7 @@
   </div>
 {/if}
 
-<div class="templates-panel">
-  <span class="panel-label">Templates:</span>
-  <div class="templates-buttons">
-    <button class="tpl-btn" on:click={() => applyTemplate('sword')}>⚔️ Sword</button>
-    <button class="tpl-btn" on:click={() => applyTemplate('monster')}>👾 Slime</button>
-    <button class="tpl-btn" on:click={() => applyTemplate('coin')}>🪙 Coin</button>
-    <button class="tpl-btn" on:click={() => applyTemplate('heart')}>❤️ Heart</button>
-    <button class="tpl-btn" on:click={() => applyTemplate('star')}>⭐️ Star</button>
-    <button class="tpl-btn" on:click={() => applyTemplate('key')}>🔑 Key</button>
-    <button class="tpl-btn" on:click={() => applyTemplate('crown')}>👑 Crown</button>
-  </div>
-</div>
+<SpriteTemplatesPanel on:select={(e) => applyTemplate(e.detail)} />
 
 <div class="editor-workspace">
   <div class="canvas-area" style="display: flex; flex-direction: column; gap: 16px;">
@@ -368,59 +359,19 @@
     {/if}
   </div>
 
-  <div class="side-panel">
-    <div class="brush-selector">
-      <button class="brush-btn" class:active={brushSize === 1 && !isBucket && !isEraser} on:click={() => { brushSize = 1; isBucket = false; isEraser = false; }} title="Small Brush">🟢 1x</button>
-      <button class="brush-btn" class:active={brushSize === 2 && !isBucket && !isEraser} on:click={() => { brushSize = 2; isBucket = false; isEraser = false; }} title="Medium Brush">🟢 2x</button>
-      <button class="brush-btn" class:active={brushSize === 3 && !isBucket && !isEraser} on:click={() => { brushSize = 3; isBucket = false; isEraser = false; }} title="Big Brush">🟢 3x</button>
-    </div>
-
-    <div class="colors-grid">
-      {#each SPRITE_EDITOR_COLORS as color}
-        <button
-          class="color-dot"
-          style:background={color}
-          class:selected={currentColor === color && !isEraser && !isBucket}
-          on:click={() => { currentColor = color; isEraser = false; isBucket = false; }}
-          aria-label="Color {color}"
-        ></button>
-      {/each}
-    </div>
-
-    <div class="brush-selector" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; background: #0f172a; padding: 10px; border-radius: 14px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); border: 2px solid #334155;">
-      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-        <span style="font-size: 0.85rem; color: #94a3b8; font-weight: 800;">🪞 Mirror:</span>
-        <select bind:value={symmetryMode} style="background: #1e293b; color: white; border: 1px solid #475569; border-radius: 6px; padding: 4px; font-size: 0.8rem; font-weight: bold; cursor: pointer; outline: none;">
-          <option value="none">None</option>
-          <option value="horizontal">↔️ Horiz</option>
-          <option value="vertical">↕️ Vert</option>
-          <option value="both">🔲 Both</option>
-        </select>
-      </div>
-      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-        <span style="font-size: 0.85rem; color: #94a3b8; font-weight: 800;">🌈 Rainbow:</span>
-        <input type="checkbox" bind:checked={isRainbowBrush} style="cursor: pointer; width: 16px; height: 16px; accent-color: #fbbf24;" />
-      </div>
-    </div>
-
-    <div class="tool-actions">
-      <button class="tool-btn undo-btn" disabled={historyIndex <= 0} on:click={handleUndo} title="Undo draw stroke">
-        ↺ Undo
-      </button>
-      <button class="tool-btn redo-btn" disabled={historyIndex >= history.length - 1} on:click={handleRedo} title="Redo draw stroke">
-        ↻ Redo
-      </button>
-      <button class="tool-btn eraser-btn" class:active={isEraser} on:click={() => { isEraser = true; isBucket = false; }}>
-        🧽 Eraser
-      </button>
-      <button class="tool-btn bucket-btn" class:active={isBucket} on:click={() => { isBucket = true; isEraser = false; }}>
-        🪣 Fill
-      </button>
-      <button class="tool-btn clear-btn" on:click={handleClear}>
-        🗑️ Clear
-      </button>
-    </div>
-  </div>
+  <SpriteEditorPalette
+    bind:currentColor
+    bind:brushSize
+    bind:isEraser
+    bind:isBucket
+    bind:symmetryMode
+    bind:isRainbowBrush
+    historyIndex={historyIndex}
+    historyLength={history.length}
+    on:undo={handleUndo}
+    on:redo={handleRedo}
+    on:clear={handleClear}
+  />
 </div>
 
 <style>
@@ -476,157 +427,6 @@
     touch-action: none;
     image-rendering: pixelated;
     box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.4);
-  }
-
-  .side-panel {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    width: 140px;
-  }
-
-  .colors-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-
-  .color-dot {
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    border: 4px solid #1e293b;
-    cursor: pointer;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    transition: transform 0.1s;
-  }
-
-  .color-dot:hover {
-    transform: scale(1.1);
-  }
-
-  .color-dot.selected {
-    outline: 4px solid #fbbf24;
-    transform: scale(1.05);
-  }
-
-  .tool-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-top: 20px;
-  }
-
-  .tool-btn {
-    border: 0;
-    border-radius: 18px;
-    padding: 14px;
-    font-size: 1.05rem;
-    font-weight: 900;
-    cursor: pointer;
-    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.2);
-    transition: transform 0.1s, background 0.2s;
-  }
-
-  .tool-btn:active {
-    transform: translateY(2px);
-  }
-
-  .eraser-btn {
-    background: #f1f5f9;
-    color: #0f172a;
-  }
-
-  .eraser-btn.active {
-    background: #fbbf24;
-    color: #0f172a;
-    outline: 4px solid white;
-    transform: scale(1.05);
-  }
-
-  .clear-btn {
-    background: #475569;
-    color: white;
-  }
-
-  .bucket-btn {
-    background: #e0f2fe;
-    color: #0369a1;
-  }
-
-  .bucket-btn.active {
-    background: #0284c7;
-    color: white;
-    outline: 4px solid white;
-    transform: scale(1.05);
-  }
-
-  .templates-panel {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    background: #0f172a;
-    padding: 12px 20px;
-    border-radius: 20px;
-  }
-
-  .panel-label {
-    font-weight: 900;
-    color: #94a3b8;
-    font-size: 1rem;
-  }
-
-  .templates-buttons {
-    display: flex;
-    gap: 10px;
-  }
-
-  .tpl-btn {
-    border: 0;
-    background: #1e293b;
-    color: white;
-    font-weight: 800;
-    padding: 8px 16px;
-    border-radius: 14px;
-    cursor: pointer;
-    font-size: 0.95rem;
-    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25);
-    transition: background 0.2s, transform 0.1s;
-  }
-
-  .tpl-btn:hover {
-    background: #334155;
-  }
-
-  .tpl-btn:active {
-    transform: translateY(2px);
-  }
-
-  .brush-selector {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 12px;
-    background: #0f172a;
-    padding: 6px;
-    border-radius: 14px;
-    justify-content: space-around;
-  }
-
-  .brush-btn {
-    border: 0;
-    background: #1e293b;
-    color: #94a3b8;
-    font-weight: 800;
-    padding: 6px 10px;
-    border-radius: 10px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    transition: background 0.2s, transform 0.1s;
-  }
-
-  .brush-btn.active {
-    background: #fbbf24;
-    color: #0f172a;
   }
 
   /* Timeline Styles */

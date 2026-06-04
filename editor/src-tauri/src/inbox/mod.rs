@@ -117,12 +117,20 @@ fn process_extracted_files(extracted_dir: &Path, repo_root: &Path) -> Result<(),
     let mut files_to_process = Vec::new();
     collect_files_recursive(extracted_dir, &mut files_to_process)?;
 
+    let mut errors = Vec::new();
     for file_path in files_to_process {
         let name = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if is_supported_asset(name) {
-            let _ = ingest::process_single_asset(&file_path, repo_root);
+            if let Err(err) = ingest::process_single_asset(&file_path, repo_root) {
+                errors.push(format!("{}: {}", name, err));
+            }
         }
     }
+
+    if !errors.is_empty() {
+        return Err(format!("Failed to ingest assets inside package: {}", errors.join(", ")));
+    }
+
     Ok(())
 }
 

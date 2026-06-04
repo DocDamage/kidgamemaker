@@ -1,6 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import {
+    runWebGLPlay,
+    runNativePlay,
+    runExportGame,
+    runShareGame
+  } from './lib/editorLauncher';
   import CanvasWorkspace from './CanvasWorkspace.svelte';
   import EditorModals from './EditorModals.svelte';
   import ParentsPanel from './ParentsPanel.svelte';
@@ -468,60 +473,23 @@
 
   async function play() {
     status = 'Saving room level...';
-    try {
-      await saveCurrentRoom();
-
-      const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
-      setGlobalGameLevel(JSON.stringify(payload));
-      setGlobalGameMuted(isMuted);
-
-      status = 'Preparing WebGL game...';
-      try {
-        await invoke('build_web_runner');
-        playModalOpen = true;
-        status = 'Loaded embedded play mode!';
-        playUiSound('chime');
-      } catch (err) {
-        console.log('WebGL player not built/available, falling back to native window:', err);
-        status = 'Launching Godot runner window...';
-        await launchNativeWindow();
-      }
-    } catch (error) {
-      status = `Play failed: ${String(error)}`;
-    }
+    const res = await runWebGLPlay(placed, worldSettings, activeRoomId, isMuted, saveCurrentRoom, playUiSound);
+    if (res.modalOpen !== undefined) playModalOpen = res.modalOpen;
+    status = res.status;
   }
 
   async function launchNativeWindow() {
-    try {
-      const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
-      status = await invoke<string>('compile_and_play', { roomPayload: payload });
-      playUiSound('chime');
-    } catch (error) {
-      status = `Native play failed: ${String(error)}`;
-    }
+    status = await runNativePlay(placed, worldSettings, activeRoomId, playUiSound);
   }
 
   async function exportGame() {
     status = 'Saving and exporting...';
-    try {
-      await saveCurrentRoom();
-      const payload = toRoomPayload(placed);
-      status = await invoke<string>('export_game', { projectId: payload.project_id });
-    } catch (error) {
-      status = `Export failed: ${String(error)}`;
-    }
+    status = await runExportGame(placed, saveCurrentRoom);
   }
 
   async function shareGame() {
     status = 'Saving and packaging Toybox...';
-    try {
-      await saveCurrentRoom();
-      const path = await invoke<string>('package_game_project');
-      status = `Toybox packaged successfully! Saved to: ${path}`;
-      playUiSound('chime');
-    } catch (error) {
-      status = `Packaging failed: ${String(error)}`;
-    }
+    status = await runShareGame(saveCurrentRoom, playUiSound);
   }
 
   function selectAsset(asset: ToyboxAsset) {

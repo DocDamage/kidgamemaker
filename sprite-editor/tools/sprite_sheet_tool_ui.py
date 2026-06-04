@@ -148,12 +148,16 @@ from tools.sprite_ui_controllers import (
 from tools.sprite_ui_editor import SpriteEditorUiMixin
 try:
     from tools.sprite_ui_review_mixin import SpriteReviewUiMixin
+    from tools.sprite_ui_settings_mixin import SpriteCutterSettingsMixin
+    from tools.sprite_ui_studio_mixin import SpriteStudioUiMixin
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from tools.sprite_ui_review_mixin import SpriteReviewUiMixin
+    from tools.sprite_ui_settings_mixin import SpriteCutterSettingsMixin
+    from tools.sprite_ui_studio_mixin import SpriteStudioUiMixin
 
 
-class SpriteSheetToolUi(SpriteReviewUiMixin, SpriteEditorUiMixin):
+class SpriteSheetToolUi(SpriteCutterSettingsMixin, SpriteReviewUiMixin, SpriteStudioUiMixin, SpriteEditorUiMixin):
     def __init__(self, *, build: bool = True) -> None:
         self.input_path = DpgValue("")
         self.auto_detect_all = DpgValue(True)
