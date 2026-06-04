@@ -218,3 +218,11 @@ If you want to implement new features, here is where to look:
    * Extend [`PlayerController.gd`](file:///g:/kidgamemaker/engine/scripts/PlayerController.gd) for player-state transitions, backpack grid usage, and inputs.
    * Extend [`SmartEnemy.gd`](file:///g:/kidgamemaker/engine/scripts/SmartEnemy.gd) for status effect modifiers, AI movement speeds, or new custom behavior states.
    * Extend [`Main.gd`](file:///g:/kidgamemaker/engine/scripts/Main.gd) to process chemistry spreading or battery force additions.
+
+---
+
+## 6. Codebase Standards & File Size Limits
+
+To maintain modularity, readability, and ease of maintenance:
+* **File Size Limit**: No source file (code, Svelte components, scripts, markup, etc.) should exceed **500 lines** unless absolutely necessary.
+* **Decomposition Policy**: If a file grows near or beyond 500 lines, it must be decomposed into smaller, single-responsibility modules, helper scripts, sub-components, or mixins.
