@@ -152,3 +152,11 @@ Drop `.png`, `.wav`, or `.zip` files into the `_Inbox/` folder. The background w
 * **Static Verification**:
   * Run TypeScript validation: `npm run check` (runs `tsc --noEmit`).
   * Verify Vite production bundling: `npm run build`.
+
+---
+
+## 🛠️ Codebase Standards & File Size Limits
+
+To maintain modularity, readability, and ease of maintenance across Svelte, Rust, Python, and GDScript components:
+* **File Size Limit**: No source file (code, Svelte components, scripts, markup, etc.) should exceed **500 lines** unless absolutely necessary.
+* **Decomposition Policy**: If a file grows near or beyond 500 lines, it must be decomposed into smaller, single-responsibility modules, helper scripts, sub-components, or mixins.

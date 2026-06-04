@@ -80,3 +80,11 @@ Example:
 - The runner links them without menus.
 
 That comes later. Phase 1 only establishes the contract shape.
+
+---
+
+## Codebase Standards & File Size Limits
+
+To maintain modularity and prevent files from becoming unmaintainable:
+* **500-Line Limit**: No source file (code, Svelte components, scripts, markup, etc.) should exceed **500 lines** unless absolutely necessary.
+* **Decomposition Policy**: Files approaching or exceeding 500 lines must be split/decomposed into smaller, single-responsibility modules, sub-components, or mixins.
