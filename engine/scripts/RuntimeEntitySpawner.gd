@@ -169,8 +169,16 @@ static func _register_node(
 
 	if runtime_template == "player":
 		app.spawn_point = node.global_position
-		app.active_player = node
-		app._attach_camera(node)
+		if app.get("active_player_1") == null:
+			app.active_player_1 = node
+			node.set("player_index", 1)
+			app.active_player = node
+			app._attach_camera(node)
+		else:
+			app.active_player_2 = node
+			node.set("player_index", 2)
+			node.modulate = Color(0.5, 0.8, 1.0, 1.0)
+		
 		# Attach visual progression tracker
 		if app.has_method("_attach_visual_progression"):
 			app._attach_visual_progression(node)

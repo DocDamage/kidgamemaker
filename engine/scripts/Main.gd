@@ -82,6 +82,9 @@ const CATEGORY_SEARCH_ORDER := [
 
 var sidecar_cache: Dictionary = {}
 var active_player: Node2D = null
+var active_player_1: Node2D = null
+var active_player_2: Node2D = null
+var health_style: String = "hearts"
 var spawn_point: Vector2 = Vector2.ZERO
 var death_y_threshold: float = 2000.0
 var spawned_entities: Array = []
@@ -110,6 +113,7 @@ var hud_manager: Node = null
 var _js_pause_cb: JavaScriptObject
 var _js_restart_cb: JavaScriptObject
 var _js_mute_cb: JavaScriptObject
+var _js_live_update_cb: JavaScriptObject
 
 static var run_record: Array = []
 var current_run: Array = []
@@ -163,9 +167,11 @@ func _ready() -> void:
 			_js_pause_cb = JavaScriptBridge.create_callback(_on_js_pause)
 			_js_restart_cb = JavaScriptBridge.create_callback(_on_js_restart)
 			_js_mute_cb = JavaScriptBridge.create_callback(_on_js_mute)
+			_js_live_update_cb = JavaScriptBridge.create_callback(_on_js_live_update)
 			window.set("godotPauseGame", _js_pause_cb)
 			window.set("godotRestartGame", _js_restart_cb)
 			window.set("godotMuteGame", _js_mute_cb)
+			window.set("godotLiveUpdateRoom", _js_live_update_cb)
 
 			# Check if window parent already has a muted setting on load
 			var initial_mute = JavaScriptBridge.eval("window.parent.currentGameMuted")
@@ -304,6 +310,58 @@ func _on_js_mute(args: Array) -> void:
 	var mute_val: bool = args[0] if args.size() > 0 else false
 	AudioServer.set_bus_mute(0, mute_val)
 	print("Game mute state set via JS: ", mute_val)
+
+
+func _on_js_live_update(args: Array) -> void:
+	var json_str: String = args[0] if args.size() > 0 else ""
+	if json_str == "":
+		return
+	print("Live-updating room from Svelte...")
+	var json := JSON.new()
+	var error := json.parse(json_str)
+	if error != OK:
+		push_error("JS Live Update parse error: " + json.get_error_message())
+		return
+
+	var level_data: Variant = json.get_data()
+	if typeof(level_data) != TYPE_DICTIONARY:
+		return
+
+	_apply_world_settings(level_data.get("world_settings", {}))
+	
+	# Clear all spawned entities except players
+	for node in spawned_entities:
+		if is_instance_valid(node) and node != active_player_1 and node != active_player_2:
+			node.queue_free()
+
+	var next_entities := []
+	if active_player_1 != null and is_instance_valid(active_player_1):
+		next_entities.append(active_player_1)
+	if active_player_2 != null and is_instance_valid(active_player_2):
+		next_entities.append(active_player_2)
+	spawned_entities = next_entities
+
+	# Re-spawn entities except the player templates
+	var entities: Array = level_data.get("entities", [])
+	for entity_data in entities:
+		if typeof(entity_data) == TYPE_DICTIONARY:
+			var asset_id: String = str(entity_data.get("asset_id", ""))
+			var sidecar := _load_sidecar(asset_id)
+			var template: String = str(sidecar.get("runtime_template", ""))
+			if template == "player":
+				spawn_point = _read_position(entity_data.get("position", {"x": 0, "y": 0}))
+				continue
+			spawn_entity(entity_data)
+
+	_build_physics_contraptions()
+	_ensure_rule_executor()
+	if rule_executor != null and is_instance_valid(rule_executor) and rule_executor.has_method("auto_connect_proximity_triggers"):
+		rule_executor.auto_connect_proximity_triggers(room_rules)
+
+	_apply_weather_particles()
+	_configure_camera_limits()
+	_update_hud()
+
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -823,6 +881,9 @@ func clear_spawned_entities() -> void:
 		if is_instance_valid(node):
 			node.queue_free()
 	spawned_entities.clear()
+	active_player = null
+	active_player_1 = null
+	active_player_2 = null
 	_ensure_hud_manager()
 	if hud_manager != null and hud_manager.has_method("clear_hud"):
 		hud_manager.clear_hud()
@@ -880,6 +941,7 @@ func _apply_world_settings(settings: Dictionary) -> void:
 	var applied: Dictionary = RUNTIME_WORLD_ENVIRONMENT_SCRIPT.apply_world_settings(self, settings)
 	difficulty = str(applied.get("difficulty", "normal"))
 	calm_mode = bool(applied.get("calm_mode", false))
+	health_style = str(settings.get("health_style", "hearts"))
 	camera_autoscroll_enabled = bool(applied.get("camera_autoscroll_enabled", false))
 	camera_autoscroll_direction = str(applied.get("camera_autoscroll_direction", "right"))
 	camera_autoscroll_speed = float(applied.get("camera_autoscroll_speed", 40.0))

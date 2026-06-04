@@ -105,6 +105,51 @@ static func toggle_squid_visuals(player: Node, active: bool) -> void:
 
 
 static func draw_player_overlays(player: Node2D) -> void:
+	var main_node = player.get_tree().get_root().get_node_or_null("Main")
+	var health_style = main_node.get("health_style") if main_node != null else "hearts"
+
+	# Bubble co-op overlay
+	if bool(player.get("is_bubbled")):
+		# Draw a large bubble around player
+		player.draw_circle(Vector2.ZERO, 32.0, Color(0.6, 0.85, 1.0, 0.35))
+		player.draw_arc(Vector2.ZERO, 32.0, 0, TAU, 32, Color(0.8, 0.95, 1.0, 0.85), 2.5)
+		# Shine highlight
+		player.draw_circle(Vector2(-12, -12), 4.0, Color(1, 1, 1, 0.8))
+
+	# Rewind visual clock overlays
+	if bool(player.get("is_rewinding")):
+		var t := Time.get_ticks_msec() / 100.0
+		var pulse_radius := 20.0 + abs(sin(t)) * 25.0
+		player.draw_arc(Vector2.ZERO, pulse_radius, 0, TAU, 24, Color(0.7, 0.4, 1.0, 0.45), 2.0)
+		player.draw_arc(Vector2.ZERO, clamp(pulse_radius - 12.0, 5.0, 50.0), 0, TAU, 24, Color(0.7, 0.4, 1.0, 0.25), 1.5)
+		var angle_hr := t * 0.4
+		var angle_min := t * 2.5
+		player.draw_line(Vector2.ZERO, Vector2(cos(angle_hr), sin(angle_hr)) * 14.0, Color(0.8, 0.6, 1.0, 0.8), 2.5)
+		player.draw_line(Vector2.ZERO, Vector2(cos(angle_min), sin(angle_min)) * 22.0, Color(0.8, 0.6, 1.0, 0.8), 1.8)
+
+	# Diegetic Health damage overlays
+	if health_style == "diegetic" and not bool(player.get("is_bubbled")):
+		var max_hp = float(player.get("max_health"))
+		var cur_hp = float(player.get("current_health"))
+		var ratio = cur_hp / max(max_hp, 1.0)
+		
+		# Draw degradation lines
+		if ratio < 0.75:
+			# Scratched (draw 2 scratch marks)
+			player.draw_line(Vector2(-10, -10), Vector2(-4, -4), Color(0.1, 0.1, 0.1, 0.75), 2.0)
+			player.draw_line(Vector2(-8, -12), Vector2(-2, -6), Color(0.1, 0.1, 0.1, 0.75), 2.0)
+			
+		if ratio < 0.50:
+			# Cracked (draw crack lines across the middle/right)
+			player.draw_line(Vector2(6, -14), Vector2(2, -2), Color(0.2, 0.1, 0.1, 0.85), 2.5)
+			player.draw_line(Vector2(2, -2), Vector2(10, 4), Color(0.2, 0.1, 0.1, 0.85), 2.5)
+			player.draw_line(Vector2(2, -2), Vector2(-6, 2), Color(0.2, 0.1, 0.1, 0.85), 2.0)
+
+		if ratio < 0.25:
+			# Critical (intense cracks all over)
+			player.draw_line(Vector2(-12, 10), Vector2(12, -10), Color(0.5, 0.1, 0.1, 0.95), 3.0)
+			player.draw_line(Vector2(-4, 12), Vector2(4, -12), Color(0.5, 0.1, 0.1, 0.95), 3.0)
+
 	if bool(player.get("is_grappling")):
 		var target_pos: Vector2 = player.get("grapple_target_pos")
 		player.draw_line(Vector2.ZERO, player.to_local(target_pos), Color(0.85, 0.65, 0.15), 3.0)

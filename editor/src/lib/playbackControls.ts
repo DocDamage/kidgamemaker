@@ -65,3 +65,21 @@ export function muteGameIframe(muted: boolean, doc: Document = document): GameIf
     return { ok: false, error };
   }
 }
+
+export function liveUpdateGameIframe(levelJson: string, doc: Document = document): GameIframeResult {
+  const iframe = gameIframe(doc);
+  if (!iframe?.contentWindow) {
+    return { ok: false, error: 'Game iframe is not available.' };
+  }
+
+  try {
+    const liveUpdate = (iframe.contentWindow as Window & { godotLiveUpdateRoom?: (json: string) => void }).godotLiveUpdateRoom;
+    if (typeof liveUpdate === 'function') {
+      liveUpdate(levelJson);
+      return { ok: true };
+    }
+    return { ok: false, error: 'godotLiveUpdateRoom is not available.' };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}

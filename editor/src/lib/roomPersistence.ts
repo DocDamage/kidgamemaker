@@ -83,7 +83,14 @@ export function normalizeLoadedWorldSettings(savedSettings?: SavedRoomState['wor
     theme: savedSettings?.theme,
     story_title: savedSettings?.story_title,
     story_intro_text: savedSettings?.story_intro_text,
-    custom_bgm_sequence: savedSettings?.custom_bgm_sequence
+    custom_bgm_sequence: savedSettings?.custom_bgm_sequence,
+    custom_bgm_instruments: savedSettings?.custom_bgm_instruments,
+    grid_x: savedSettings?.grid_x,
+    grid_y: savedSettings?.grid_y,
+    health_style: savedSettings?.health_style ?? 'hearts',
+    age_mode: savedSettings?.age_mode,
+    snap_size: savedSettings?.snap_size,
+    game_speed_multiplier: savedSettings?.game_speed_multiplier
   };
 }
 

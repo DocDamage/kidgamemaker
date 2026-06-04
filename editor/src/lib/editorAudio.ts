@@ -77,13 +77,13 @@ function playSnare(ctx: AudioContext) {
   noise.stop(now + 0.12);
 }
 
-function playBass(ctx: AudioContext, step: number) {
+function playBass(ctx: AudioContext, step: number, type: OscillatorType = 'sawtooth') {
   const notes = [130.81, 155.56, 196.0, 233.08, 261.63, 196.0, 155.56, 130.81];
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   const filter = ctx.createBiquadFilter();
-  osc.type = 'sawtooth';
+  osc.type = type;
   osc.frequency.setValueAtTime(notes[step % notes.length], now);
   filter.type = 'lowpass';
   filter.frequency.setValueAtTime(400, now);
@@ -144,20 +144,29 @@ export function playUiSound(type: UiSound) {
   }
 }
 
-export function tickBeatPreview(sequence: BeatSequence, currentStep: number): number {
+export function tickBeatPreview(sequence: BeatSequence, currentStep: number, instruments?: string[]): number {
   try {
     const ctx = getAudioContext();
+    const insts = instruments || ['sine', 'triangle', 'triangle', 'sawtooth'];
     if (sequence[0]?.[currentStep]) {
-      playKick(ctx);
+      if (insts[0] === 'sine') {
+        playKick(ctx);
+      } else {
+        playTone(ctx, 80, 0.12, 0.25, insts[0] as OscillatorType);
+      }
     }
     if (sequence[1]?.[currentStep]) {
-      playSnare(ctx);
+      if (insts[1] === 'triangle') {
+        playSnare(ctx);
+      } else {
+        playTone(ctx, 220, 0.1, 0.15, insts[1] as OscillatorType);
+      }
     }
     if (sequence[2]?.[currentStep]) {
-      playTone(ctx, 8000, 0.04, 0.05, 'triangle');
+      playTone(ctx, 1200, 0.05, 0.05, insts[2] as OscillatorType);
     }
     if (sequence[3]?.[currentStep]) {
-      playBass(ctx, currentStep);
+      playBass(ctx, currentStep, insts[3] as OscillatorType);
     }
   } catch (_) {
     // Preview audio is optional; leave the composer usable if audio is unavailable.
@@ -166,17 +175,25 @@ export function tickBeatPreview(sequence: BeatSequence, currentStep: number): nu
   return (currentStep + 1) % 8;
 }
 
-export function playBeatCellPreview(row: number) {
+export function playBeatCellPreview(row: number, type: OscillatorType = 'sine') {
   try {
     const ctx = getAudioContext();
     if (row === 0) {
-      playKick(ctx, 0.15);
+      if (type === 'sine') {
+        playKick(ctx, 0.15);
+      } else {
+        playTone(ctx, 80, 0.15, 0.25, type);
+      }
     } else if (row === 1) {
-      playTone(ctx, 350, 0.12, 0.12, 'triangle');
+      if (type === 'triangle') {
+        playTone(ctx, 350, 0.12, 0.12, 'triangle');
+      } else {
+        playTone(ctx, 220, 0.12, 0.15, type);
+      }
     } else if (row === 2) {
-      playTone(ctx, 6000, 0.05, 0.06, 'sine');
+      playTone(ctx, 1200, 0.05, 0.05, type);
     } else {
-      playTone(ctx, 130.81, 0.15, 0.07, 'sawtooth');
+      playTone(ctx, 130.81, 0.15, 0.07, type);
     }
   } catch (_) {
     // Cell toggles should remain responsive even without audio output.

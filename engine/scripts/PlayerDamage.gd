@@ -39,6 +39,40 @@ static func apply_damage(player: Node2D, amount: int) -> void:
 	if current_health <= 0:
 		player.set("current_health", 0)
 		print("Player has died!")
+
+		# Bubble Respawn Co-op check
+		var is_coop_active := false
+		var partner: Node2D = null
+		if main_ref != null:
+			var p1 = main_ref.get("active_player_1")
+			var p2 = main_ref.get("active_player_2")
+			if p1 != null and p2 != null:
+				is_coop_active = true
+				if player == p1:
+					partner = p2
+				else:
+					partner = p1
+
+		var partner_bubbled := false
+		if partner != null and partner.get("is_bubbled") == true:
+			partner_bubbled = true
+
+		if is_coop_active and not partner_bubbled:
+			player.set("is_bubbled", true)
+			# Disable player collisions so they float freely
+			player.set_collision_layer_value(1, false)
+			player.set_collision_mask_value(1, false)
+			player.velocity = Vector2(0, -50.0)
+			if main_ref != null and main_ref.has_method("spawn_floating_text"):
+				main_ref.spawn_floating_text("🫧 BUBBLE!", player.global_position, Color.LIGHT_BLUE)
+			if main_ref != null and main_ref.has_method("play_custom_sfx"):
+				main_ref.play_custom_sfx(str(player.get("asset_id")), "hit")
+			return
+
+		# If both are dead, clean up bubble states and trigger normal game-over
+		if partner != null:
+			partner.set("is_bubbled", false)
+
 		if main_ref != null:
 			if main_ref.has_method("handle_player_death"):
 				main_ref.call_deferred("handle_player_death")

@@ -274,7 +274,7 @@ export function remixPlacedRoom(placed: PlacedEntity[], worldSettings: WorldSett
   };
 }
 
-function randomThemeName(): ThemeName {
+export function randomThemeName(): ThemeName {
   const themes: ThemeName[] = ['space', 'candy', 'jungle', 'ice', 'volcano'];
   return themes[Math.floor(Math.random() * themes.length)];
 }
@@ -287,4 +287,189 @@ function shufflePositions(entities: PlacedEntity[]): Array<{ x: number; y: numbe
   return entities
     .map((ent) => ({ ...ent.position }))
     .sort(() => Math.random() - 0.5);
+}
+
+export function buildSurpriseWorld(
+  findAsset: FindAsset,
+  difficultyMode: string,
+  calmMode: boolean
+): GeneratedRoom[] {
+  const worldTheme = randomThemeName();
+  const roomsList: GeneratedRoom[] = [];
+  
+  const terrainAsset = findAsset('stone_floor') ?? { id: 'stone_floor', name: 'Stone Floor', category: 'terrain', type: 'terrain' };
+  const heroAsset = findAsset('hero_knight') ?? { id: 'hero_knight', name: 'Hero Knight', category: 'heroes', type: 'player' };
+  const rubyAsset = findAsset('gold_ruby') ?? { id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', type: 'collectible' };
+  const slimeAsset = findAsset('slime_patrol') ?? { id: 'slime_patrol', name: 'Slime', category: 'enemies', type: 'enemy' };
+  const portalAsset = findAsset('portal_door') ?? findAsset('exit_portal') ?? { id: 'portal_door', name: 'Portal Door', category: 'portals', type: 'portal' };
+
+  const worldId = `surprise_world_${Math.floor(Math.random() * 9000 + 1000)}`;
+
+  for (let x = 0; x < 4; x++) {
+    for (let y = 0; y < 4; y++) {
+      const roomId = `${worldId}_${x}_${y}`;
+      const worldSettings: WorldSettings = {
+        ...buildThemeWorldSettings(worldTheme),
+        theme: worldTheme,
+        difficulty: difficultyMode,
+        calm_mode: calmMode,
+        grid_x: x,
+        grid_y: y,
+        victory_rules: { win_condition: (x === 3 && y === 3) ? 'portal' : 'all_coins', celebration: 'confetti' },
+        loss_rules: { lose_condition: 'health_0', action: 'respawn' }
+      } as WorldSettings;
+
+      const placed: PlacedEntity[] = [];
+
+      if (x === 0 && y === 0) {
+        placed.push({
+          instance_id: makeInstanceId(heroAsset.id),
+          asset_id: heroAsset.id,
+          category: heroAsset.category,
+          type: heroAsset.type ?? heroAsset.category,
+          position: { x: 128, y: 300 },
+          is_camera_target: true,
+          modifiers: { variant: 'default', scale_multiplier: 1.0 }
+        });
+      }
+
+      let curX = 0;
+      let curY = 392;
+      const platformCount = 6 + Math.floor(Math.random() * 4);
+      const platformPositions: Array<{ x: number; y: number }> = [];
+
+      for (let i = 0; i < platformCount; i++) {
+        placed.push({
+          instance_id: makeInstanceId(terrainAsset.id),
+          asset_id: terrainAsset.id,
+          category: terrainAsset.category,
+          type: terrainAsset.type ?? terrainAsset.category,
+          position: { x: curX, y: curY },
+          modifiers: { variant: 'default', scale_multiplier: 1.0 }
+        });
+        platformPositions.push({ x: curX, y: curY });
+        curX += 128 + Math.floor(Math.random() * 48);
+        curY += (Math.floor(Math.random() * 3) - 1) * 32;
+        curY = Math.max(250, Math.min(480, curY));
+      }
+
+      const collectibleCount = 3 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < collectibleCount; i++) {
+        const platform = platformPositions[Math.floor(Math.random() * platformPositions.length)];
+        placed.push({
+          instance_id: makeInstanceId(rubyAsset.id),
+          asset_id: rubyAsset.id,
+          category: rubyAsset.category,
+          type: rubyAsset.type ?? rubyAsset.category,
+          position: { x: platform.x + (Math.random() - 0.5) * 60, y: platform.y - 60 },
+          modifiers: { variant: 'default', scale_multiplier: 1.0, score_value: 10 }
+        });
+      }
+
+      const enemyCount = 1 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < enemyCount; i++) {
+        const platform = platformPositions[Math.min(platformPositions.length - 2, 2 + Math.floor(Math.random() * (platformPositions.length - 3)))];
+        if (platform) {
+          placed.push({
+            instance_id: makeInstanceId(slimeAsset.id),
+            asset_id: slimeAsset.id,
+            category: slimeAsset.category,
+            type: slimeAsset.type ?? slimeAsset.category,
+            position: { x: platform.x, y: platform.y - 48 },
+            modifiers: {
+              variant: 'default',
+              scale_multiplier: 1.0,
+              behavior_type: 'patrol',
+              patrol_speed: 60
+            }
+          });
+        }
+      }
+
+      if (x > 0) {
+        placed.push({
+          instance_id: 'portal_west',
+          asset_id: portalAsset.id,
+          category: portalAsset.category,
+          type: portalAsset.type ?? portalAsset.category,
+          position: { x: 60, y: 300 },
+          modifiers: {
+            variant: 'default',
+            scale_multiplier: 1.0,
+            target_room: `${worldId}_${x - 1}_${y}`,
+            target_portal: 'portal_east'
+          }
+        });
+      }
+      if (x < 3) {
+        placed.push({
+          instance_id: 'portal_east',
+          asset_id: portalAsset.id,
+          category: portalAsset.category,
+          type: portalAsset.type ?? portalAsset.category,
+          position: { x: 860, y: 300 },
+          modifiers: {
+            variant: 'default',
+            scale_multiplier: 1.0,
+            target_room: `${worldId}_${x + 1}_${y}`,
+            target_portal: 'portal_west'
+          }
+        });
+      }
+      if (y > 0) {
+        placed.push({
+          instance_id: 'portal_north',
+          asset_id: portalAsset.id,
+          category: portalAsset.category,
+          type: portalAsset.type ?? portalAsset.category,
+          position: { x: 300, y: 160 },
+          modifiers: {
+            variant: 'default',
+            scale_multiplier: 1.0,
+            target_room: `${worldId}_${x}_${y - 1}`,
+            target_portal: 'portal_south'
+          }
+        });
+      }
+      if (y < 3) {
+        placed.push({
+          instance_id: 'portal_south',
+          asset_id: portalAsset.id,
+          category: portalAsset.category,
+          type: portalAsset.type ?? portalAsset.category,
+          position: { x: 580, y: 300 },
+          modifiers: {
+            variant: 'default',
+            scale_multiplier: 1.0,
+            target_room: `${worldId}_${x}_${y + 1}`,
+            target_portal: 'portal_north'
+          }
+        });
+      }
+
+      if (x === 3 && y === 3) {
+        placed.push({
+          instance_id: 'exit_portal_goal',
+          asset_id: 'exit_portal',
+          category: 'portals',
+          type: 'portal',
+          position: { x: 800, y: 300 },
+          modifiers: {
+            variant: 'default',
+            scale_multiplier: 1.2
+          }
+        });
+      }
+
+      roomsList.push({
+        roomId,
+        theme: worldTheme,
+        worldSettings,
+        placed,
+        platformCount
+      });
+    }
+  }
+
+  return roomsList;
 }

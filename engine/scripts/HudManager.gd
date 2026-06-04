@@ -139,8 +139,9 @@ func update_hud() -> void:
 		else:
 			hud_helper_label.text = ""
 
+	var health_style: String = main_context.get("health_style") if main_context != null else "hearts"
 	var active_player: Node = main_context.get("active_player")
-	if active_player != null and is_instance_valid(active_player):
+	if health_style != "diegetic" and active_player != null and is_instance_valid(active_player):
 		var hp: int = active_player.get("current_health") if "current_health" in active_player else 100
 		var max_hp: int = active_player.get("max_health") if "max_health" in active_player else 100
 		hud_health_label.text = "HP: " + _heart_text(hp, max_hp, str(main_context.get("difficulty")))

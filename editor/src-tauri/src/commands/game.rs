@@ -305,3 +305,121 @@ pub fn build_web_runner() -> Result<String, String> {
         Err(format!("Godot Web export failed: {err_msg}"))
     }
 }
+
+use std::sync::atomic::{AtomicBool, Ordering};
+static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+pub fn get_local_ip() -> Result<String, String> {
+    use std::net::UdpSocket;
+    if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
+        if socket.connect("8.8.8.8:80").is_ok() {
+            if let Ok(local_addr) = socket.local_addr() {
+                return Ok(local_addr.ip().to_string());
+            }
+        }
+    }
+    // Fallback to local loopback
+    Ok("127.0.0.1".to_string())
+}
+
+#[tauri::command]
+pub fn start_share_server() -> Result<String, String> {
+    if SERVER_RUNNING.load(Ordering::Relaxed) {
+        return Ok("Sharing server is already running.".to_string());
+    }
+
+    let repo_root = locate_repo_root()?;
+    let exports_dir = repo_root.join("exports");
+    
+    // Ensure exports directory exists
+    fs::create_dir_all(&exports_dir)
+        .map_err(|err| format!("Failed to create exports directory: {err}"))?;
+
+    let addr = "0.0.0.0:8099";
+    let listener = match std::net::TcpListener::bind(addr) {
+        Ok(l) => l,
+        Err(err) => {
+            SERVER_RUNNING.store(true, Ordering::Relaxed);
+            return Ok(format!("Sharing server bound or already active: {err}"));
+        }
+    };
+
+    SERVER_RUNNING.store(true, Ordering::Relaxed);
+
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        for stream in listener.incoming() {
+            let mut stream = match stream {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+
+            let exports_dir = exports_dir.clone();
+            std::thread::spawn(move || {
+                let mut buffer = [0; 1024];
+                if stream.read(&mut buffer).is_err() {
+                    return;
+                }
+
+                let request = String::from_utf8_lossy(&buffer);
+                let first_line = request.lines().next().unwrap_or("");
+                let parts: Vec<&str> = first_line.split_whitespace().collect();
+                if parts.len() < 2 || parts[0] != "GET" {
+                    return;
+                }
+
+                let path = parts[1];
+                if path == "/download" {
+                    if let Ok(entries) = std::fs::read_dir(&exports_dir) {
+                        let mut latest_file = None;
+                        let mut latest_time = std::time::SystemTime::UNIX_EPOCH;
+
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("ktoy") {
+                                if let Ok(metadata) = entry.metadata() {
+                                    if let Ok(modified) = metadata.modified() {
+                                        if modified > latest_time {
+                                            latest_time = modified;
+                                            latest_file = Some(path);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some(file_path) = latest_file {
+                            if let Ok(content) = std::fs::read(&file_path) {
+                                let filename = file_path.file_name().and_then(|f| f.to_str()).unwrap_or("game.ktoy");
+                                let response = format!(
+                                    "HTTP/1.1 200 OK\r\n\
+                                     Content-Type: application/zip\r\n\
+                                     Content-Disposition: attachment; filename=\"{}\"\r\n\
+                                     Content-Length: {}\r\n\
+                                     Access-Control-Allow-Origin: *\r\n\
+                                     Connection: close\r\n\r\n",
+                                    filename,
+                                    content.len()
+                                );
+
+                                let _ = stream.write_all(response.as_bytes());
+                                let _ = stream.write_all(&content);
+                                let _ = stream.flush();
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                let not_found = "HTTP/1.1 404 NOT FOUND\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+                let _ = stream.write_all(not_found.as_bytes());
+                let _ = stream.flush();
+            });
+        }
+        SERVER_RUNNING.store(false, Ordering::Relaxed);
+    });
+
+    Ok("Sharing server started on port 8099".to_string())
+}
+

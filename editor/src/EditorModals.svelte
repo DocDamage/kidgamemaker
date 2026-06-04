@@ -6,6 +6,7 @@
   import SpriteEditorModal from './SpriteEditorModal.svelte';
   import ThemeSelectorModal from './ThemeSelectorModal.svelte';
   import ToyboxModal from './ToyboxModal.svelte';
+  import ScrapbookModal from './ScrapbookModal.svelte';
   import type { AssetInventory, ToyboxAsset } from './lib/canvasState';
   import type { ThemeName } from './lib/themeRooms';
 
@@ -15,6 +16,7 @@
   export let themeSelectorOpen = false;
   export let beatComposerOpen = false;
   export let playModalOpen = false;
+  export let scrapbookOpen = false;
   export let inventory: AssetInventory = {};
   export let isMuted = false;
   export let favorites: string[] = [];
@@ -25,6 +27,8 @@
   export let editingCategory = 'decorations';
   export let themeDraft: { theme: ThemeName; adjective: string; noun: string };
   export let customBgmSequence: number[][] | undefined = undefined;
+  export let customBgmInstruments: string[] | undefined = undefined;
+  export let unlockedStamps: string[] = [];
 
   const dispatch = createEventDispatcher<{
     selectToyboxItem: ToyboxAsset;
@@ -38,13 +42,14 @@
     createThemeRoom: { theme: ThemeName; adjective: string; noun: string };
     closeThemeSelector: void;
     previewBeat: void;
-    saveBeat: number[][];
+    saveBeat: { sequence: number[][]; instruments: string[] };
     closeBeatComposer: void;
     closePlayModal: void;
     playStatus: string;
     toggleMute: void;
     restartSound: void;
     launchWindow: void;
+    closeScrapbook: void;
   }>();
 </script>
 
@@ -53,6 +58,7 @@
   {inventory}
   {isMuted}
   bind:favorites
+  {unlockedStamps}
   on:itemSelected={(event) => dispatch('selectToyboxItem', event.detail)}
   on:close={() => dispatch('closeToybox')}
 />
@@ -89,6 +95,7 @@
 <BeatComposerModal
   isVisible={beatComposerOpen}
   initialSequence={customBgmSequence}
+  initialInstruments={customBgmInstruments}
   on:previewStart={() => dispatch('previewBeat')}
   on:save={(event) => dispatch('saveBeat', event.detail)}
   on:close={() => dispatch('closeBeatComposer')}
@@ -102,4 +109,9 @@
   on:toggleMute={() => dispatch('toggleMute')}
   on:restartSound={() => dispatch('restartSound')}
   on:launchWindow={() => dispatch('launchWindow')}
+/>
+
+<ScrapbookModal
+  isVisible={scrapbookOpen}
+  on:close={() => dispatch('closeScrapbook')}
 />

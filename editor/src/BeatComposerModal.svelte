@@ -6,9 +6,10 @@
 
   export let isVisible = false;
   export let initialSequence: BeatSequence | undefined = undefined;
+  export let initialInstruments: string[] | undefined = undefined;
 
   const dispatch = createEventDispatcher<{
-    save: BeatSequence;
+    save: { sequence: BeatSequence; instruments: string[] };
     close: void;
     previewStart: void;
   }>();
@@ -24,6 +25,7 @@
   const ACTIVE_COLORS = ['#ef4444', '#3b82f6', '#eab308', '#a855f7'];
 
   let sequence: BeatSequence = cloneSequence(DEFAULT_SEQUENCE);
+  let instruments: string[] = ['sine', 'triangle', 'triangle', 'sawtooth'];
   let previewing = false;
   let currentPreviewStep = 0;
   let previewIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -31,6 +33,7 @@
 
   $: if (isVisible && !wasVisible) {
     sequence = cloneSequence(initialSequence && initialSequence.length > 0 ? initialSequence : DEFAULT_SEQUENCE);
+    instruments = initialInstruments && initialInstruments.length === 4 ? [...initialInstruments] : ['sine', 'triangle', 'triangle', 'sawtooth'];
     previewing = false;
     currentPreviewStep = 0;
   }
@@ -57,13 +60,13 @@
   }
 
   function tickPreview() {
-    currentPreviewStep = tickBeatPreview(sequence, currentPreviewStep);
+    currentPreviewStep = tickBeatPreview(sequence, currentPreviewStep, instruments);
   }
 
   function toggleBeatCell(row: number, col: number) {
     sequence[row][col] = sequence[row][col] ? 0 : 1;
     sequence = cloneSequence(sequence);
-    playBeatCellPreview(row);
+    playBeatCellPreview(row, instruments[row] as OscillatorType);
   }
 
   function stopPreview() {
@@ -81,7 +84,7 @@
 
   function save() {
     stopPreview();
-    dispatch('save', cloneSequence(sequence));
+    dispatch('save', { sequence: cloneSequence(sequence), instruments: [...instruments] });
   }
 
   onDestroy(stopPreview);
@@ -98,7 +101,15 @@
       <div class="sequencer-grid">
         {#each INSTRUMENTS as instName, rIndex}
           <div class="seq-row">
-            <span>{instName}</span>
+            <div class="instrument-selector-box">
+              <span class="inst-label">{instName}</span>
+              <select class="synth-select" bind:value={instruments[rIndex]} on:change={() => playBeatCellPreview(rIndex, instruments[rIndex] as OscillatorType)}>
+                <option value="sine">〰️ Sine</option>
+                <option value="square">🔳 Square</option>
+                <option value="triangle">🔺 Triangle</option>
+                <option value="sawtooth">🪚 Sawtooth</option>
+              </select>
+            </div>
             {#each Array(8) as _, cIndex}
               {@const isActive = sequence[rIndex][cIndex] === 1}
               <button
@@ -153,7 +164,8 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
-    max-width: 500px;
+    max-width: 530px;
+    width: 90vw;
   }
 
   h2 {
@@ -176,16 +188,39 @@
 
   .seq-row {
     display: grid;
-    grid-template-columns: 80px repeat(8, 1fr);
+    grid-template-columns: 120px repeat(8, 1fr);
     align-items: center;
     gap: 6px;
   }
 
-  .seq-row span {
-    font-size: 0.85rem;
+  .instrument-selector-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+  }
+
+  .inst-label {
+    font-size: 0.8rem;
     font-weight: bold;
     color: white;
-    text-align: left;
+  }
+
+  .synth-select {
+    background: #0f172a;
+    color: #fbbf24;
+    border: 2px solid #fbbf24;
+    border-radius: 8px;
+    padding: 3px 6px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    width: 100%;
+    outline: none;
+    font-weight: bold;
+  }
+
+  .synth-select:hover {
+    background: #1e293b;
   }
 
   .seq-cell {

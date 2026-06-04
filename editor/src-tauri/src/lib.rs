@@ -25,7 +25,9 @@ pub fn run() {
             commands::load_child_sprite,
             commands::save_custom_audio,
             commands::package_game_project,
-            commands::build_web_runner
+            commands::build_web_runner,
+            commands::get_local_ip,
+            commands::start_share_server
         ])
         .run(tauri::generate_context!())
     {

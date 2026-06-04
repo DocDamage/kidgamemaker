@@ -22,8 +22,97 @@ const PlayerCombat = preload("res://scripts/PlayerCombat.gd")
 @export var gravity_scale: float = 1.0
 @export var invincibility_duration: float = 0.8
 @export var asset_id: String = ""
+@export var player_index: int = 1
 
+var is_bubbled: bool = false
 var current_health: int = max_health
+var state_history: Array = []
+const MAX_HISTORY_FRAMES: int = 300
+var is_rewinding: bool = false
+
+func get_player_input_dir() -> float:
+	if player_index == 2:
+		var left = Input.is_physical_key_pressed(KEY_A)
+		var right = Input.is_physical_key_pressed(KEY_D)
+		return (1.0 if right else 0.0) - (1.0 if left else 0.0)
+	else:
+		var left = Input.is_physical_key_pressed(KEY_LEFT) or Input.is_action_pressed("ui_left")
+		var right = Input.is_physical_key_pressed(KEY_RIGHT) or Input.is_action_pressed("ui_right")
+		return (1.0 if right else 0.0) - (1.0 if left else 0.0)
+
+func is_up_pressed() -> bool:
+	if player_index == 2:
+		return Input.is_physical_key_pressed(KEY_W)
+	else:
+		return Input.is_physical_key_pressed(KEY_UP) or Input.is_action_pressed("ui_up")
+
+func is_down_pressed() -> bool:
+	if player_index == 2:
+		return Input.is_physical_key_pressed(KEY_S)
+	else:
+		return Input.is_physical_key_pressed(KEY_DOWN) or Input.is_action_pressed("ui_down")
+
+func is_jump_just_pressed() -> bool:
+	if player_index == 2:
+		return Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_Q)
+	else:
+		return Input.is_physical_key_pressed(KEY_UP) or Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up")
+
+func is_jump_pressed() -> bool:
+	if player_index == 2:
+		return Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_Q)
+	else:
+		return Input.is_physical_key_pressed(KEY_UP) or Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")
+
+func is_jump_just_released() -> bool:
+	if player_index == 2:
+		return Input.is_physical_key_released(KEY_W) or Input.is_physical_key_released(KEY_Q)
+	else:
+		return Input.is_physical_key_released(KEY_UP) or Input.is_action_just_released("ui_accept") or Input.is_action_just_released("ui_up")
+
+func is_block_pressed() -> bool:
+	if player_index == 2:
+		return Input.is_physical_key_pressed(KEY_E)
+	else:
+		return Input.is_physical_key_pressed(KEY_Z)
+
+func is_attack_just_pressed() -> bool:
+	if player_index == 2:
+		return Input.is_physical_key_pressed(KEY_R)
+	else:
+		return Input.is_physical_key_pressed(KEY_X)
+
+func is_special_pressed() -> bool:
+	if player_index == 2:
+		return Input.is_physical_key_pressed(KEY_F)
+	else:
+		return Input.is_physical_key_pressed(KEY_C)
+
+func is_dash_just_pressed() -> bool:
+	if player_index == 2:
+		return Input.is_physical_key_pressed(KEY_SHIFT) or Input.is_physical_key_pressed(KEY_TAB)
+	else:
+		return Input.is_physical_key_pressed(KEY_SHIFT) or Input.is_action_just_pressed("ui_select")
+
+func is_rewind_pressed() -> bool:
+	if player_index == 2:
+		return Input.is_physical_key_pressed(KEY_N)
+	else:
+		return Input.is_physical_key_pressed(KEY_B)
+
+func pop_bubble() -> void:
+	is_bubbled = false
+	current_health = max_health / 2
+	set_collision_layer_value(1, true)
+	set_collision_mask_value(1, true)
+	velocity = Vector2.ZERO
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main != null:
+		if main.has_method("spawn_floating_text"):
+			main.spawn_floating_text("RESPAWN! 🫧", global_position, Color.GREEN)
+		if main.has_method("play_sfx"):
+			main.play_sfx("coin")
+	queue_redraw()
 var gravity: float = ProjectSettings.get_setting("physics/2d/default_gravity")
 var _invincible := false
 var trail_particles: CPUParticles2D = null
@@ -276,6 +365,93 @@ func take_damage(amount: int) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Diegetic Health red pulsing under 25% health
+	if not is_bubbled:
+		var main_node = get_tree().get_root().get_node_or_null("Main")
+		var is_diegetic = main_node.get("health_style") == "diegetic" if main_node != null else false
+		if is_diegetic and float(current_health) / float(max_health) < 0.25:
+			var pulse = abs(sin(Time.get_ticks_msec() / 150.0))
+			if player_index == 2:
+				modulate = Color(1.0, 0.8 - pulse * 0.5, 0.8 - pulse * 0.5)
+			else:
+				modulate = Color(1.0, 1.0 - pulse * 0.6, 1.0 - pulse * 0.6)
+		else:
+			if player_index == 2:
+				if modulate != Color(0.5, 0.8, 1.0, 1.0):
+					modulate = Color(0.5, 0.8, 1.0, 1.0)
+			else:
+				if modulate != Color.WHITE:
+					modulate = Color.WHITE
+
+	is_rewinding = is_rewind_pressed() and state_history.size() > 0
+
+	if is_rewinding:
+		var state = state_history.pop_back()
+		if state_history.size() > 0:
+			state = state_history.pop_back()
+		
+		if state != null:
+			global_position = state.global_position
+			velocity = state.velocity
+			current_health = state.current_health
+			facing_direction = state.facing_direction
+			var was_bubbled = is_bubbled
+			is_bubbled = state.is_bubbled
+			scale = state.scale
+			
+			if was_bubbled and not is_bubbled:
+				set_collision_layer_value(1, true)
+				set_collision_mask_value(1, true)
+			elif not was_bubbled and is_bubbled:
+				set_collision_layer_value(1, false)
+				set_collision_mask_value(1, false)
+			
+			modulate = Color(0.7, 0.4, 1.0, 1.0)
+			
+			if OS.has_feature("web"):
+				# Post message to Svelte
+				JavaScriptBridge.eval("window.parent.postMessage({type: 'unlock_sticker', id: 'temporal_master'}, '*')")
+				JavaScriptBridge.eval("window.postMessage({type: 'unlock_sticker', id: 'temporal_master'}, '*')")
+		
+		queue_redraw()
+		move_and_slide()
+		return
+	else:
+		var state := {
+			"global_position": global_position,
+			"velocity": velocity,
+			"current_health": current_health,
+			"facing_direction": facing_direction,
+			"is_bubbled": is_bubbled,
+			"scale": scale
+		}
+		state_history.append(state)
+		if state_history.size() > MAX_HISTORY_FRAMES:
+			state_history.remove_at(0)
+
+	if is_bubbled:
+		var target_player: Node2D = null
+		var main_node = get_tree().get_root().get_node_or_null("Main")
+		if main_node != null:
+			if player_index == 1:
+				target_player = main_node.get("active_player_2")
+			else:
+				target_player = main_node.get("active_player_1")
+		
+		if target_player != null:
+			var dir = (target_player.global_position - global_position).normalized()
+			velocity = dir * 120.0
+			# Touch to pop check
+			if global_position.distance_to(target_player.global_position) < 40.0:
+				pop_bubble()
+		else:
+			# Just drift upwards slowly if no partner
+			velocity = Vector2(0, -50.0)
+			
+		move_and_slide()
+		queue_redraw()
+		return
+
 	# ─── BLUE MAGE remains check ───
 	if hero_class == "mage" and get_parent() != null:
 		var main_ref = get_parent()
@@ -305,10 +481,10 @@ func _physics_process(delta: float) -> void:
 				touching_painted_wall = true
 				break
 		if touching_painted_wall:
-			var v_in := Input.get_axis("ui_up", "ui_down")
-			if v_in == 0.0 and Input.is_physical_key_pressed(KEY_W):
+			var v_in := 0.0
+			if is_up_pressed():
 				v_in = -1.0
-			elif v_in == 0.0 and Input.is_physical_key_pressed(KEY_S):
+			elif is_down_pressed():
 				v_in = 1.0
 			velocity.y = v_in * movement_speed * 1.5
 			velocity.x = 0.0
@@ -352,7 +528,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	# Wall / Ceiling Run mechanics
-	var input_dir := Input.get_axis("ui_left", "ui_right")
+	var input_dir := get_player_input_dir()
 	if PlayerWallCeilingRun.process_wall_run(self, delta, input_dir):
 		return
 	if PlayerWallCeilingRun.process_ceiling_run(self, delta, input_dir):
@@ -377,14 +553,14 @@ func _physics_process(delta: float) -> void:
 	else:
 		coyote_timer -= delta
 
-	if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up"):
+	if is_jump_just_pressed():
 		jump_buffer_timer = jump_buffer_duration
 	else:
 		jump_buffer_timer -= delta
 
-	var charge_jump_held := Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")
-	var charge_jump_pressed := Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up")
-	var charge_jump_down_held := Input.is_action_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S)
+	var charge_jump_held := is_jump_pressed()
+	var charge_jump_pressed := is_jump_just_pressed()
+	var charge_jump_down_held := is_down_pressed()
 	if charge_jump_enabled and is_on_floor() and charge_jump_pressed and not charge_jump_down_held and not is_charge_jump_charging:
 		is_charge_jump_charging = true
 		charge_jump_timer = 0.0
@@ -440,7 +616,7 @@ func _physics_process(delta: float) -> void:
 
 	# Crouching, Sliding & Squid Form Logic
 	PlayerCrouchSlide.update_crouch_slide(self, delta)
-	var down_input_pressed := Input.is_action_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S)
+	var down_input_pressed := is_down_pressed()
 
 	# Speed Booster & Shinespark mechanics
 	PlayerSpecialMoves.update_speed_booster(self, input_dir, down_input_pressed, delta)
@@ -546,11 +722,14 @@ func _physics_process(delta: float) -> void:
 		modulate = Color(1.0, 0.5, 1.0)
 	elif is_giant:
 		modulate = Color(1.0, 0.8, 0.2)
-	elif gravity_inverted:
-		modulate = Color(0.6, 0.4, 1.0)
 	else:
 		if not _invincible:
-			if costume_tint != "" and costume_tint != "default":
+			var main_node = get_tree().get_root().get_node_or_null("Main")
+			var health_style = main_node.get("health_style") if main_node != null else "hearts"
+			if health_style == "diegetic" and current_health < max_health * 0.25:
+				var pulse = sin(Time.get_ticks_msec() * 0.015) * 0.4 + 0.6
+				modulate = Color(1.0, pulse, pulse)
+			elif costume_tint != "" and costume_tint != "default":
 				modulate = Color(costume_tint)
 			else:
 				modulate = Color(1.0, 1.0, 1.0)
@@ -585,7 +764,7 @@ func _physics_process(delta: float) -> void:
 		facing_direction = sign(input_dir)
 
 	# Spin Dash charge trigger (holding Down and pressing Jump on floor)
-	if is_on_floor() and down_input_pressed and (Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_up")):
+	if is_on_floor() and down_input_pressed and is_jump_just_pressed():
 		is_spindashing = true
 		spindash_charge = 0.0
 		velocity = Vector2.ZERO
@@ -594,7 +773,7 @@ func _physics_process(delta: float) -> void:
 	# Handle Dash Input
 	var can_dash_rogue = (hero_class == "rogue" and dashes_spent < 2 and not is_dashing)
 	var can_dash_normal = (dash_cooldown <= 0.0 and not is_dashing)
-	if (Input.is_physical_key_pressed(KEY_SHIFT) or Input.is_action_just_pressed("ui_select")) and (can_dash_normal or can_dash_rogue) and not is_blocking:
+	if is_dash_just_pressed() and (can_dash_normal or can_dash_rogue) and not is_blocking:
 		is_dashing = true
 		dash_timer = 0.2
 		dash_direction = facing_direction
@@ -615,7 +794,7 @@ func _physics_process(delta: float) -> void:
 			main.spawn_floating_text("💨 DASH!", global_position, Color.CYAN)
 
 	# Handle Ground Pound Input
-	if not is_on_floor() and not inside_water and not is_creative and (Input.is_action_just_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S)):
+	if not is_on_floor() and not inside_water and not is_creative and is_down_pressed():
 		if not is_ground_pounding:
 			is_ground_pounding = true
 			velocity.x = 0.0
@@ -624,7 +803,7 @@ func _physics_process(delta: float) -> void:
 				main.spawn_floating_text("⬇️ SLAM!", global_position, Color.ORANGE)
 
 	# Handle Shield Block & Parry Input
-	if Input.is_physical_key_pressed(KEY_Z) and is_on_floor() and not is_dashing:
+	if is_block_pressed() and is_on_floor() and not is_dashing:
 		if not is_blocking:
 			is_blocking = true
 			parry_window_timer = 0.18 # 180ms parry window
@@ -634,7 +813,7 @@ func _physics_process(delta: float) -> void:
 		parry_window_timer = 0.0
 
 	# Handle Melee Attack Input
-	if Input.is_physical_key_pressed(KEY_X) and attack_cooldown <= 0.0 and not is_dashing and not is_blocking:
+	if is_attack_just_pressed() and attack_cooldown <= 0.0 and not is_dashing and not is_blocking:
 		if hero_class == "mage":
 			attack_cooldown = 0.22
 			_fire_mage_wand_bolt()
@@ -648,7 +827,7 @@ func _physics_process(delta: float) -> void:
 			_execute_melee_strike(combo_step)
 
 	# Handle Ranged / Special Input
-	if Input.is_physical_key_pressed(KEY_C) and not is_dashing and not is_blocking:
+	if is_special_pressed() and not is_dashing and not is_blocking:
 		if hero_class == "archer":
 			if archer_shoot_cooldown <= 0.0:
 				_fire_archer_arrow()
@@ -709,24 +888,24 @@ func _physics_process(delta: float) -> void:
 	# Water buoyancy, jetpack thrust, glider cape glide, or standard gravity
 	if not is_dashing and not is_ground_pounding:
 		if is_creative or is_star_mode:
-			var v_input := Input.get_axis("ui_up", "ui_down")
-			if v_input == 0.0 and Input.is_physical_key_pressed(KEY_W):
+			var v_input := 0.0
+			if is_up_pressed():
 				v_input = -1.0
-			elif v_input == 0.0 and Input.is_physical_key_pressed(KEY_S):
+			elif is_down_pressed():
 				v_input = 1.0
 			velocity.y = v_input * active_speed
-			if Input.is_action_pressed("ui_accept"):
+			if is_jump_pressed():
 				velocity.y = -active_speed if not gravity_inverted else active_speed
 		elif inside_water:
 			velocity.y += gravity * (1.0 - water_buoyancy) * delta
 			velocity.y = clamp(velocity.y, -220.0, 180.0)
-		elif has_jetpack and jetpack_fuel > 0.0 and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
+		elif has_jetpack and jetpack_fuel > 0.0 and is_jump_pressed():
 			velocity.y = -260.0 if not gravity_inverted else 260.0
 			jetpack_fuel -= delta * 35.0
 			modulate = Color(1.0, 0.5, 0.2) # Jetpack orange visual tint
 			if main != null and main.has_method("spawn_floating_text") and randf() < delta * 4.0:
 				main.spawn_floating_text("🔥", global_position, Color.ORANGE)
-		elif has_glider and not is_on_floor() and (velocity.y > 0.0 if not gravity_inverted else velocity.y < 0.0) and (Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")):
+		elif has_glider and not is_on_floor() and (velocity.y > 0.0 if not gravity_inverted else velocity.y < 0.0) and is_jump_pressed():
 			if gravity_inverted:
 				velocity.y = max(velocity.y, -45.0)
 			else:
@@ -782,7 +961,7 @@ func _physics_process(delta: float) -> void:
 
 	# Variable jump cancel (jump cut on release)
 	if not is_on_floor() and ((velocity.y < 0.0 and not gravity_inverted) or (velocity.y > 0.0 and gravity_inverted)):
-		var jump_released := Input.is_action_just_released("ui_accept") or Input.is_action_just_released("ui_up")
+		var jump_released := is_jump_just_released()
 		if jump_released:
 			if physics_preset == "hollow":
 				velocity.y = 0.0

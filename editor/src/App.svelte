@@ -39,7 +39,7 @@
     createDefaultWorldSettings
   } from './lib/editorDefaults';
   import { ensurePlacedEntityDefaults } from './lib/entityDefaults';
-  import { muteGameIframe, setGlobalGameLevel, setGlobalGameMuted } from './lib/playbackControls';
+  import { muteGameIframe, setGlobalGameLevel, setGlobalGameMuted, liveUpdateGameIframe } from './lib/playbackControls';
   import { addRoomRule, deleteRoomRule } from './lib/roomRules';
   import {
     deleteSavedRoom,
@@ -61,11 +61,14 @@
     buildThemeStarterEntities,
     buildThemeWorldSettings,
     buildSurpriseRoom,
+    buildSurpriseWorld,
     randomRoomAdjective,
     randomRoomNoun,
     remixPlacedRoom,
     type ThemeName
   } from './lib/themeRooms';
+  import { invoke } from '@tauri-apps/api/core';
+  import qrcode from './lib/qrcode.min.js';
   import {
     eraseEntity,
     fallbackInventory,
@@ -92,6 +95,85 @@
 
   let showMapView = false;
   let showRulesEditor = false;
+  let scrapbookOpen = false;
+
+  let activeCelebration: { name: string; emoji: string } | null = null;
+  let confettiParticles: Array<{ x: number; y: number; color: string; speedX: number; speedY: number; size: number; angle: number; spin: number }> = [];
+
+  const STICKER_DETAILS: Record<string, { name: string; emoji: string }> = {
+    jungle_explorer: { name: 'Jungle Explorer', emoji: '🌴' },
+    lava_runner: { name: 'Lava Runner', emoji: '🌋' },
+    monster_masher: { name: 'Monster Masher', emoji: '👾' },
+    coop_champ: { name: 'Co-Op Champ', emoji: '👥' },
+    temporal_master: { name: 'Temporal Master', emoji: '⏳' },
+    sound_designer: { name: 'Sound Designer', emoji: '🎹' },
+    world_architect: { name: 'World Architect', emoji: '🎲' }
+  };
+
+  function unlockAchievement(id: string) {
+    let scrapbook: string[] = [];
+    try {
+      const stored = localStorage.getItem('scrapbook_stickers');
+      if (stored) scrapbook = JSON.parse(stored);
+    } catch (_) {}
+    if (!scrapbook.includes(id)) {
+      scrapbook.push(id);
+      try {
+        localStorage.setItem('scrapbook_stickers', JSON.stringify(scrapbook));
+      } catch (_) {}
+      triggerStickerCelebration(id);
+    }
+  }
+
+  function triggerStickerCelebration(id: string) {
+    const details = STICKER_DETAILS[id];
+    if (details) {
+      activeCelebration = details;
+      playUiSound('chime');
+      createConfettiBurst();
+      setTimeout(() => {
+        activeCelebration = null;
+      }, 3500);
+    }
+  }
+
+  function createConfettiBurst() {
+    const colors = ['#f43f5e', '#a855f7', '#3b82f6', '#10b981', '#fbbf24', '#f97316'];
+    const particles = [];
+    for (let i = 0; i < 80; i++) {
+      particles.push({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2 - 100,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        speedX: (Math.random() - 0.5) * 15,
+        speedY: (Math.random() - 0.7) * 20 - 5,
+        size: Math.random() * 8 + 6,
+        angle: Math.random() * 360,
+        spin: (Math.random() - 0.5) * 10
+      });
+    }
+    confettiParticles = particles;
+    animateConfetti();
+  }
+
+  let animationFrameId: number;
+  function animateConfetti() {
+    if (confettiParticles.length === 0) return;
+    confettiParticles = confettiParticles.map(p => {
+      return {
+        ...p,
+        x: p.x + p.speedX,
+        y: p.y + p.speedY,
+        speedY: p.speedY + 0.4,
+        speedX: p.speedX * 0.98,
+        angle: p.angle + p.spin
+      };
+    }).filter(p => p.y < window.innerHeight && p.x > 0 && p.x < window.innerWidth);
+
+    if (confettiParticles.length > 0) {
+      animationFrameId = requestAnimationFrame(animateConfetti);
+    }
+  }
 
   function toggleMapView() {
     showMapView = !showMapView;
@@ -124,12 +206,14 @@
     playUiSound('chime');
   }
 
-  function saveBeatSequence(sequence: number[][]) {
-    worldSettings.custom_bgm_sequence = sequence;
+  function saveBeatSequence(detail: { sequence: number[][]; instruments: string[] }) {
+    worldSettings.custom_bgm_sequence = detail.sequence;
+    worldSettings.custom_bgm_instruments = detail.instruments;
     worldSettings.theme = 'custom';
     saveCurrentRoom();
     playUiSound('chime');
     beatComposerOpen = false;
+    unlockAchievement('sound_designer');
   }
 
 
@@ -273,6 +357,77 @@
 
   $: levelLengthLabel = calculateLevelLengthLabel(placed);
 
+  // --- Daily Discovery & Weekly Challenges ---
+  let unlockedStamps: string[] = [];
+  try {
+    const stored = localStorage.getItem('toybox_unlocked_stamps');
+    if (stored) unlockedStamps = JSON.parse(stored);
+  } catch (_) {}
+
+  let weeklyChallengeCompleted = localStorage.getItem('weekly_challenge_completed') === 'true';
+
+  let sessionStampsCount = 0;
+  let lastPlacedLength = 0;
+  let creationDurationSeconds = 0;
+
+  // Track daily progress reactively
+  $: {
+    const fireCount = placed.filter(e => e.asset_id === 'chemistry_fire').length;
+    const iceCount = placed.filter(e => e.asset_id === 'chemistry_ice').length;
+    const starCount = placed.filter(e => e.asset_id === 'star_piece').length;
+
+    if (fireCount >= 3 && !unlockedStamps.includes('effects_fire')) {
+      unlockStamp('effects_fire', 'Fire Effect 🔥');
+    }
+    if (iceCount >= 3 && !unlockedStamps.includes('effects_snow')) {
+      unlockStamp('effects_snow', 'Snow Flurry ❄️');
+    }
+    if (starCount >= 3 && !unlockedStamps.includes('effects_sparkles')) {
+      unlockStamp('effects_sparkles', 'Magic Sparkles ✨');
+    }
+
+    const hasSword = placed.some(e => e.asset_id === 'weapon_sword');
+    const hasCactus = placed.some(e => e.asset_id === 'cactus_hazard');
+    const hasJelly = placed.some(e => e.asset_id === 'jelly_trampoline');
+
+    if (hasSword && hasCactus && hasJelly && !weeklyChallengeCompleted) {
+      weeklyChallengeCompleted = true;
+      localStorage.setItem('weekly_challenge_completed', 'true');
+      playUiSound('chime');
+      alert("🏆 Weekly Challenge Completed!\nAmazing job using the Sword, Cactus, and Bouncy Jelly in your design! You are a master creator!");
+    }
+
+    // Achievements/Stickers updates
+    const enemyCount = placed.filter(e => e.category === 'enemies').length;
+    if (enemyCount >= 3) {
+      unlockAchievement('monster_masher');
+    }
+
+    const playerCount = placed.filter(e => e.category === 'heroes' && e.type === 'player').length;
+    if (playerCount >= 2) {
+      unlockAchievement('coop_champ');
+    }
+
+    if (worldSettings.theme === 'jungle') {
+      unlockAchievement('jungle_explorer');
+    } else if (worldSettings.theme === 'volcano') {
+      unlockAchievement('lava_runner');
+    }
+
+    // Session placed stamps count
+    if (placed.length > lastPlacedLength) {
+      sessionStampsCount += (placed.length - lastPlacedLength);
+    }
+    lastPlacedLength = placed.length;
+  }
+
+  function unlockStamp(id: string, name: string) {
+    unlockedStamps = [...unlockedStamps, id];
+    localStorage.setItem('toybox_unlocked_stamps', JSON.stringify(unlockedStamps));
+    playUiSound('chime');
+    alert(`🎉 Daily Discovery Unlocked!\nYou created using your toys and unlocked: ${name}!`);
+  }
+
 
   // Level editor undo/redo history stack
   let levelHistoryState: LevelHistoryState = { history: [], index: -1 };
@@ -301,45 +456,54 @@
     playUiSound('pop');
   }
 
-  onMount(async () => {
-    try {
-      const stored = localStorage.getItem('toybox_favorites');
-      if (stored) {
-        favorites = JSON.parse(stored);
+  onMount(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'unlock_sticker') {
+        unlockAchievement(event.data.id);
       }
-    } catch (_) {}
+    };
+    window.addEventListener('message', handleMessage);
 
-    if (hasTauriHost()) {
+    (async () => {
       try {
-        inventory = await loadAssetInventory();
-        activeAsset = firstInventoryAsset(inventory) ?? activeAsset;
-        status = 'Loaded toybox assets.';
-
-      } catch (error) {
-        status = `Using fallback toybox: ${error}`;
-      }
-    } else {
-      inventory = fallbackInventory;
-      activeAsset = inventory.terrain?.[0] ?? activeAsset;
-      status = 'Browser preview mode: using fallback toybox.';
-    }
-
-    await loadRoomList();
-    
-    if (rooms.includes(activeRoomId)) {
-      await loadSelectedRoom(activeRoomId);
-    } else {
-      try {
-        const savedState = await loadLegacyGameState();
-        if (savedState && Array.isArray(savedState.entities)) {
-          placed = savedState.entities;
-          status += ' Restored saved game state.';
+        const stored = localStorage.getItem('toybox_favorites');
+        if (stored) {
+          favorites = JSON.parse(stored);
         }
-      } catch (error) {
-        status += ' No saved game state found, starting fresh.';
+      } catch (_) {}
+
+      if (hasTauriHost()) {
+        try {
+          inventory = await loadAssetInventory();
+          activeAsset = firstInventoryAsset(inventory) ?? activeAsset;
+          status = 'Loaded toybox assets.';
+
+        } catch (error) {
+          status = `Using fallback toybox: ${error}`;
+        }
+      } else {
+        inventory = fallbackInventory;
+        activeAsset = inventory.terrain?.[0] ?? activeAsset;
+        status = 'Browser preview mode: using fallback toybox.';
       }
-      levelHistoryState = createLevelHistory(placed);
-    }
+
+      await loadRoomList();
+      
+      if (rooms.includes(activeRoomId)) {
+        await loadSelectedRoom(activeRoomId);
+      } else {
+        try {
+          const savedState = await loadLegacyGameState();
+          if (savedState && Array.isArray(savedState.entities)) {
+            placed = savedState.entities;
+            status += ' Restored saved game state.';
+          }
+        } catch (error) {
+          status += ' No saved game state found, starting fresh.';
+        }
+        levelHistoryState = createLevelHistory(placed);
+      }
+    })();
 
     // Auto-save every 60 seconds
     const saveId = setInterval(() => {
@@ -354,10 +518,20 @@
       } catch { /* silent */ }
     }, 5_000);
 
+    // Creation duration timer & time limit checker
+    const timerId = setInterval(() => {
+      creationDurationSeconds += 1;
+      const limitMins = Number(localStorage.getItem('parent_screen_time_limit') || '30');
+      if (creationDurationSeconds === limitMins * 60) {
+        alert(`⏰ Screen Time Alert: You have been creating for ${limitMins} minutes! Time to take a little break!`);
+      }
+    }, 1000);
+
     // Return cleanup so intervals are cancelled on unmount / hot-reload
     return () => {
       clearInterval(saveId);
       clearInterval(refreshId);
+      clearInterval(timerId);
     };
   });
 
@@ -388,6 +562,17 @@
       });
       await loadRoomList();
       generateThumbnail(activeRoomId);
+
+      // Live hot-update WebGL play session
+      if (playModalOpen) {
+        const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
+        payload.world_settings = {
+          ...payload.world_settings,
+          difficulty: difficultyMode,
+          calm_mode: calmMode
+        };
+        liveUpdateGameIframe(JSON.stringify(payload));
+      }
     } catch (error) {
       status = `Save failed: ${String(error)}`;
     }
@@ -501,9 +686,40 @@
     status = await runExportGame(placed, saveCurrentRoom);
   }
 
+  let shareModalOpen = false;
+  let shareUrl = '';
+  let qrSvgString = '';
+
   async function shareGame() {
+    const peerBlockingEnabled = localStorage.getItem('parent_peer_blocking') === 'true';
+    if (peerBlockingEnabled) {
+      alert("🔏 Sharing is blocked by Parent controls! Unblock it in the Parents settings panel.");
+      return;
+    }
+
     status = 'Saving and packaging Toybox...';
-    status = await runShareGame(saveCurrentRoom, playUiSound);
+    try {
+      await saveCurrentRoom();
+      const ktoyPath = await invoke<string>('package_game_project');
+      status = `Packaged successfully to ${ktoyPath}. Starting share server...`;
+
+      await invoke('start_share_server');
+      const localIp = await invoke<string>('get_local_ip');
+      shareUrl = `http://${localIp}:8099/download`;
+
+      const qr = qrcode(4, 'L');
+      qr.addData(shareUrl);
+      qr.make();
+      qrSvgString = qr.createSvgTag(6, 12);
+      shareModalOpen = true;
+
+      status = 'Sharing active! QR code generated.';
+      playUiSound('chime');
+    } catch (err) {
+      console.error(err);
+      status = `Packaging or sharing failed: ${String(err)}`;
+      alert(`Sharing failed: ${err}`);
+    }
   }
 
   function selectAsset(asset: ToyboxAsset) {
@@ -518,15 +734,29 @@
 
   // ── Feature: 🎲 Surprise Me! Level Generator ──────────────────────────────
   async function surpriseMe() {
-    const generated = buildSurpriseRoom(findAsset, difficultyMode, calmMode);
-    activeRoomId = generated.roomId;
-    worldSettings = generated.worldSettings;
-    placed = generated.placed;
-    levelHistoryState = createLevelHistory(placed);
+    status = '🎲 Generating connected 4x4 Spelunky-style Metroidvania world...';
+    try {
+      const generatedRooms = buildSurpriseWorld(findAsset, difficultyMode, calmMode);
+      for (const r of generatedRooms) {
+        const payload = toRoomPayload(r.placed, r.worldSettings, 'demo_project', r.roomId);
+        payload.world_settings.difficulty = r.worldSettings.difficulty ?? 'normal';
+        payload.world_settings.calm_mode = r.worldSettings.calm_mode ?? false;
+        payload.world_settings.grid_x = r.worldSettings.grid_x;
+        payload.world_settings.grid_y = r.worldSettings.grid_y;
+        await saveRoomPayload(r.roomId, payload);
+      }
+      
+      await loadRoomList();
+      const firstRoom = generatedRooms[0];
+      await loadSelectedRoom(firstRoom.roomId);
 
-    status = `🎲 Surprise! Created ${generated.theme} adventure with ${generated.platformCount} platforms!`;
-    playUiSound('chime');
-    await saveCurrentRoom();
+      status = `🎲 Generated 4x4 Metroidvania world! Start playing in ${firstRoom.roomId}!`;
+      playUiSound('chime');
+      unlockAchievement('world_architect');
+    } catch (err) {
+      console.error(err);
+      status = `Failed to generate surprise world: ${String(err)}`;
+    }
   }
 
   async function remixCurrentRoom() {
@@ -574,6 +804,7 @@
     on:remix={remixCurrentRoom}
     on:play={play}
     on:toggleParents={() => parentsPanelOpen = !parentsPanelOpen}
+    on:openScrapbook={() => scrapbookOpen = true}
   />
 
   {#if parentsPanelOpen}
@@ -584,6 +815,9 @@
       {difficultyMode}
       {calmMode}
       {worldSettings}
+      placedCount={placed.length}
+      {sessionStampsCount}
+      {creationDurationSeconds}
       on:browseRooms={() => bookshelfOpen = true}
       on:activeRoomIdChange={(event) => activeRoomId = event.detail}
       on:loadRoom={(event) => loadSelectedRoom(event.detail)}
@@ -595,6 +829,7 @@
       on:difficultyChange={(event) => setDifficultyMode(event.detail)}
       on:calmModeChange={(event) => setCalmMode(event.detail)}
       on:ageModeChange={(event) => applyAgeModeChange(event.detail)}
+      on:healthStyleChange={(event) => { worldSettings.health_style = event.detail; saveCurrentRoom(); }}
     />
   {/if}
 
@@ -602,7 +837,6 @@
     <RoomMapView
       {rooms}
       {activeRoomId}
-      {placed}
       on:loadRoom={(event) => loadSelectedRoom(event.detail)}
       on:saveRoom={saveCurrentRoom}
     />
@@ -621,8 +855,57 @@
       quickItems={quickRibbon}
       {activeAsset}
       {eraserMode}
+      {unlockedStamps}
       on:select={(event) => selectAsset(event.detail)}
     />
+
+    <!-- Floating Quests Widget -->
+    <div class="quests-floating-widget">
+      <h3>🎯 Daily & Weekly Quests</h3>
+      
+      <div class="quest-section">
+        <h4>🌟 Daily Stamp Discoveries</h4>
+        <div class="quest-item" class:completed={unlockedStamps.includes('effects_fire')}>
+          <span class="quest-status">{unlockedStamps.includes('effects_fire') ? '✅' : '🔥'}</span>
+          <div class="quest-details">
+            <span class="quest-title">Fire Effect</span>
+            <span class="quest-desc">Place 3 Fire Torches ({placed.filter(e => e.asset_id === 'chemistry_fire').length}/3)</span>
+          </div>
+        </div>
+
+        <div class="quest-item" class:completed={unlockedStamps.includes('effects_snow')}>
+          <span class="quest-status">{unlockedStamps.includes('effects_snow') ? '✅' : '❄️'}</span>
+          <div class="quest-details">
+            <span class="quest-title">Snow Effect</span>
+            <span class="quest-desc">Place 3 Ice Crystals ({placed.filter(e => e.asset_id === 'chemistry_ice').length}/3)</span>
+          </div>
+        </div>
+
+        <div class="quest-item" class:completed={unlockedStamps.includes('effects_sparkles')}>
+          <span class="quest-status">{unlockedStamps.includes('effects_sparkles') ? '✅' : '✨'}</span>
+          <div class="quest-details">
+            <span class="quest-title">Magic Sparkles</span>
+            <span class="quest-desc">Place 3 Star Pieces ({placed.filter(e => e.asset_id === 'star_piece').length}/3)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="quest-section">
+        <h4>🏆 Weekly Design Challenge</h4>
+        <div class="quest-item" class:completed={weeklyChallengeCompleted}>
+          <span class="quest-status">{weeklyChallengeCompleted ? '✅' : '⚔️'}</span>
+          <div class="quest-details font-bold">
+            <span class="quest-title">Course Constructor Challenge</span>
+            <span class="quest-desc">Use <strong>Sword</strong>, <strong>Cactus</strong>, and <strong>Bouncy Jelly</strong> to build a course!</span>
+            <div class="check-row">
+              <span class:check-ok={placed.some(e => e.asset_id === 'weapon_sword')}>Sword</span>
+              <span class:check-ok={placed.some(e => e.asset_id === 'cactus_hazard')}>Cactus</span>
+              <span class:check-ok={placed.some(e => e.asset_id === 'jelly_trampoline')}>Jelly</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <CanvasWorkspace
       {worldSettings}
@@ -662,6 +945,7 @@
     {themeSelectorOpen}
     {beatComposerOpen}
     {playModalOpen}
+    {scrapbookOpen}
     {inventory}
     {isMuted}
     bind:favorites
@@ -671,7 +955,9 @@
     {editingAssetId}
     {editingCategory}
     {themeDraft}
+    {unlockedStamps}
     customBgmSequence={worldSettings.custom_bgm_sequence}
+    customBgmInstruments={worldSettings.custom_bgm_instruments}
     on:selectToyboxItem={(event) => selectAsset(event.detail)}
     on:closeToybox={() => toyboxOpen = false}
     on:selectRoom={(event) => { loadSelectedRoom(event.detail); bookshelfOpen = false; }}
@@ -690,7 +976,31 @@
     on:toggleMute={toggleMute}
     on:restartSound={() => playUiSound('chime')}
     on:launchWindow={() => { playModalOpen = false; launchNativeWindow(); }}
+    on:closeScrapbook={() => scrapbookOpen = false}
   />
+
+  {#if shareModalOpen}
+    <div class="share-modal-backdrop" on:click={() => shareModalOpen = false}>
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div class="share-modal-box" on:click|stopPropagation>
+        <h2>📲 Share Your Game!</h2>
+        <p>Friends on the same Wi-Fi can scan this QR code or click the link to play your level!</p>
+        
+        <div class="qr-container">
+          {@html qrSvgString}
+        </div>
+        
+        <div class="share-url-box">
+          <span class="url-label">Wi-Fi Link:</span>
+          <a href={shareUrl} class="url-value" target="_blank">{shareUrl}</a>
+        </div>
+
+        <p class="share-warning-hint font-bold">⚠️ Keep this window open while your friends download the game!</p>
+
+        <button class="close-share-btn" on:click={() => shareModalOpen = false}>Close</button>
+      </div>
+    </div>
+  {/if}
 
   {#if selectedPlacedEntity}
     <SelectedEntityCustomizer
@@ -704,6 +1014,35 @@
       on:saveRoom={saveCurrentRoom}
     />
   {/if}
+
+  {#if activeCelebration}
+    <div class="celebration-overlay">
+      <div class="celebration-card">
+        <span class="celebration-stars">✨⭐✨</span>
+        <h2>STICKER EARNED!</h2>
+        <div class="celebration-emoji-glow">
+          <span class="celebration-emoji">{activeCelebration.emoji}</span>
+        </div>
+        <h3>{activeCelebration.name}</h3>
+        <p>Added to your Sticker Scrapbook!</p>
+      </div>
+    </div>
+  {/if}
+
+  {#if confettiParticles.length > 0}
+    <div class="confetti-container">
+      {#each confettiParticles as p}
+        <div class="confetti-piece" style="
+          left: {p.x}px;
+          top: {p.y}px;
+          background-color: {p.color};
+          width: {p.size}px;
+          height: {p.size * 1.5}px;
+          transform: rotate({p.angle}deg);
+        "></div>
+      {/each}
+    </div>
+  {/if}
 </main>
 
 <style>
@@ -713,4 +1052,281 @@
     grid-template-rows: auto auto 1fr auto;
   }
 
+  .quests-floating-widget {
+    position: fixed;
+    bottom: 50px;
+    right: 20px;
+    width: 320px;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(12px);
+    border: 3px solid rgba(251, 191, 36, 0.4);
+    border-radius: 20px;
+    padding: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    z-index: 50;
+    color: white;
+  }
+
+  .quests-floating-widget h3 {
+    margin: 0 0 12px 0;
+    font-size: 1.1rem;
+    color: #fbbf24;
+    text-align: center;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 6px;
+  }
+
+  .quest-section {
+    margin-bottom: 12px;
+  }
+
+  .quest-section h4 {
+    margin: 0 0 6px 0;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .quest-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: rgba(30, 41, 59, 0.5);
+    border-radius: 10px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .quest-item.completed {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.4);
+  }
+
+  .quest-status {
+    font-size: 1.2rem;
+  }
+
+  .quest-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .quest-title {
+    font-weight: bold;
+    font-size: 0.85rem;
+  }
+
+  .quest-desc {
+    font-size: 0.75rem;
+    color: #94a3b8;
+  }
+
+  .check-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .check-row span {
+    font-size: 0.65rem;
+    background: #374151;
+    color: #9ca3af;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .check-row span.check-ok {
+    background: #059669;
+    color: white;
+    font-weight: bold;
+  }
+
+  /* Share Modal styles */
+  .share-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
+    display: grid;
+    place-items: center;
+    z-index: 100;
+  }
+
+  .share-modal-box {
+    background: #1e293b;
+    border: 6px solid #a855f7;
+    border-radius: 32px;
+    padding: 32px;
+    width: min(480px, 90vw);
+    text-align: center;
+    box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+    color: white;
+  }
+
+  .share-modal-box h2 {
+    color: #a855f7;
+    margin-top: 0;
+  }
+
+  .qr-container {
+    background: white;
+    padding: 16px;
+    border-radius: 20px;
+    display: inline-block;
+    margin: 20px 0;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  }
+
+  .qr-container :global(svg) {
+    display: block;
+  }
+
+  .share-url-box {
+    background: #0f172a;
+    border: 2px solid #374151;
+    border-radius: 12px;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 16px;
+  }
+
+  .url-label {
+    font-size: 0.75rem;
+    color: #94a3b8;
+  }
+
+  .url-value {
+    color: #38bdf8;
+    font-family: monospace;
+    font-size: 1rem;
+    word-break: break-all;
+    text-decoration: none;
+    font-weight: bold;
+  }
+
+  .url-value:hover {
+    text-decoration: underline;
+  }
+
+  .share-warning-hint {
+    font-size: 0.75rem;
+    color: #fca5a5;
+    margin-bottom: 20px;
+  }
+
+  .close-share-btn {
+    background: #a855f7;
+    color: white;
+    border: none;
+    border-radius: 16px;
+    padding: 10px 28px;
+    font-weight: bold;
+    font-size: 1.1rem;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #7e22ce;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+
+  .close-share-btn:active {
+    transform: translateY(4px);
+    box-shadow: none;
+  }
+
+  /* Sticker unlock celebrations */
+  .celebration-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    display: grid;
+    place-items: center;
+    z-index: 998;
+    pointer-events: none;
+    animation: fade-in 0.3s ease-out;
+  }
+
+  .celebration-card {
+    background: #2a1f3d;
+    border: 6px solid #fbbf24;
+    border-radius: 30px;
+    padding: 30px;
+    text-align: center;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    color: white;
+    max-width: 320px;
+    animation: bounce-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .celebration-stars {
+    font-size: 2rem;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .celebration-card h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #f43f5e;
+    font-weight: 900;
+  }
+
+  .celebration-emoji-glow {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    background: white;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    margin: 16px auto;
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.8);
+  }
+
+  .celebration-emoji {
+    font-size: 4rem;
+    line-height: 1;
+  }
+
+  .celebration-card h3 {
+    margin: 8px 0 0 0;
+    font-size: 1.4rem;
+    color: #fbbf24;
+    font-weight: 800;
+  }
+
+  .celebration-card p {
+    margin: 6px 0 0 0;
+    font-size: 0.9rem;
+    color: #cbd5e1;
+  }
+
+  .confetti-container {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 999;
+    overflow: hidden;
+  }
+
+  .confetti-piece {
+    position: absolute;
+    border-radius: 2px;
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes bounce-in {
+    0% { transform: scale(0.3); opacity: 0; }
+    50% { transform: scale(1.1); }
+    70% { transform: scale(0.9); }
+    100% { transform: scale(1); opacity: 1; }
+  }
 </style>

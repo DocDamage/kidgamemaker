@@ -8,6 +8,26 @@
   export let inventory: AssetInventory = {};
   export let isMuted = false;
   export let favorites: string[] = [];
+  export let unlockedStamps: string[] = [];
+
+  const LOCKED_BY_DEFAULT = ['effects_fire', 'effects_snow', 'effects_sparkles'];
+  const LOCK_RECIPES: Record<string, string> = {
+    'effects_fire': '🔥 Place 3 Fire Torches to unlock!',
+    'effects_snow': '❄️ Place 3 Ice Crystals to unlock!',
+    'effects_sparkles': '🌟 Place 3 Star Pieces to unlock!'
+  };
+
+  function isItemLocked(itemId: string) {
+    return LOCKED_BY_DEFAULT.includes(itemId) && !unlockedStamps.includes(itemId);
+  }
+
+  function handleToyClick(item: ToyboxAsset) {
+    if (isItemLocked(item.id)) {
+      alert(`🔒 Locked Stamp: ${item.name}\nQuest: ${LOCK_RECIPES[item.id]}`);
+      return;
+    }
+    dispatch('itemSelected', item);
+  }
 
   const dispatch = createEventDispatcher<{
     itemSelected: ToyboxAsset;
@@ -118,21 +138,26 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <div 
                 class="toy" 
+                class:toy-locked={isItemLocked(item.id)}
                 role="button" 
                 tabindex="0" 
-                on:click={() => dispatch('itemSelected', item)}
-                on:keydown={(e) => e.key === 'Enter' && dispatch('itemSelected', item)}
+                on:click={() => handleToyClick(item)}
+                on:keydown={(e) => e.key === 'Enter' && handleToyClick(item)}
               >
-                <button
-                  type="button"
-                  class="favorite-btn"
-                  on:click={(e) => toggleFavorite(item.id, e)}
-                  title="Favorite this toy"
-                >
-                  {favorites.includes(item.id) ? '❤️' : '🤍'}
-                </button>
+                {#if !isItemLocked(item.id)}
+                  <button
+                    type="button"
+                    class="favorite-btn"
+                    on:click={(e) => toggleFavorite(item.id, e)}
+                    title="Favorite this toy"
+                  >
+                    {favorites.includes(item.id) ? '❤️' : '🤍'}
+                  </button>
+                {/if}
                 <span class="toy-visual-container">
-                  {#if item.visual && !isEmojiVisual(item.visual)}
+                  {#if isItemLocked(item.id)}
+                    <span class="lock-overlay-emoji">🔒</span>
+                  {:else if item.visual && !isEmojiVisual(item.visual)}
                     {#if item.is_spritesheet && item.frames && item.frames[0]}
                       <img
                         src={getInventoryAssetUrl(item)}
@@ -158,7 +183,10 @@
                     <span>{item.visual ?? '🎮'}</span>
                   {/if}
                 </span>
-                <strong>{item.name}</strong>
+                <strong>{isItemLocked(item.id) ? 'Locked' : item.name}</strong>
+                {#if isItemLocked(item.id)}
+                  <span class="recipe-hint">{LOCK_RECIPES[item.id]}</span>
+                {/if}
               </div>
             {/each}
           </div>
@@ -359,5 +387,30 @@
     color: #94a3b8;
     font-size: 1.3rem;
     margin-top: 48px;
+  }
+
+  .toy-locked {
+    background: #475569 !important;
+    color: #94a3b8 !important;
+    cursor: not-allowed;
+    box-shadow: 0 5px 0 #334155 !important;
+    opacity: 0.8;
+  }
+
+  .toy-locked:hover {
+    background: #475569 !important;
+    transform: none !important;
+    box-shadow: 0 5px 0 #334155 !important;
+  }
+
+  .lock-overlay-emoji {
+    font-size: 2.4rem !important;
+  }
+
+  .recipe-hint {
+    font-size: 0.65rem;
+    color: #fca5a5;
+    text-align: center;
+    line-height: 1.1;
   }
 </style>

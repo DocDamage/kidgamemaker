@@ -33,6 +33,7 @@
     remix: void;
     play: void;
     toggleParents: void;
+    openScrapbook: void;
   }>();
 
   function animateClick(event: MouseEvent) {
@@ -65,7 +66,8 @@
     surprise: () => dispatch('surprise'),
     remix: () => dispatch('remix'),
     play: () => dispatch('play'),
-    toggleParents: () => dispatch('toggleParents')
+    toggleParents: () => dispatch('toggleParents'),
+    openScrapbook: () => dispatch('openScrapbook')
   };
 </script>
 
@@ -132,6 +134,7 @@
   <button class="draw-toy-btn-top" on:click={(event) => clickDispatch(event, 'drawToy')} title="Draw Toy">🎨 Draw</button>
   <button class="surprise-btn-top" on:click={(event) => clickDispatch(event, 'surprise')} title="Generate a random level!">🎲 Surprise Me!</button>
   <button class="remix-btn-top" on:click={(event) => clickDispatch(event, 'remix')} title="Shuffles the items in the room!">🔀 Remix!</button>
+  <button class="scrapbook-btn-top" on:click={(event) => clickDispatch(event, 'openScrapbook')} title="🏆 Achievement Sticker Scrapbook">🏆 Scrapbook</button>
   <button id="btn-play" class="play-btn-top" on:click={(event) => clickDispatch(event, 'play')} title="Play!">▶ PLAY</button>
   <button class="parents-toggle-btn" class:active={parentsPanelOpen} on:click={(event) => clickDispatch(event, 'toggleParents')} title="Parents / Developers Settings">⚙️ Parents</button>
 </header>
@@ -278,6 +281,12 @@
     font-size: 1.3rem;
     padding: 10px 24px;
     box-shadow: 0 6px 0 #15803d;
+  }
+
+  .scrapbook-btn-top {
+    background: #f43f5e;
+    color: white;
+    box-shadow: 0 4px 0 #be123c;
   }
 
   .parents-toggle-btn {

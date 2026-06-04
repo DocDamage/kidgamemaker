@@ -19,7 +19,7 @@
   import type { PlacedEntity, ToyboxAsset } from './lib/canvasState';
 
   export let entity: PlacedEntity;
-  export let rooms: Record<string, PlacedEntity[]>;
+  export let rooms: string[] = [];
   export let activeRoomId: string;
   export let placed: PlacedEntity[];
   export let findAsset: (assetId: string) => ToyboxAsset | undefined;

@@ -127,12 +127,16 @@ export type WorldSettings = {
   story_title?: string;
   story_intro_text?: string;
   custom_bgm_sequence?: number[][];
+  custom_bgm_instruments?: string[];
   /** Three-age accessibility mode. Controls grid snap, game speed, and fail behaviour. */
   age_mode?: AgeMode;
   /** Snap grid size in pixels — set automatically by age_mode selector */
   snap_size?: number;
   /** Game speed multiplier written into world_settings so Godot can read it */
   game_speed_multiplier?: number;
+  grid_x?: number;
+  grid_y?: number;
+  health_style?: 'hearts' | 'diegetic';
 };
 
 export type PhaseAFeatureContract = {
