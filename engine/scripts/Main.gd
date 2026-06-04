@@ -323,7 +323,10 @@ func spawn_entity(data: Dictionary) -> Node2D:
 		"particles":
 			node = _make_particles(data, sidecar)
 		"trigger":
-			node = _make_trigger(data, sidecar)
+			if asset_id == "trigger_pressure_plate":
+				node = _make_pressure_plate(data, sidecar)
+			else:
+				node = _make_trigger(data, sidecar)
 		"gate":
 			node = _make_gate(data, sidecar)
 		"jelly":
@@ -422,6 +425,8 @@ func _make_player(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
 		var modifiers: Dictionary = data.get("modifiers", {})
 		if modifiers.has("costume_tint"):
 			body.set("costume_tint", str(modifiers.get("costume_tint")))
+		if modifiers.has("hero_class"):
+			body.set("hero_class", str(modifiers.get("hero_class")))
 
 	return body
 
@@ -530,6 +535,10 @@ func _make_enemy(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
 			body.set("projectile_speed", float(modifiers.get("projectile_speed")))
 		if modifiers.has("projectile_interval"):
 			body.set("projectile_interval", float(modifiers.get("projectile_interval")))
+		if modifiers.has("boss_hud_style"):
+			body.set("boss_hud_style", str(modifiers.get("boss_hud_style")))
+		if modifiers.has("boss_phases_count"):
+			body.set("boss_phases_count", int(modifiers.get("boss_phases_count")))
 
 	return body
 
@@ -546,6 +555,7 @@ func _make_collectible(data: Dictionary, sidecar: Dictionary) -> Area2D:
 		var gameplay: Dictionary = sidecar.get("gameplay_logic", {})
 		area.set("score_value", int(gameplay.get("score_value", 0)))
 		area.set("heal_value", int(gameplay.get("heal_value", 0)))
+		area.set("powerup_type", str(gameplay.get("powerup_type", "")))
 		area.set("asset_id", str(data.get("asset_id", "")))
 
 		# Override baseline with instance modifiers
@@ -1175,8 +1185,8 @@ func execute_rules(trigger_type: String, trigger_id: String = "") -> void:
 		if rule_trigger_type != trigger_type:
 			continue
 			
-		# Match trigger ID if button, lever, or target
-		if (rule_trigger_type == "button_step" or rule_trigger_type == "lever_flip" or rule_trigger_type == "target_hit") and rule_trigger_id != trigger_id:
+		# Match trigger ID if button, lever, target, or pressure plate
+		if (rule_trigger_type == "button_step" or rule_trigger_type == "lever_flip" or rule_trigger_type == "target_hit" or rule_trigger_type == "pressure_plate_on" or rule_trigger_type == "pressure_plate_off") and rule_trigger_id != trigger_id:
 			continue
 			
 		var action_type = str(rule.get("action_type", ""))
@@ -1965,6 +1975,55 @@ func _create_hud() -> void:
 	hud_score_label.label_settings = score_settings
 	control.add_child(hud_score_label)
 
+	# Boss HUD container
+	var boss_hud := Control.new()
+	boss_hud.name = "BossHUD"
+	boss_hud.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	boss_hud.anchor_left = 0.5
+	boss_hud.anchor_right = 0.5
+	boss_hud.offset_left = -200
+	boss_hud.offset_right = 200
+	boss_hud.offset_top = 24
+	boss_hud.offset_bottom = 80
+	boss_hud.visible = false
+	control.add_child(boss_hud)
+
+	var bar_bg := ColorRect.new()
+	bar_bg.name = "BarBg"
+	bar_bg.color = Color(0.1, 0.1, 0.1, 0.85)
+	bar_bg.size = Vector2(400, 16)
+	bar_bg.position = Vector2(0, 28)
+	boss_hud.add_child(bar_bg)
+
+	var bar_fill := ColorRect.new()
+	bar_fill.name = "BarFill"
+	bar_fill.color = Color(0.85, 0.15, 0.15, 1.0)
+	bar_fill.size = Vector2(400, 16)
+	bar_fill.position = Vector2(0, 28)
+	boss_hud.add_child(bar_fill)
+
+	var border := ReferenceRect.new()
+	border.name = "Border"
+	border.border_color = Color(0.5, 0.5, 0.5)
+	border.border_width = 2.0
+	border.editor_only = false
+	border.size = Vector2(400, 16)
+	border.position = Vector2(0, 28)
+	boss_hud.add_child(border)
+
+	var boss_label := Label.new()
+	boss_label.name = "BossLabel"
+	boss_label.text = "BOSS"
+	boss_label.size = Vector2(400, 24)
+	boss_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boss_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var boss_lbl_settings := LabelSettings.new()
+	boss_lbl_settings.font_size = 18
+	boss_lbl_settings.outline_size = 4
+	boss_lbl_settings.outline_color = Color.BLACK
+	boss_label.label_settings = boss_lbl_settings
+	boss_hud.add_child(boss_label)
+
 	# Minimap HUD widget
 	var minimap := Control.new()
 	minimap.name = "Minimap"
@@ -2084,6 +2143,54 @@ func _update_hud() -> void:
 			
 	if keys_str != "":
 		hud_score_label.text = keys_str + " | " + hud_score_label.text
+
+	# Update Boss HUD dynamically
+	if hud_canvas != null and is_instance_valid(hud_canvas):
+		var hud_control = hud_canvas.get_child(0)
+		if hud_control != null and hud_control.has_node("BossHUD"):
+			var boss_hud = hud_control.get_node("BossHUD")
+			if current_boss_node != null and is_instance_valid(current_boss_node) and current_boss_node.get("current_health") > 0:
+				boss_hud.visible = true
+				
+				# Get stats
+				var hp: int = current_boss_node.get("current_health")
+				var max_hp: int = current_boss_node.get("max_health")
+				var ratio := float(hp) / float(max_hp)
+				
+				var raw_name = str(current_boss_node.get_meta("asset_id")).replace("_", " ").to_upper() if current_boss_node.has_meta("asset_id") else "BOSS"
+				var style: String = current_boss_node.get("boss_hud_style") if "boss_hud_style" in current_boss_node else "retro"
+				var phase: int = current_boss_node.get("current_phase") if "current_phase" in current_boss_node else 1
+				
+				# Format name & style colors
+				var label_text := ""
+				var fill_color := Color.RED
+				
+				match style:
+					"royal":
+						label_text = "👑 " + raw_name + " 👑"
+						fill_color = Color(1.0, 0.85, 0.0) # Gold
+					"spooky":
+						label_text = "💀 " + raw_name + " 💀"
+						fill_color = Color(0.6, 0.1, 0.95) # Dark Purple
+					_: # retro
+						label_text = "👾 " + raw_name + " 👾"
+						fill_color = Color(0.85, 0.15, 0.15) # Red
+				
+				if phase > 1:
+					label_text += " [PHASE %d]" % phase
+					if phase == 2:
+						fill_color = fill_color.lerp(Color.ORANGE, 0.5)
+					elif phase == 3:
+						var t = Time.get_ticks_msec() / 100.0
+						var flash_factor = sin(t) * 0.4 + 0.6
+						fill_color = Color(1.0, 0.1, 0.1).lerp(Color(1.0, 0.8, 0.8), flash_factor)
+						label_text += " (⚡ENRAGED⚡)"
+				
+				boss_hud.get_node("BossLabel").text = label_text
+				boss_hud.get_node("BarFill").size.x = 400.0 * clamp(ratio, 0.0, 1.0)
+				boss_hud.get_node("BarFill").color = fill_color
+			else:
+				boss_hud.visible = false
 
 
 var _bgm_player: AudioStreamPlayer = null
@@ -2331,6 +2438,58 @@ func _make_trigger(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	area.set("target_id", target_id)
 
 	return area
+
+
+func _make_pressure_plate(data: Dictionary, sidecar: Dictionary) -> Area2D:
+	var area := Area2D.new()
+	var size := _collision_size(sidecar, Vector2(48, 16), data)
+	_add_box_collision(area, size)
+	_add_visuals(area, sidecar, size, Color(0.9, 0.9, 0.1, 0.8)) # Yellow pressure plate
+	
+	area.set_meta("asset_id", "trigger_pressure_plate")
+
+	var modifiers: Dictionary = data.get("modifiers", {})
+	var target_id: String = str(modifiers.get("target_id", ""))
+
+	var plate_script := GDScript.new()
+	plate_script.source_code = "extends Area2D\n" + \
+		"var target_id: String = ''\n" + \
+		"var active_bodies: int = 0\n" + \
+		"func _ready() -> void:\n" + \
+		"\tbody_entered.connect(_on_body_entered)\n" + \
+		"\tbody_exited.connect(_on_body_exited)\n" + \
+		"func _on_body_entered(body: Node) -> void:\n" + \
+		"\tif body is CharacterBody2D:\n" + \
+		"\t\tactive_bodies += 1\n" + \
+		"\t\tif active_bodies == 1:\n" + \
+		"\t\t\tvar main = get_tree().get_root().get_node_or_null('Main')\n" + \
+		"\t\t\tif main != null:\n" + \
+		"\t\t\t\tif main.has_method('play_sfx'): main.play_sfx('coin')\n" + \
+		"\t\t\t\tif main.has_method('notify_pressure_plate'): main.notify_pressure_plate(name, true)\n" + \
+		"\t\t\tvar target = get_parent().get_node_or_null(target_id)\n" + \
+		"\t\t\tif target != null and target.has_method('toggle_gate'):\n" + \
+		"\t\t\t\ttarget.toggle_gate()\n" + \
+		"func _on_body_exited(body: Node) -> void:\n" + \
+		"\tif body is CharacterBody2D:\n" + \
+		"\t\tactive_bodies = max(0, active_bodies - 1)\n" + \
+		"\t\tif active_bodies == 0:\n" + \
+		"\t\t\tvar main = get_tree().get_root().get_node_or_null('Main')\n" + \
+		"\t\t\tif main != null:\n" + \
+		"\t\t\t\tif main.has_method('notify_pressure_plate'): main.notify_pressure_plate(name, false)\n" + \
+		"\t\t\tvar target = get_parent().get_node_or_null(target_id)\n" + \
+		"\t\t\tif target != null and target.has_method('toggle_gate'):\n" + \
+		"\t\t\t\ttarget.toggle_gate()\n"
+	plate_script.reload()
+	area.set_script(plate_script)
+	area.set("target_id", target_id)
+
+	return area
+
+
+func notify_pressure_plate(trigger_id: String, is_pressed: bool) -> void:
+	var trigger_type = "pressure_plate_on" if is_pressed else "pressure_plate_off"
+	print("notify_pressure_plate called for: ", trigger_id, " type: ", trigger_type)
+	execute_rules(trigger_type, trigger_id)
 
 
 func _make_gate(data: Dictionary, sidecar: Dictionary) -> AnimatableBody2D:

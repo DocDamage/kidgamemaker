@@ -1877,12 +1877,14 @@
                   <option value="button_step">🔘 Floor Button Stepped</option>
                   <option value="lever_flip">🕹️ Wall Lever Flipped</option>
                   <option value="target_hit">🎯 Target Practice Hit</option>
+                  <option value="pressure_plate_on">🟨 Pressure Plate Pressed</option>
+                  <option value="pressure_plate_off">🟨 Pressure Plate Released</option>
                   <option value="coins_5">💎 Collected 5 Rubies</option>
                   <option value="coins_10">💎 Collected 10 Rubies</option>
                 </select>
 
-                {#if rule.trigger_type === 'button_step' || rule.trigger_type === 'lever_flip' || rule.trigger_type === 'target_hit'}
-                  {@const targetTriggerAsset = rule.trigger_type === 'button_step' ? 'trigger_button' : rule.trigger_type === 'lever_flip' ? 'trigger_lever' : 'target_practice'}
+                {#if rule.trigger_type === 'button_step' || rule.trigger_type === 'lever_flip' || rule.trigger_type === 'target_hit' || rule.trigger_type === 'pressure_plate_on' || rule.trigger_type === 'pressure_plate_off'}
+                  {@const targetTriggerAsset = rule.trigger_type === 'button_step' ? 'trigger_button' : rule.trigger_type === 'lever_flip' ? 'trigger_lever' : rule.trigger_type === 'target_hit' ? 'target_practice' : 'trigger_pressure_plate'}
                   <select 
                     style="background: #0f172a; color: white; border: 1px solid #475569; padding: 6px; border-radius: 6px; font-size: 0.85rem;"
                     bind:value={rule.trigger_id}
@@ -2429,6 +2431,41 @@
               {/each}
             </div>
           </div>
+
+          <div class="option-group" style="margin-top: 16px;">
+            <span class="option-label-text">🛡️ Hero Job / Class:</span>
+            <div class="class-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px;">
+              {#each [
+                { id: 'warrior', name: 'Warrior ⚔️', desc: 'Stronger melee & block', color: '#f87171' },
+                { id: 'mage', name: 'Mage 🔮', desc: 'Magic wands & fast mana', color: '#c084fc' },
+                { id: 'rogue', name: 'Rogue 💨', desc: 'Fast run & double dash', color: '#60a5fa' },
+                { id: 'archer', name: 'Archer 🏹', desc: 'Instant rapid fire arrows', color: '#4ade80' }
+              ] as job}
+                <button
+                  type="button"
+                  title={job.desc}
+                  style="
+                    background: {selectedPlacedEntity.modifiers.hero_class === job.id ? job.color : '#1e293b'};
+                    color: {selectedPlacedEntity.modifiers.hero_class === job.id ? '#0f172a' : 'white'};
+                    border: 2px solid {job.color};
+                    padding: 8px 4px;
+                    border-radius: 12px;
+                    font-size: 0.8rem;
+                    font-weight: bold;
+                    cursor: pointer;
+                    text-align: center;
+                    box-shadow: 0 3px 0 rgba(0,0,0,0.3);
+                  "
+                  on:click={() => {
+                    selectedPlacedEntity.modifiers.hero_class = job.id;
+                    saveCurrentRoom();
+                  }}
+                >
+                  {job.name}
+                </button>
+              {/each}
+            </div>
+          </div>
         {/if}
 
         {#if selectedPlacedEntity.category === 'terrain' || selectedPlacedEntity.type === 'terrain'}
@@ -2600,6 +2637,8 @@
               on:change={() => {
                 if (selectedPlacedEntity.modifiers.boss_mode) {
                   selectedPlacedEntity.modifiers.scale_multiplier = 1.8;
+                  if (selectedPlacedEntity.modifiers.boss_hud_style === undefined) selectedPlacedEntity.modifiers.boss_hud_style = 'retro';
+                  if (selectedPlacedEntity.modifiers.boss_phases_count === undefined) selectedPlacedEntity.modifiers.boss_phases_count = 2;
                 } else {
                   selectedPlacedEntity.modifiers.scale_multiplier = 1.0;
                 }
@@ -2607,6 +2646,60 @@
               }} 
             />
           </div>
+
+          {#if selectedPlacedEntity.modifiers.boss_mode}
+            <div class="option-group" style="margin-left: 12px; border-left: 3px solid #eab308; padding-left: 12px; margin-top: 8px;">
+              <span class="option-label-text" style="font-size: 0.85rem; color: #eab308;">👑 Boss Settings:</span>
+              
+              <div class="option-group" style="margin-top: 8px;">
+                <div class="option-label" style="font-size: 0.8rem; margin-bottom: 4px;">
+                  <span>HUD Health Bar Style:</span>
+                </div>
+                <select 
+                  class="option-select" 
+                  style="width: 100%; background: #1e293b; color: white; border: 1px solid #475569; border-radius: 8px; padding: 4px; font-size: 0.8rem;"
+                  bind:value={selectedPlacedEntity.modifiers.boss_hud_style}
+                  on:change={saveCurrentRoom}
+                >
+                  <option value="retro">👾 Retro Pixel</option>
+                  <option value="royal">👑 Royal Gold</option>
+                  <option value="spooky">💀 Spooky Skull</option>
+                </select>
+              </div>
+
+              <div class="option-group" style="margin-top: 8px;">
+                <div class="option-label" style="font-size: 0.8rem; margin-bottom: 4px;">
+                  <span>Boss Phases:</span>
+                  <span style="font-weight: bold; color: #eab308;">{selectedPlacedEntity.modifiers.boss_phases_count ?? 2} Phases</span>
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 4px;">
+                  {#each [1, 2, 3] as phase}
+                    <button
+                      type="button"
+                      style="
+                        flex: 1;
+                        background: {(selectedPlacedEntity.modifiers.boss_phases_count ?? 2) === phase ? '#eab308' : '#1e293b'};
+                        color: {(selectedPlacedEntity.modifiers.boss_phases_count ?? 2) === phase ? '#0f172a' : 'white'};
+                        border: 1px solid #eab308;
+                        padding: 4px;
+                        border-radius: 8px;
+                        font-size: 0.8rem;
+                        font-weight: bold;
+                        cursor: pointer;
+                        box-shadow: 0 2px 0 rgba(0,0,0,0.2);
+                      "
+                      on:click={() => {
+                        selectedPlacedEntity.modifiers.boss_phases_count = phase;
+                        saveCurrentRoom();
+                      }}
+                    >
+                      {phase}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            </div>
+          {/if}
         {:else if selectedPlacedEntity.category === 'collectibles' || selectedPlacedEntity.type === 'collectible'}
           <div class="option-group">
             <div class="option-label">

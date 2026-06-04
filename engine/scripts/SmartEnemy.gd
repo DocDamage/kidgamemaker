@@ -20,6 +20,13 @@ var _jump_cooldown: float = 2.0
 var _shoot_timer: float = 0.0
 var max_health: int = 20
 var current_health: int = max_health
+var stun_timer: float = 0.0
+var knockback_timer: float = 0.0
+var _stun_spinner: Node2D = null
+var boss_hud_style: String = "retro"
+var boss_phases_count: int = 2
+var current_phase: int = 1
+var phase_hp_thresholds: Array = []
 
 
 func _ready() -> void:
@@ -33,6 +40,14 @@ func _ready() -> void:
 	if boss_mode:
 		scale = Vector2(1.8, 1.8)
 		patrol_speed *= 1.5
+		max_health = max(max_health, 300)
+		current_health = max_health
+		if boss_phases_count == 2:
+			phase_hp_thresholds = [int(max_health * 0.5)]
+		elif boss_phases_count == 3:
+			phase_hp_thresholds = [int(max_health * 0.66), int(max_health * 0.33)]
+		else:
+			phase_hp_thresholds = []
 
 	# Difficulty adjustment: easy mode makes enemies 50% slower
 	var main = get_tree().get_root().get_node_or_null("Main")
@@ -68,46 +83,67 @@ func _on_damage_area_body_entered(body: Node) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _stun_spinner != null:
+		if stun_timer > 0.0:
+			_stun_spinner.visible = true
+			_stun_spinner.rotation += 5.0 * delta
+		else:
+			_stun_spinner.visible = false
+
 	if shoot_projectiles:
-		_shoot_timer -= delta
-		if _shoot_timer <= 0.0:
-			_shoot_projectile()
-			_shoot_timer = projectile_interval
+		# Disable shooting when stunned
+		if stun_timer <= 0.0:
+			_shoot_timer -= delta
+			if _shoot_timer <= 0.0:
+				_shoot_projectile()
+				_shoot_timer = projectile_interval
 
 	if behavior_type != "fly":
 		if not is_on_floor():
 			velocity.y += gravity * gravity_scale * delta
 	else:
-		_time_passed += delta
-		velocity.y = cos(_time_passed * 4.0) * 80.0
+		if stun_timer <= 0.0 and knockback_timer <= 0.0:
+			_time_passed += delta
+			velocity.y = cos(_time_passed * 4.0) * 80.0
 
-	match behavior_type:
-		"chase":
-			var main = get_tree().get_root().get_node_or_null("Main")
-			var player = main.active_player if main != null else null
-			if player != null:
-				var diff = player.global_position.x - global_position.x
-				if abs(diff) < 240.0:
-					direction = 1 if diff > 0 else -1
-					velocity.x = float(direction) * patrol_speed * 1.4
+	if knockback_timer > 0.0:
+		knockback_timer -= delta
+		velocity.x = move_toward(velocity.x, 0.0, 500.0 * delta)
+		if behavior_type == "fly":
+			velocity.y = move_toward(velocity.y, 0.0, 500.0 * delta)
+	elif stun_timer > 0.0:
+		stun_timer -= delta
+		velocity.x = 0.0
+		if behavior_type == "fly":
+			velocity.y = 0.0
+	else:
+		match behavior_type:
+			"chase":
+				var main = get_tree().get_root().get_node_or_null("Main")
+				var player = main.active_player if main != null else null
+				if player != null:
+					var diff = player.global_position.x - global_position.x
+					if abs(diff) < 240.0:
+						direction = 1 if diff > 0 else -1
+						velocity.x = float(direction) * patrol_speed * 1.4
+					else:
+						velocity.x = float(direction) * patrol_speed
 				else:
 					velocity.x = float(direction) * patrol_speed
-			else:
+
+			"jump":
+				velocity.x = float(direction) * patrol_speed
+				if is_on_floor():
+					_jump_cooldown -= delta
+					if _jump_cooldown <= 0.0:
+						velocity.y = -350.0
+						_jump_cooldown = randf_range(1.5, 3.0)
+
+			"fly":
 				velocity.x = float(direction) * patrol_speed
 
-		"jump":
-			velocity.x = float(direction) * patrol_speed
-			if is_on_floor():
-				_jump_cooldown -= delta
-				if _jump_cooldown <= 0.0:
-					velocity.y = -350.0
-					_jump_cooldown = randf_range(1.5, 3.0)
-
-		"fly":
-			velocity.x = float(direction) * patrol_speed
-
-		_: # patrol
-			velocity.x = float(direction) * patrol_speed
+			_: # patrol
+				velocity.x = float(direction) * patrol_speed
 
 	# Apply conveyor belt movement to enemy velocity
 	var conveyor_velocity := Vector2.ZERO
@@ -124,14 +160,15 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 
-	if behavior_type == "fly" or behavior_type == "chase":
-		if is_on_wall():
-			direction *= -1
-			_update_probe()
-	else:
-		if is_on_wall() or not _has_floor_ahead():
-			direction *= -1
-			_update_probe()
+	if stun_timer <= 0.0 and knockback_timer <= 0.0:
+		if behavior_type == "fly" or behavior_type == "chase":
+			if is_on_wall():
+				direction *= -1
+				_update_probe()
+		else:
+			if is_on_wall() or not _has_floor_ahead():
+				direction *= -1
+				_update_probe()
 
 
 func _has_floor_ahead() -> bool:
@@ -207,6 +244,7 @@ func _shoot_projectile() -> void:
 
 func take_damage(amount: int) -> void:
 	current_health -= amount
+	knockback_timer = 0.25
 	
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main != null and main.has_method("spawn_floating_text"):
@@ -223,9 +261,99 @@ func take_damage(amount: int) -> void:
 	tween.tween_property(self, "scale", Vector2(base_scale.x * 0.8, base_scale.y * 1.3), 0.08)
 	tween.tween_property(self, "scale", base_scale, 0.1)
 
+	if boss_mode and current_health > 0:
+		var next_phase := 1
+		if boss_phases_count == 2:
+			if current_health <= phase_hp_thresholds[0]:
+				next_phase = 2
+		elif boss_phases_count == 3:
+			if current_health <= phase_hp_thresholds[1]:
+				next_phase = 3
+			elif current_health <= phase_hp_thresholds[0]:
+				next_phase = 2
+		
+		if next_phase > current_phase:
+			current_phase = next_phase
+			_trigger_phase_transition()
+
 	if current_health <= 0:
 		current_health = 0
 		die()
+
+
+func _trigger_phase_transition() -> void:
+	stun_timer = max(stun_timer, 1.2) # Invulnerability stun
+	knockback_timer = 0.25
+	
+	var text := "🔥 PHASE 2!"
+	if current_phase == 3:
+		text = "⚡ FINAL ENRAGED PHASE! ⚡"
+		
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main != null:
+		if main.has_method("play_sfx"): main.play_sfx("coin")
+		if main.has_method("spawn_floating_text"):
+			main.spawn_floating_text(text, global_position + Vector2(0, -40), Color.RED if current_phase == 3 else Color.ORANGE)
+			
+	# Wobble Scale Animation using Tween
+	var base_scale = scale
+	var tween = create_tween()
+	tween.tween_property(self, "scale", Vector2(base_scale.x * 1.6, base_scale.y * 0.5), 0.1)
+	tween.tween_property(self, "scale", Vector2(base_scale.x * 0.5, base_scale.y * 1.6), 0.1)
+	tween.tween_property(self, "scale", base_scale, 0.1)
+	
+	# Phase Stats boost:
+	if current_phase == 2:
+		patrol_speed *= 1.3
+		projectile_interval *= 0.8
+		modulate = Color(1.0, 0.6, 0.3) # orange aura
+	elif current_phase == 3:
+		patrol_speed *= 1.6
+		projectile_interval *= 0.5
+		modulate = Color(1.0, 0.3, 0.3) # red aura
+		
+		# Spawn Rage steam particles
+		var p := CPUParticles2D.new()
+		p.name = "RageParticles"
+		p.amount = 15
+		p.lifetime = 0.6
+		p.direction = Vector2.UP
+		p.gravity = Vector2(0, -150)
+		p.initial_velocity_min = 40.0
+		p.initial_velocity_max = 80.0
+		p.color = Color(1.0, 0.2, 0.2, 0.8)
+		p.emitting = true
+		p.position = Vector2(0, 0)
+		add_child(p)
+
+
+func stun(duration: float) -> void:
+	stun_timer = max(stun_timer, duration)
+	knockback_timer = 0.25 # Stun also stops normal movement
+	
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main != null and main.has_method("spawn_floating_text"):
+		main.spawn_floating_text("💫 STUNNED!", global_position + Vector2(0, -30), Color.YELLOW)
+	
+	if _stun_spinner == null:
+		_stun_spinner = Node2D.new()
+		_stun_spinner.name = "StunSpinner"
+		add_child(_stun_spinner)
+		
+		for i in range(3):
+			var star = Label.new()
+			star.text = "⭐"
+			star.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			var settings = LabelSettings.new()
+			settings.font_size = 16
+			star.label_settings = settings
+			var angle = i * (2.0 * PI / 3.0)
+			star.position = Vector2(cos(angle), sin(angle)) * 20.0 - Vector2(10, 10)
+			_stun_spinner.add_child(star)
+		
+		_stun_spinner.position = Vector2(0, -40)
+	else:
+		_stun_spinner.visible = true
 
 
 func die() -> void:

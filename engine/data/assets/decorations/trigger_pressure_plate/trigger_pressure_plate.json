@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "asset_id": "trigger_pressure_plate",
+  "asset_name": "Pressure Plate",
+  "category": "decorations",
+  "runtime_template": "trigger",
+  "visual": "🟨",
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [48, 16]
+  }
+}
