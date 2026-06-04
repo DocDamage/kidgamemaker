@@ -14,11 +14,11 @@ except ModuleNotFoundError:  # Keep helper tests importable when the GUI depende
     dpg = None  # type: ignore[assignment]
 
 try:
-    from tools.sprite_ui_helpers import PREVIEW_ACCESSIBILITY_MODES, tooltip_text
+    from tools.sprite_ui_helpers import PREVIEW_ACCESSIBILITY_MODES, REVIEW_CANVAS_SIZE, tooltip_text
     from tools.sprite_ui_settings import builtin_preset_names
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from tools.sprite_ui_helpers import PREVIEW_ACCESSIBILITY_MODES, tooltip_text
+    from tools.sprite_ui_helpers import PREVIEW_ACCESSIBILITY_MODES, REVIEW_CANVAS_SIZE, tooltip_text
     from tools.sprite_ui_settings import builtin_preset_names
 
 
@@ -251,3 +251,139 @@ class OutputSettingsPanel(SpriteToolPanel):
         dpg.add_spacer(height=10)
         app._add_button("Save Preset", app.save_preset, "save_preset", width=-1)
         app._add_button("Load Preset", app.load_preset, "load_preset", width=-1)
+
+
+class SettingsTabsPanel(SpriteToolPanel):
+    def build(self) -> None:
+        app = self.app
+        dpg.add_text("Settings")
+        with dpg.tab_bar(tag="settings_tabs"):
+            with dpg.tab(label="Core"):
+                RunSettingsPanel(app).build()
+            with dpg.tab(label="Detect"):
+                DetectionSettingsPanel(app).build()
+            with dpg.tab(label="Output"):
+                OutputSettingsPanel(app).build()
+            with dpg.tab(label="Review"):
+                ReviewSettingsPanel(app).build()
+            with dpg.tab(label="Studio"):
+                StudioSettingsPanel(app).build()
+            with dpg.tab(label="Editor"):
+                EditorSettingsPanel(app).build()
+
+
+class ReviewSettingsPanel(SpriteToolPanel):
+    def build(self) -> None:
+        app = self.app
+        with dpg.group(horizontal=True):
+            app._add_button("Load Project", app.load_project_dialog, "load_project")
+            app._add_button("Save Project", app.save_project_dialog, "save_project")
+        with dpg.group(horizontal=True):
+            app._add_combo("##recent_project", app.recent_project, [str(path) for path in app.recent_projects], "recent_projects", tag="recent_project_combo", width=190)
+            app._add_button("Open Recent", app.open_recent_project, "recent_projects")
+        with dpg.group(horizontal=True):
+            app._add_button("Undo", app.undo_project_edit, "undo")
+            app._add_button("Redo", app.redo_project_edit, "redo")
+        app._add_button("Apply Outputs", app.apply_project_outputs, "apply_outputs", width=-1)
+        dpg.add_text("Filter")
+        with dpg.group(horizontal=True):
+            app._add_combo("##review_filter", app.review_status_filter, ["all", "needs_review", "approved", "rejected"], "review_filter", width=120, callback=lambda *_args: app.refresh_project_rows())
+            app._add_input_text("##review_query", app.review_query, "review_query", "review_query", width=145, callback=lambda *_args: app.refresh_project_rows())
+        with dpg.child_window(tag="review_list_panel", width=-1, height=130, border=True):
+            dpg.add_spacer(height=1)
+        attach_tooltip("review_list_panel", "review_list")
+        app._review_list = DpgSelectableList("review_list_panel", multi=True, on_select=app.populate_review_editor)
+        with dpg.child_window(tag="review_image_panel", width=-1, height=140, border=True):
+            dpg.add_text("Load a project to review sprites.", wrap=260)
+        with dpg.group(tag="review_source_canvas_frame"):
+            dpg.add_drawlist(tag="review_source_canvas", width=REVIEW_CANVAS_SIZE[0], height=REVIEW_CANVAS_SIZE[1])
+        attach_tooltip("review_source_canvas_frame", "review_source_canvas")
+        with dpg.item_handler_registry(tag="review_canvas_handlers"):
+            dpg.add_item_clicked_handler(callback=app._on_review_canvas_press)
+        dpg.bind_item_handler_registry("review_source_canvas", "review_canvas_handlers")
+        dpg.add_text("Animation Clip")
+        app._add_combo("##animation_clip", app.review_animation_clip, [], "animation_clip", tag="review_animation_combo", width=-1)
+        with dpg.group(horizontal=True):
+            app._add_button("Play", app.play_review_animation, "play_animation")
+            app._add_button("Stop", app.stop_review_animation, "stop_animation")
+        dpg.add_text("Name")
+        app._add_input_text("##review_name", app.review_name, "review_name", "review_name", width=-1)
+        dpg.add_text("Category")
+        app._add_input_text("##review_category", app.review_category, "review_category", "review_category", width=-1)
+        dpg.add_text("BBox x/y/w/h")
+        with dpg.group(horizontal=True):
+            app._add_input_text("##review_bbox_x", app.review_bbox_x, "review_bbox_x", "review_bbox", width=58)
+            app._add_input_text("##review_bbox_y", app.review_bbox_y, "review_bbox_y", "review_bbox", width=58)
+            app._add_input_text("##review_bbox_width", app.review_bbox_width, "review_bbox_width", "review_bbox", width=58)
+            app._add_input_text("##review_bbox_height", app.review_bbox_height, "review_bbox_height", "review_bbox", width=58)
+        dpg.add_text("Pivot x/y")
+        with dpg.group(horizontal=True):
+            app._add_input_text("##review_pivot_x", app.review_pivot_x, "review_pivot_x", "review_pivot", width=100)
+            app._add_input_text("##review_pivot_y", app.review_pivot_y, "review_pivot_y", "review_pivot", width=100)
+        dpg.add_text("Status / Flags")
+        with dpg.group(horizontal=True):
+            app._add_combo("##review_status", app.review_status, ["needs_review", "approved", "rejected"], "review_status", width=120)
+            app._add_input_text("##review_flags", app.review_flags, "review_flags", "review_flags", width=130)
+        app._add_button("Apply Edit", app.apply_review_edit, "apply_edit", width=-1)
+        with dpg.group(horizontal=True):
+            app._add_button("Approve", app.approve_review_sprite, "approve")
+            app._add_button("Reject", app.reject_review_sprite, "reject")
+        dpg.add_text("Split boxes")
+        app._add_input_text("##split_boxes", app.review_split_boxes, "split_boxes", "split_boxes", width=-1)
+        with dpg.group(horizontal=True):
+            app._add_button("Split Selected", app.split_review_sprite, "split_selected")
+            app._add_button("Merge Selected", app.merge_review_sprites, "merge_selected")
+
+
+class StudioSettingsPanel(SpriteToolPanel):
+    def build(self) -> None:
+        app = self.app
+        with dpg.group(horizontal=True):
+            app._add_button("Refresh", app.refresh_studio_panel, "studio_refresh")
+            app._add_button("Review + Apply", app.review_apply_studio_project, "studio_review_apply")
+        with dpg.group(horizontal=True):
+            app._add_button("Auto Name", app.auto_name_studio_project, "studio_auto_name")
+            app._add_button("Profiles", app.generate_studio_profiles, "studio_generate_profiles")
+        with dpg.group(horizontal=True):
+            app._add_button("Diff Project", app.diff_studio_project, "studio_diff_project")
+            app._add_button("Train Preset", app.train_studio_preset, "studio_train_preset")
+        dpg.add_text("Taxonomy Pattern")
+        app._add_input_text("##studio_taxonomy_pattern", app.studio_taxonomy_pattern, "studio_taxonomy_pattern", "studio_taxonomy_pattern", width=-1)
+        dpg.add_text("Dashboard")
+        dpg.add_text("Load a project to build a studio dashboard.", tag="studio_dashboard_label", wrap=260)
+        attach_tooltip("studio_dashboard_label", "studio_dashboard")
+        dpg.add_text("Review Queue")
+        with dpg.child_window(tag="studio_queue_panel", width=-1, height=100, border=True):
+            dpg.add_spacer(height=1)
+        attach_tooltip("studio_queue_panel", "studio_queue")
+        app._studio_queue_list = DpgSelectableList("studio_queue_panel")
+        dpg.add_text("Asset Browser")
+        with dpg.group(horizontal=True):
+            app._add_combo("##studio_status_filter", app.studio_status_filter, ["all", "needs_review", "approved", "rejected"], "studio_asset_query", width=120, callback=lambda *_args: app.refresh_studio_panel())
+            app._add_input_text("##studio_query", app.studio_query, "studio_query", "studio_asset_query", width=130, callback=lambda *_args: app.refresh_studio_panel())
+        with dpg.child_window(tag="studio_asset_panel", width=-1, height=140, border=True):
+            dpg.add_spacer(height=1)
+        attach_tooltip("studio_asset_panel", "studio_asset_list")
+        app._studio_asset_list = DpgSelectableList("studio_asset_panel")
+
+
+class EditorSettingsPanel(SpriteToolPanel):
+    def build(self) -> None:
+        app = self.app
+        with dpg.group(horizontal=True):
+            app._add_button("Fullscreen Editor", lambda *_args: app.set_editor_fullscreen(not bool(app.editor_workspace.fullscreen)), "editor_fullscreen")
+            app._add_button("Load Sprite", app.load_editor_sprite_dialog, "editor_load_sprite")
+            app._add_button("Save Package", app.save_editor_package, "editor_save_package")
+            app._add_button("Save To Project", app.save_editor_to_project, "editor_save_project")
+        with dpg.group(horizontal=True):
+            with dpg.child_window(tag="editor_tool_rail", width=130, height=520, border=True):
+                app._build_editor_tool_rail()
+            with dpg.child_window(tag="editor_canvas", width=520, height=520, border=True):
+                attach_tooltip("editor_canvas", "editor_canvas")
+                app._build_editor_canvas_panel()
+            with dpg.child_window(tag="editor_side_panel", width=300, height=520, border=True):
+                app._build_editor_side_panel()
+        with dpg.child_window(tag="editor_timeline_panel", width=-1, height=130, border=True):
+            attach_tooltip("editor_timeline_panel", "editor_timeline_panel")
+            app._build_editor_timeline_panel()
+        dpg.add_text(str(app.editor_status.get()), tag="editor_status_text", wrap=920)
