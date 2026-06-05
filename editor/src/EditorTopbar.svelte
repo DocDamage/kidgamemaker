@@ -32,6 +32,7 @@
     openToybox: void;
     drawToy: void;
     surprise: void;
+    openLevelBuilder: void;
     remix: void;
     play: void;
     toggleParents: void;
@@ -67,6 +68,7 @@
     openToybox: () => dispatch('openToybox'),
     drawToy: () => dispatch('drawToy'),
     surprise: () => dispatch('surprise'),
+    openLevelBuilder: () => dispatch('openLevelBuilder'),
     remix: () => dispatch('remix'),
     play: () => dispatch('play'),
     toggleParents: () => dispatch('toggleParents'),
@@ -139,6 +141,7 @@
   <button class="toybox-btn-top" on:click={(event) => clickDispatch(event, 'openToybox')} title="Toybox">🧰 Toybox</button>
   <button class="draw-toy-btn-top" on:click={(event) => clickDispatch(event, 'drawToy')} title="Draw Toy">🎨 Draw</button>
   <button class="surprise-btn-top" on:click={(event) => clickDispatch(event, 'surprise')} title="Generate a random level!">🎲 Surprise Me!</button>
+  <button class="level-builder-btn-top" on:click={(event) => clickDispatch(event, 'openLevelBuilder')} title="Compile a seed-based level!">🧬 Level Builder</button>
   <button class="remix-btn-top" on:click={(event) => clickDispatch(event, 'remix')} title="Shuffles the items in the room!">🔀 Remix!</button>
   <button class="scrapbook-btn-top" on:click={(event) => clickDispatch(event, 'openScrapbook')} title="🏆 Achievement Sticker Scrapbook">🏆 Scrapbook</button>
   <button id="btn-play" class="play-btn-top" on:click={(event) => clickDispatch(event, 'play')} title="Play!">▶ PLAY</button>

@@ -53,7 +53,8 @@ export function createDefaultWorldSettings(): WorldSettings {
     loss_rules: { lose_condition: 'health_0', action: 'game_over' },
     room_rules: [],
     level_balancer_enabled: true,
-    tutorial_whisperer_enabled: true
+    tutorial_whisperer_enabled: true,
+    turf_war_enabled: false
   };
 }
 

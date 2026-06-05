@@ -13,8 +13,20 @@ static func create_player(app, data: Dictionary, sidecar: Dictionary, player_scr
 		var base_health := int(attrs.get("max_health", 100))
 		if difficulty == "easy":
 			base_health = base_health * 2
+
+		var bonus: String = app.get("card_battle_bonus") if "card_battle_bonus" in app else ""
+		if bonus == "extra_hp":
+			base_health += 30
 		body.set("max_health", base_health)
-		body.set("movement_speed", float(attrs.get("movement_speed", 220)))
+
+		var base_speed := float(attrs.get("movement_speed", 220))
+		if bonus == "speed_boost":
+			base_speed *= 1.25
+		body.set("movement_speed", base_speed)
+
+		if bonus == "shield":
+			body.set_meta("card_battle_bonus", "shield")
+
 		body.set("jump_force", float(attrs.get("jump_force", -460)))
 		body.set("gravity_scale", float(attrs.get("gravity_scale", 1.0)))
 		body.set("asset_id", str(data.get("asset_id", "")))

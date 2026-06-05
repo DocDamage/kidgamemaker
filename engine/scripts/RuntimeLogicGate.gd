@@ -34,6 +34,8 @@ func _evaluate() -> void:
 		if main != null:
 			var trigger_event := "logic_gate_on" if output_state else "logic_gate_off"
 			main.execute_rules(trigger_event, name)
+			if main.has_method("_update_logic_gates_for_trigger"):
+				main._update_logic_gates_for_trigger(name, output_state)
 
 
 func _update_visuals() -> void:

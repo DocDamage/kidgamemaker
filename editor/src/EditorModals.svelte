@@ -7,6 +7,7 @@
   import ThemeSelectorModal from './ThemeSelectorModal.svelte';
   import ToyboxModal from './ToyboxModal.svelte';
   import ScrapbookModal from './ScrapbookModal.svelte';
+  import ProceduralLevelModal from './ProceduralLevelModal.svelte';
   import type { AssetInventory, ToyboxAsset } from './lib/canvasState';
   import type { ThemeName } from './lib/themeRooms';
 
@@ -17,6 +18,7 @@
   export let beatComposerOpen = false;
   export let playModalOpen = false;
   export let scrapbookOpen = false;
+  export let levelBuilderOpen = false;
   export let inventory: AssetInventory = {};
   export let isMuted = false;
   export let favorites: string[] = [];
@@ -50,6 +52,9 @@
     restartSound: void;
     launchWindow: void;
     closeScrapbook: void;
+    closeLevelBuilder: void;
+    generateLevel: { biome: 'forest' | 'castle' | 'space'; difficulty: 'easy' | 'medium' | 'hard'; seed: string };
+    cardBattleBonus: string | null;
   }>();
 </script>
 
@@ -109,9 +114,16 @@
   on:toggleMute={() => dispatch('toggleMute')}
   on:restartSound={() => dispatch('restartSound')}
   on:launchWindow={() => dispatch('launchWindow')}
+  on:cardBattleBonus={(event) => dispatch('cardBattleBonus', event.detail)}
 />
 
 <ScrapbookModal
   isVisible={scrapbookOpen}
   on:close={() => dispatch('closeScrapbook')}
+/>
+
+<ProceduralLevelModal
+  isVisible={levelBuilderOpen}
+  on:close={() => dispatch('closeLevelBuilder')}
+  on:generate={(event) => dispatch('generateLevel', event.detail)}
 />

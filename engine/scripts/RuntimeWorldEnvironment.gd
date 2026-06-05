@@ -59,6 +59,7 @@ static func apply_world_settings(parent: Node, settings: Dictionary) -> Dictiona
 		"bgm_sequence": settings.get("custom_bgm_sequence", []),
 		"age_mode": age_mode,
 		"game_speed_multiplier": game_speed_mult,
+		"turf_war_enabled": bool(settings.get("turf_war_enabled", false)),
 		"spawned_nodes": [modulate_node]
 	}
 

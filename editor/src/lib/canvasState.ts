@@ -138,6 +138,8 @@ export type WorldSettings = {
   grid_x?: number;
   grid_y?: number;
   health_style?: 'hearts' | 'diegetic';
+  turf_war_enabled?: boolean;
+  card_battle_bonus?: string | null;
 };
 
 export type PhaseAFeatureContract = {
@@ -470,6 +472,9 @@ export const fallbackInventory: AssetInventory = {
     { id: 'zonai_spring', name: 'Zonai Spring 🌀', category: 'decorations', visual: '🌀', type: 'zonai_spring', snapping_type: 'free_float' },
     { id: 'zonai_beam', name: 'Zonai Laser 🔫', category: 'decorations', visual: '🔫', type: 'zonai_beam', snapping_type: 'free_float' },
     { id: 'zonai_battery', name: 'Zonai Battery 🔋', category: 'decorations', visual: '🔋', type: 'zonai_battery', snapping_type: 'free_float' },
+    { id: 'zonai_steering_stick', name: 'Steering Stick 🎮', category: 'decorations', visual: '🎮', type: 'zonai_steering_stick', snapping_type: 'free_float' },
+    { id: 'zonai_stabilizer', name: 'Stabilizer ⚖️', category: 'decorations', visual: '⚖️', type: 'zonai_stabilizer', snapping_type: 'free_float' },
+    { id: 'zonai_flamethrower', name: 'Flamethrower 🔥', category: 'decorations', visual: '🔥', type: 'zonai_flamethrower', snapping_type: 'free_float' },
     { id: 'crafting_bench', name: 'Crafting Bench 🔨', category: 'decorations', visual: '🔨', type: 'crafting_bench', snapping_type: 'gravity_snap' },
     { id: 'bbq_spit', name: 'BBQ Spit 🍖', category: 'decorations', visual: '🍖', type: 'bbq_spit', snapping_type: 'gravity_snap' },
     { id: 'chemistry_fire', name: 'Fire Torch 🔥', category: 'decorations', visual: '🔥', type: 'chemistry_fire', snapping_type: 'free_float' },
@@ -486,7 +491,8 @@ export const fallbackInventory: AssetInventory = {
     { id: 'anvil_upgrade', name: 'Weapon Anvil ⚒️', category: 'decorations', visual: '⚒️', type: 'anvil_upgrade', snapping_type: 'gravity_snap' },
     { id: 'compass_stamp', name: 'Magic Compass 🧭', category: 'decorations', visual: '🧭', type: 'compass', snapping_type: 'free_float' },
     { id: 'ambient_butterfly', name: 'Magic Butterfly 🦋', category: 'decorations', visual: '🦋', type: 'ambient_creature', snapping_type: 'free_float' },
-    { id: 'ambient_squirrel', name: 'Cute Squirrel 🐿️', category: 'decorations', visual: '🐿️', type: 'ambient_creature', snapping_type: 'gravity_snap' }
+    { id: 'ambient_squirrel', name: 'Cute Squirrel 🐿️', category: 'decorations', visual: '🐿️', type: 'ambient_creature', snapping_type: 'gravity_snap' },
+    { id: 'celestial_sprite', name: 'Celestial Sprite 🦄', category: 'decorations', visual: '🦄', type: 'decoration', snapping_type: 'free_float' }
   ],
   particles: [
     { id: 'effects_fire', name: 'Fire Effect', category: 'particles', visual: '🔥', type: 'particles', snapping_type: 'free_float' },

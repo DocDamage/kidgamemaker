@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { pauseGameIframe, restartGameIframe } from './lib/playbackControls';
+  import CardBattleLoadingScreen from './CardBattleLoadingScreen.svelte';
 
   export let isVisible = false;
   export let isMuted = false;
@@ -11,16 +12,45 @@
     toggleMute: void;
     restartSound: void;
     launchWindow: void;
+    cardBattleBonus: string | null;
   }>();
 
   let isPaused = false;
   let wasVisible = false;
+  let showCardBattle = true;
+  let activeBonus: string | null = null;
 
   $: if (isVisible && !wasVisible) {
     isPaused = false;
+    showCardBattle = true;
+    activeBonus = null;
   }
 
   $: wasVisible = isVisible;
+
+  function handleCardBattleComplete(event: CustomEvent<{ bonus: string | null }>) {
+    activeBonus = event.detail.bonus;
+    
+    // Propagate bonus to the WebGL game state
+    const currentLevelStr = (window as any).currentGameLevel;
+    if (currentLevelStr) {
+      try {
+        const payload = JSON.parse(currentLevelStr);
+        if (!payload.world_settings) {
+          payload.world_settings = {};
+        }
+        payload.world_settings.card_battle_bonus = activeBonus;
+        (window as any).currentGameLevel = JSON.stringify(payload);
+        (window as any).currentGameBonus = activeBonus;
+      } catch (e) {
+        console.error("Failed to parse/update level payload for card battle bonus:", e);
+      }
+    }
+    
+    dispatch('cardBattleBonus', activeBonus);
+    showCardBattle = false;
+    dispatch('status', activeBonus ? `🏆 Card Battle Victory! Bonus: ${activeBonus}` : 'Card Battle Skipped / Finished');
+  }
 
   function togglePauseGame() {
     const nextPaused = !isPaused;
@@ -62,6 +92,14 @@
 {#if isVisible}
   <div class="backdrop" role="button" tabindex="-1" on:click={close}>
     <div class="modal play-modal" role="dialog" tabindex="0" on:click|stopPropagation>
+      {#if showCardBattle}
+        <CardBattleLoadingScreen
+          {isMuted}
+          on:complete={handleCardBattleComplete}
+          on:skip={() => handleCardBattleComplete(new CustomEvent('complete', { detail: { bonus: null } }))}
+        />
+      {/if}
+
       <header class="play-header">
         <h2>🎮 Playing Game! 🎮</h2>
         <div class="play-controls-overlay">

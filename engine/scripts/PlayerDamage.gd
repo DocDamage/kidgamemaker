@@ -10,6 +10,9 @@ static func apply_damage(player: Node2D, amount: int) -> void:
 		elif diff == "easy":
 			amount = int(max(1.0, float(amount) * 0.5))
 
+	if player.has_meta("card_battle_bonus") and player.get_meta("card_battle_bonus") == "shield":
+		amount = int(max(1.0, float(amount) * 0.8))
+
 	if bool(player.get("is_blocking")):
 		if float(player.get("parry_window_timer")) > 0.0:
 			_handle_parry(player, main_ref)

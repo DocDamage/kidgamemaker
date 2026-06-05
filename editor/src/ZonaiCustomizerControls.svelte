@@ -14,6 +14,9 @@
   $: isSpring = entity.type === 'zonai_spring';
   $: isBeam = entity.type === 'zonai_beam';
   $: isBattery = entity.type === 'zonai_battery';
+  $: isSteeringStick = entity.type === 'zonai_steering_stick';
+  $: isStabilizer = entity.type === 'zonai_stabilizer';
+  $: isFlamethrower = entity.type === 'zonai_flamethrower';
 
   function saveRoom() {
     dispatch('saveRoom');
@@ -170,7 +173,31 @@
       on:change={saveRoom}
     />
   </div>
-{/if}
+  {:else if isSteeringStick}
+    <div class="option-group">
+      <span class="option-label-text">🎮 Driveable Steering Stick</span>
+      <p style="font-size: 0.8rem; color: #94a3b8; margin: 0; line-height: 1.4;">Walk near the steering stick to drive your rig with Arrow/WASD keys! Press Space to jump off.</p>
+    </div>
+  {:else if isStabilizer}
+    <div class="option-group">
+      <span class="option-label-text">⚖️ Gyro stabilizer</span>
+      <p style="font-size: 0.8rem; color: #94a3b8; margin: 0; line-height: 1.4;">Keeps the vehicle balanced and standing upright automatically.</p>
+    </div>
+  {:else if isFlamethrower}
+    <div class="option-group">
+      <span class="option-label-text">🔥 Flame Nozzle Direction:</span>
+      <select
+        class="option-select"
+        bind:value={entity.modifiers.zonai_direction}
+        on:change={saveRoom}
+      >
+        <option value="right">➡️ Right</option>
+        <option value="left">⬅️ Left</option>
+        <option value="up">⬆️ Up</option>
+        <option value="down">⬇️ Down</option>
+      </select>
+    </div>
+  {/if}
 
 <style>
   .option-group {

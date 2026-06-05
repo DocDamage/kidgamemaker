@@ -28,7 +28,7 @@ func _on_body_entered(body: Node) -> void:
 		_spawn_paint_burst(main)
 
 	if body.has_method("take_damage") and not body.name.begins_with("Player"):
-		body.take_damage(10)
+		body.take_damage(10, "water", shooter)
 		body.set_meta("paint_color", "green")
 		body.modulate = Color(0.2, 1.0, 0.2)
 

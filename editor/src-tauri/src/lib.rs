@@ -24,6 +24,7 @@ pub fn run() {
             commands::save_child_sprite,
             commands::load_child_sprite,
             commands::save_custom_audio,
+            commands::generate_magic_stamp,
             commands::package_game_project,
             commands::build_web_runner,
             commands::get_local_ip,

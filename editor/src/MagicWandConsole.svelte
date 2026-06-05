@@ -8,11 +8,13 @@
   const dispatch = createEventDispatcher<{
     close: void;
     saveRoom: void;
+    generateLevel: { biome: 'forest' | 'castle' | 'space'; difficulty: 'easy' | 'medium' | 'hard'; seed: string };
   }>();
 
   let commandText = '';
   let statusMessage = '';
   let statusColor = '#fbbf24';
+  let isListening = false;
 
   const suggestions = [
     'make it night',
@@ -23,8 +25,33 @@
     'make it clear',
     'spawn 3 slimes',
     'spawn 5 gems',
-    'clear hazards'
+    'clear hazards',
+    'build forest level easy',
+    'generate space map hard',
+    'make castle level medium'
   ];
+
+  const voicePrompts = [
+    "build an easy forest level seed magical",
+    "generate a spooky castle map on hard seed skull",
+    "make a low-gravity space level on medium",
+    "create a hard forest level with seed jungle-run",
+    "build a castle level on easy seed fortress-1"
+  ];
+
+  function simulateVoiceInput() {
+    isListening = true;
+    commandText = 'Listening... 🎙️';
+    statusMessage = '🎙️ Listening to your spoken description...';
+    statusColor = '#fbbf24';
+
+    setTimeout(() => {
+      isListening = false;
+      const selected = voicePrompts[Math.floor(Math.random() * voicePrompts.length)];
+      commandText = selected;
+      executeCommand();
+    }, 1500);
+  }
 
   function selectSuggestion(sug: string) {
     commandText = sug;
@@ -168,6 +195,37 @@
         return;
       }
     }
+    // 5. Procedural Level spoken layouts
+    const biomeKeywords = ['forest', 'jungle', 'woodland', 'castle', 'dungeon', 'spooky', 'space', 'cosmic', 'alien'];
+    const hasBiome = biomeKeywords.some(kw => cmd.includes(kw));
+    const isBuildCommand = cmd.includes('build') || cmd.includes('make') || cmd.includes('generate') || cmd.includes('create') || cmd.includes('level') || cmd.includes('layout') || cmd.includes('biome') || cmd.includes('map');
+
+    if (hasBiome && isBuildCommand) {
+      let biome: 'forest' | 'castle' | 'space' = 'forest';
+      if (cmd.includes('castle') || cmd.includes('dungeon') || cmd.includes('spooky')) {
+        biome = 'castle';
+      } else if (cmd.includes('space') || cmd.includes('cosmic') || cmd.includes('alien')) {
+        biome = 'space';
+      }
+
+      let difficulty: 'easy' | 'medium' | 'hard' = 'medium';
+      if (cmd.includes('easy') || cmd.includes('simple')) {
+        difficulty = 'easy';
+      } else if (cmd.includes('hard') || cmd.includes('difficult') || cmd.includes('challenging')) {
+        difficulty = 'hard';
+      }
+
+      const seedMatch = cmd.match(/seed\s+([a-zA-Z0-9_\-]+)/);
+      const seed = seedMatch ? seedMatch[1] : `voice-${Math.floor(Math.random() * 900 + 100)}`;
+
+      dispatch('generateLevel', { biome, difficulty, seed });
+      showSuccess(`🪄 Spell translated! Generated ${biome} level (${difficulty}) with seed "${seed}"!`);
+      commandText = '';
+      setTimeout(() => {
+        dispatch('close');
+      }, 1500);
+      return;
+    }
 
     showError("🔮 The magic wand didn't recognize that spell. Try one of the suggestions below!");
   }
@@ -205,6 +263,7 @@
       </p>
 
       <div class="input-row">
+        <button class="mic-btn" class:listening={isListening} on:click={simulateVoiceInput} title="Speak Spell! (Simulate Voice)">🎙️</button>
         <input
           type="text"
           bind:value={commandText}
@@ -396,5 +455,41 @@
     border-color: #fbbf24;
     color: white;
     background: rgba(251, 191, 36, 0.05);
+  }
+
+  .mic-btn {
+    background: #334155;
+    border: 2px solid #475569;
+    border-radius: 14px;
+    padding: 0 16px;
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mic-btn:hover {
+    background: #475569;
+    border-color: #fbbf24;
+  }
+
+  .mic-btn.listening {
+    background: #ef4444;
+    border-color: #f87171;
+    animation: mic-pulse 1s infinite alternate;
+  }
+
+  @keyframes mic-pulse {
+    from {
+      transform: scale(1);
+      box-shadow: 0 0 0 rgba(239, 68, 68, 0);
+    }
+    to {
+      transform: scale(1.1);
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+    }
   }
 </style>

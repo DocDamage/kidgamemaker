@@ -50,7 +50,7 @@ func explode() -> void:
 		if collider.has_method("take_damage") and not collider.name.begins_with("Player"):
 			var dist := global_position.distance_to(collider.global_position)
 			var falloff: float = 1.0 - clamp(dist / blast_radius, 0.0, 0.8)
-			collider.take_damage(int(45.0 * falloff))
+			collider.take_damage(int(45.0 * falloff), "fire", player)
 			if "velocity" in collider:
 				var dir: Vector2 = (collider.global_position - global_position).normalized()
 				collider.velocity += dir * 350.0 * falloff

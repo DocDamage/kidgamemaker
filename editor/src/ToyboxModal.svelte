@@ -10,11 +10,12 @@
   export let favorites: string[] = [];
   export let unlockedStamps: string[] = [];
 
-  const LOCKED_BY_DEFAULT = ['effects_fire', 'effects_snow', 'effects_sparkles'];
+  const LOCKED_BY_DEFAULT = ['effects_fire', 'effects_snow', 'effects_sparkles', 'celestial_sprite'];
   const LOCK_RECIPES: Record<string, string> = {
     'effects_fire': '🔥 Place 3 Fire Torches to unlock!',
     'effects_snow': '❄️ Place 3 Ice Crystals to unlock!',
-    'effects_sparkles': '🌟 Place 3 Star Pieces to unlock!'
+    'effects_sparkles': '🌟 Place 3 Star Pieces to unlock!',
+    'celestial_sprite': '🌌 Connect the Pegasus Diamond constellation in the Star Mapper drawer to unlock!'
   };
 
   function isItemLocked(itemId: string) {

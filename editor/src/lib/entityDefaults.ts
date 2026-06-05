@@ -60,6 +60,13 @@ export function ensurePlacedEntityDefaults(item: PlacedEntity): void {
     setDefault(modifiers, 'beam_range', 300.0);
   } else if (item.type === 'zonai_battery') {
     setDefault(modifiers, 'battery_capacity', 100.0);
+  } else if (item.type === 'zonai_steering_stick') {
+    // defaults
+  } else if (item.type === 'zonai_stabilizer') {
+    // defaults
+  } else if (item.type === 'zonai_flamethrower') {
+    setDefault(modifiers, 'zonai_direction', 'right');
+    setDefault(modifiers, 'damage', 10.0);
   } else if (item.type === 'companion_pikmin') {
     setDefault(modifiers, 'pikmin_color', 'red');
   } else if (item.type === 'companion_ghost') {

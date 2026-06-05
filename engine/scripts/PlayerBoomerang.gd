@@ -38,7 +38,7 @@ func _on_body_entered(body: Node) -> void:
 	if body.has_method("take_damage") and not body.name.begins_with("Player"):
 		if not body in _hit_enemies:
 			_hit_enemies.append(body)
-			body.take_damage(int(damage_val))
+			body.take_damage(int(damage_val), "", player)
 			if "velocity" in body and player != null:
 				var facing_direction := float(player.get("facing_direction"))
 				body.velocity += Vector2(facing_direction * 120.0, -80.0)
@@ -71,7 +71,7 @@ func _explode() -> void:
 		if collider.has_method("take_damage") and not collider.name.begins_with("Player"):
 			var dist := global_position.distance_to(collider.global_position)
 			var falloff: float = 1.0 - clamp(dist / 60.0, 0.0, 0.8)
-			collider.take_damage(int(35.0 * falloff))
+			collider.take_damage(int(35.0 * falloff), "fire" if is_explosive else "", player)
 		if collider.has_meta("is_destructible") and collider.get_meta("is_destructible") == true:
 			collider.call_deferred("shatter")
 	

@@ -35,6 +35,8 @@ var is_frozen: bool = false
 var freeze_timer: float = 0.0
 var is_shocked: bool = false
 var shock_timer: float = 0.0
+var is_wet: bool = false
+var wet_timer: float = 0.0
 var latched_pikmin: Array = []
 var boss_hud_style: String = "retro"
 var boss_phases_count: int = 2
@@ -46,8 +48,10 @@ var current_phase: int = 1
 var phase_hp_thresholds: Array = []
 var tail_health: int = 60
 var horn_health: int = 60
+var wing_health: int = 60
 var tail_broken: bool = false
 var horn_broken: bool = false
+var wing_broken: bool = false
 
 
 func _ready() -> void:
@@ -72,6 +76,7 @@ func _ready() -> void:
 		patrol_speed *= 1.5
 		max_health = max(max_health, 300)
 		current_health = max_health
+		_setup_boss_part_labels()
 		if boss_phases_count == 2:
 			phase_hp_thresholds = [int(max_health * 0.5)]
 		elif boss_phases_count == 3:
@@ -127,6 +132,10 @@ func _on_damage_area_body_entered(body: Node) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if boss_mode:
+		queue_redraw()
+		_update_boss_part_labels()
+
 	# Sleeping: the enemy dozes off — Zzz particles, 30% speed, no attacks
 	if is_sleeping:
 		velocity.x = move_toward(velocity.x, 0.0, 400.0 * delta)
@@ -164,6 +173,15 @@ func _physics_process(delta: float) -> void:
 			is_burning = false
 			modulate = Color.WHITE
 
+	if is_wet:
+		wet_timer -= delta
+		if not is_frozen and not is_shocked and not is_burning:
+			modulate = Color(0.5, 0.7, 1.0)
+		if wet_timer <= 0.0:
+			is_wet = false
+			if not is_frozen and not is_shocked and not is_burning:
+				modulate = Color.WHITE
+
 	if _stun_spinner != null:
 		if stun_timer > 0.0:
 			_stun_spinner.visible = true
@@ -179,7 +197,11 @@ func _physics_process(delta: float) -> void:
 				_shoot_projectile()
 				_shoot_timer = projectile_interval
 
-	if behavior_type != "fly":
+	var active_behavior = behavior_type
+	if wing_broken and active_behavior == "fly":
+		active_behavior = "patrol"
+
+	if active_behavior != "fly":
 		if not is_on_floor():
 			velocity.y += gravity * gravity_scale * delta
 	else:
@@ -190,12 +212,12 @@ func _physics_process(delta: float) -> void:
 	if knockback_timer > 0.0:
 		knockback_timer -= delta
 		velocity.x = move_toward(velocity.x, 0.0, 500.0 * delta)
-		if behavior_type == "fly":
+		if active_behavior == "fly":
 			velocity.y = move_toward(velocity.y, 0.0, 500.0 * delta)
 	elif stun_timer > 0.0:
 		stun_timer -= delta
 		velocity.x = 0.0
-		if behavior_type == "fly":
+		if active_behavior == "fly":
 			velocity.y = 0.0
 	else:
 		var active_speed = patrol_speed
@@ -205,7 +227,7 @@ func _physics_process(delta: float) -> void:
 		if latched_pikmin.size() > 0:
 			active_speed *= 0.5
 
-		match behavior_type:
+		match active_behavior:
 			"chase":
 				var main = get_tree().get_root().get_node_or_null("Main")
 				var player = main.active_player if main != null else null
@@ -249,7 +271,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 	if stun_timer <= 0.0 and knockback_timer <= 0.0:
-		if behavior_type == "fly" or behavior_type == "chase":
+		if active_behavior == "fly" or active_behavior == "chase":
 			if is_on_wall():
 				direction *= -1
 				_update_probe()
@@ -312,49 +334,166 @@ func _shoot_projectile() -> void:
 
 
 
-func take_damage(amount: int, element: String = "") -> void:
+func take_damage(amount: int, element: String = "", attacker: Node2D = null) -> void:
 	var final_amount := amount
-	var weakness = str(get_meta("weakness_element")).to_lower() if has_meta("weakness_element") else ""
+	var final_element := element.to_lower()
+	var triggered_combo := ""
 	
+	# Determine if any elemental combos occur
+	if final_element != "":
+		# Melt (Fire + Ice): 2.0x damage, removes freeze
+		if final_element == "fire" and is_frozen:
+			triggered_combo = "melt"
+			final_amount = int(final_amount * 2.0)
+			is_frozen = false
+			freeze_timer = 0.0
+		elif final_element == "ice" and is_burning:
+			triggered_combo = "melt"
+			final_amount = int(final_amount * 2.0)
+			is_burning = false
+			burn_timer = 0.0
+		
+		# Vaporize (Water + Fire): 2.0x damage, removes burn
+		elif final_element == "water" and is_burning:
+			triggered_combo = "vaporize"
+			final_amount = int(final_amount * 2.0)
+			is_burning = false
+			burn_timer = 0.0
+		elif final_element == "fire" and is_wet:
+			triggered_combo = "vaporize"
+			final_amount = int(final_amount * 2.0)
+			is_wet = false
+			wet_timer = 0.0
+			
+		# Supercharge (Lightning + Fire/Water/Wet/Shock): 2.0x damage, applies shock and inflicts area lightning damage
+		elif final_element == "lightning" and (is_burning or is_wet or is_shocked):
+			triggered_combo = "supercharge"
+			final_amount = int(final_amount * 2.0)
+			is_burning = false
+			burn_timer = 0.0
+			is_wet = false
+			wet_timer = 0.0
+		elif (final_element == "fire" or final_element == "water") and is_shocked:
+			triggered_combo = "supercharge"
+			final_amount = int(final_amount * 2.0)
+			is_shocked = false
+			shock_timer = 0.0
+			
+		# Shatter (Lightning/Ice + Frozen): 1.5x damage, shatters ice status
+		elif (final_element == "lightning" or final_element == "ice") and is_frozen:
+			triggered_combo = "shatter"
+			final_amount = int(final_amount * 1.5)
+			is_frozen = false
+			freeze_timer = 0.0
+			
+	# Also Shatter if taking physical damage (no element) while frozen!
+	if final_element == "" and is_frozen:
+		triggered_combo = "shatter"
+		final_amount = int(final_amount * 1.5)
+		is_frozen = false
+		freeze_timer = 0.0
+
+	# Apply elemental status if no combo occurred
+	if triggered_combo == "":
+		if final_element == "fire":
+			set_burning(5.0)
+		elif final_element == "ice":
+			set_frozen(3.0)
+		elif final_element == "lightning":
+			set_shocked(2.0)
+		elif final_element == "water":
+			is_wet = true
+			wet_timer = 5.0
+
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if triggered_combo != "":
+		var combo_color := Color.WHITE
+		var combo_text := ""
+		if triggered_combo == "melt":
+			combo_color = Color.ORANGE
+			combo_text = "🔥❄️ MELT (2.0x DMG)!"
+		elif triggered_combo == "vaporize":
+			combo_color = Color.CYAN
+			combo_text = "💧🔥 VAPORIZE (2.0x DMG)!"
+		elif triggered_combo == "supercharge":
+			combo_color = Color.YELLOW
+			combo_text = "⚡💥 SUPERCHARGE (2.0x DMG)!"
+			_trigger_area_shock(main)
+		elif triggered_combo == "shatter":
+			combo_color = Color.DEEP_SKY_BLUE
+			combo_text = "❄️🔨 SHATTER (1.5x DMG)!"
+			
+		if main != null and main.has_method("spawn_floating_text"):
+			main.spawn_floating_text(combo_text, global_position + Vector2(0, -30), combo_color)
+		if main != null and main.has_method("play_sfx"):
+			main.play_sfx("hit")
+
+	var weakness = str(get_meta("weakness_element")).to_lower() if has_meta("weakness_element") else ""
 	var is_weak_hit := false
 	if weakness != "":
-		if element.to_lower() == weakness:
+		if final_element == weakness:
 			is_weak_hit = true
 		elif weakness == "fire" and is_burning:
 			is_weak_hit = true
 		elif weakness == "ice" and is_frozen:
 			is_weak_hit = true
-		elif weakness == "water" and water_type != "normal" and inside_water:
-			is_weak_hit = true
 			
 	if is_weak_hit:
 		final_amount *= 3
-		var main = get_tree().get_root().get_node_or_null("Main")
 		if main != null and main.has_method("spawn_floating_text"):
 			main.spawn_floating_text("🎯 WEAKNESS HIT! 3x DAMAGE! 🎯", global_position, Color.GOLD)
 
-	# Boss Part Breaking logic
-	if boss_mode:
-		if not tail_broken:
-			tail_health -= final_amount
-			if tail_health <= 0:
-				tail_broken = true
-				patrol_speed *= 0.6 # Slow down boss because tail is broken!
-				var main = get_tree().get_root().get_node_or_null("Main")
-				if main != null and main.has_method("spawn_floating_text"):
-					main.spawn_floating_text("💥 BOSS TAIL BROKEN (Speed Reduced!)", global_position + Vector2(0, -60), Color.ORANGE)
-				if main != null and main.has_method("play_sfx"):
-					main.play_sfx("hit")
-		elif not horn_broken:
+	# Boss Part Breaking logic based on relative position
+	if boss_mode and attacker != null:
+		var local_diff = attacker.global_position - global_position
+		var target_part := ""
+		
+		# Classify attack directions:
+		# top: local_diff.y < -20.0
+		# front: (local_diff.x * direction) > 10.0
+		# rear: (local_diff.x * direction) < -10.0
+		if local_diff.y < -20.0 and not wing_broken:
+			target_part = "wing"
+		elif local_diff.x * direction > 10.0 and not horn_broken:
+			target_part = "horn"
+		elif local_diff.x * direction < -10.0 and not tail_broken:
+			target_part = "tail"
+			
+		if target_part == "wing":
+			wing_health -= final_amount
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("🎯 WING HIT!", global_position + Vector2(0, -50), Color.CYAN)
+			if wing_health <= 0:
+				wing_broken = true
+				if main != null:
+					if main.has_method("spawn_floating_text"):
+						main.spawn_floating_text("💥 BOSS WING BROKEN (Flight Disabled!)", global_position + Vector2(0, -60), Color.CYAN)
+					if main.has_method("play_sfx"):
+						main.play_sfx("hit")
+		elif target_part == "horn":
 			horn_health -= final_amount
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("🎯 HORN HIT!", global_position + Vector2(0, -50), Color.RED)
 			if horn_health <= 0:
 				horn_broken = true
-				shoot_projectiles = false # Stop shooting because horn is broken!
-				var main = get_tree().get_root().get_node_or_null("Main")
-				if main != null and main.has_method("spawn_floating_text"):
-					main.spawn_floating_text("💥 BOSS HORN BROKEN (Projectiles Disabled!)", global_position + Vector2(0, -60), Color.RED)
-				if main != null and main.has_method("play_sfx"):
-					main.play_sfx("hit")
+				shoot_projectiles = false
+				if main != null:
+					if main.has_method("spawn_floating_text"):
+						main.spawn_floating_text("💥 BOSS HORN BROKEN (Projectiles Disabled!)", global_position + Vector2(0, -60), Color.RED)
+					if main.has_method("play_sfx"):
+						main.play_sfx("hit")
+		elif target_part == "tail":
+			tail_health -= final_amount
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("🎯 TAIL HIT!", global_position + Vector2(0, -50), Color.GOLD)
+			if tail_health <= 0:
+				tail_broken = true
+				patrol_speed *= 0.5
+				if main != null:
+					if main.has_method("spawn_floating_text"):
+						main.spawn_floating_text("💥 BOSS TAIL BROKEN (Speed Reduced!)", global_position + Vector2(0, -60), Color.GOLD)
+					if main.has_method("play_sfx"):
+						main.play_sfx("hit")
 
 	current_health -= final_amount
 	knockback_timer = 0.25
@@ -596,3 +735,71 @@ func put_to_sleep() -> void:
 	var main = get_tree().get_root().get_node_or_null("Main")
 	if main != null and main.has_method("spawn_floating_text"):
 		main.spawn_floating_text("💤 ZZZ...", global_position + Vector2(0, -50), Color(0.7, 0.85, 1.0))
+
+
+func _setup_boss_part_labels() -> void:
+	var parts = {
+		"HornLabel": {"text": "😈 HORN", "color": Color.RED},
+		"WingLabel": {"text": "🪶 WING", "color": Color.CYAN},
+		"TailLabel": {"text": "🦎 TAIL", "color": Color.GOLD}
+	}
+	for part_name in parts:
+		var info = parts[part_name]
+		var lbl := Label.new()
+		lbl.name = part_name
+		lbl.text = info["text"]
+		var settings := LabelSettings.new()
+		settings.font_size = 8
+		settings.font_color = info["color"]
+		settings.outline_size = 2
+		settings.outline_color = Color.BLACK
+		lbl.label_settings = settings
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lbl.size = Vector2(40, 12)
+		add_child(lbl)
+
+
+func _update_boss_part_labels() -> void:
+	var horn_lbl = get_node_or_null("HornLabel")
+	var wing_lbl = get_node_or_null("WingLabel")
+	var tail_lbl = get_node_or_null("TailLabel")
+	
+	if horn_lbl:
+		horn_lbl.position = Vector2(20 * direction, -15) - horn_lbl.size * 0.5
+		horn_lbl.visible = not horn_broken
+	if wing_lbl:
+		wing_lbl.position = Vector2(-10 * direction, -35) - wing_lbl.size * 0.5
+		wing_lbl.visible = not wing_broken
+	if tail_lbl:
+		tail_lbl.position = Vector2(-25 * direction, 10) - tail_lbl.size * 0.5
+		tail_lbl.visible = not tail_broken
+
+
+func _draw() -> void:
+	if not boss_mode:
+		return
+	# Draw hit zone outlines/indicators if not broken
+	if not horn_broken:
+		var horn_pos = Vector2(20 * direction, -15)
+		draw_arc(horn_pos, 12.0, 0, 2 * PI, 16, Color.RED, 2.0)
+	if not wing_broken:
+		var wing_pos = Vector2(-10 * direction, -35)
+		draw_arc(wing_pos, 16.0, 0, 2 * PI, 16, Color.CYAN, 2.0)
+	if not tail_broken:
+		var tail_pos = Vector2(-25 * direction, 10)
+		draw_arc(tail_pos, 12.0, 0, 2 * PI, 16, Color.GOLD, 2.0)
+
+
+func _trigger_area_shock(main: Node) -> void:
+	if main == null:
+		return
+	var radius := 120.0
+	var area_dmg := 15
+	for child in main.get_children():
+		if is_instance_valid(child) and child != self and child.has_method("take_damage") and not child.name.begins_with("Player"):
+			var child_2d = child as Node2D
+			if child_2d != null and global_position.distance_to(child_2d.global_position) < radius:
+				child_2d.take_damage(area_dmg, "lightning", self)
+				if main.has_method("spawn_floating_text"):
+					main.spawn_floating_text("⚡ SHOCK!", child_2d.global_position, Color.YELLOW)

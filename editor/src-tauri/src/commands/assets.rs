@@ -534,3 +534,463 @@ pub fn save_custom_audio(
 
     Ok(format!("Custom SFX for {} successfully saved.", asset_id))
 }
+
+fn get_color_from_prompt(prompt: &str) -> &str {
+    let p = prompt.to_lowercase();
+    if p.contains("red") || p.contains("fire") || p.contains("lava") || p.contains("ruby") || p.contains("hot") {
+        "#ff4b4b"
+    } else if p.contains("blue") || p.contains("water") || p.contains("ice") || p.contains("sapphire") || p.contains("sky") || p.contains("cold") {
+        "#3b82f6"
+    } else if p.contains("green") || p.contains("grass") || p.contains("herb") || p.contains("emerald") || p.contains("slime") || p.contains("nature") {
+        "#10b981"
+    } else if p.contains("yellow") || p.contains("gold") || p.contains("sun") || p.contains("coin") || p.contains("star") {
+        "#eab308"
+    } else if p.contains("purple") || p.contains("magic") || p.contains("shadow") || p.contains("void") || p.contains("poison") {
+        "#8b5cf6"
+    } else if p.contains("orange") || p.contains("sunset") || p.contains("autumn") || p.contains("bronze") {
+        "#f97316"
+    } else if p.contains("pink") || p.contains("love") || p.contains("cute") {
+        "#ec4899"
+    } else if p.contains("white") || p.contains("snow") || p.contains("cloud") || p.contains("light") {
+        "#f8fafc"
+    } else if p.contains("black") || p.contains("dark") || p.contains("shadow") {
+        "#0f172a"
+    } else if p.contains("grey") || p.contains("gray") || p.contains("stone") || p.contains("iron") || p.contains("metal") {
+        "#64748b"
+    } else {
+        "#fbbf24"
+    }
+}
+
+fn parse_hex_color(hex: &str) -> (u8, u8, u8) {
+    let hex = hex.trim_start_matches('#');
+    if hex.len() == 6 {
+        let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0);
+        let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0);
+        let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0);
+        (r, g, b)
+    } else {
+        (255, 255, 255)
+    }
+}
+
+fn generate_procedural_pixel_grid(prompt: &str) -> Vec<Vec<String>> {
+    let mut grid = vec![vec!["transparent".to_string(); 16]; 16];
+    let p = prompt.to_lowercase();
+    let main_color = get_color_from_prompt(&p).to_string();
+    let sec_color = if main_color == "#eab308" { "#ff4b4b".to_string() } else { "#eab308".to_string() };
+    let outline_color = "#1e293b".to_string();
+    let highlight_color = "#ffffff".to_string();
+
+    if p.contains("sword") || p.contains("blade") || p.contains("dagger") || p.contains("saber") || p.contains("weapon") || p.contains("knife") {
+        for i in 0..9 {
+            let x = 3 + i;
+            let y = 12 - i;
+            grid[y][x] = main_color.clone();
+            if y > 0 && x > 0 {
+                grid[y - 1][x] = highlight_color.clone();
+            }
+        }
+        grid[12][3] = sec_color.clone();
+        grid[10][5] = sec_color.clone();
+        grid[13][2] = "#78350f".to_string();
+        grid[14][1] = outline_color.clone();
+    } else if p.contains("potion") || p.contains("bottle") || p.contains("flask") || p.contains("elixir") || p.contains("drink") || p.contains("poison") {
+        for y in 2..15 {
+            for x in 3..13 {
+                if y >= 2 && y <= 4 {
+                    if x == 6 || x == 9 {
+                        grid[y][x] = outline_color.clone();
+                    } else if x == 7 || x == 8 {
+                        grid[y][x] = "#93c5fd".to_string();
+                    }
+                }
+                if y == 5 {
+                    if x == 5 || x == 10 {
+                        grid[y][x] = outline_color.clone();
+                    } else if x >= 6 && x <= 9 {
+                        grid[y][x] = "#93c5fd".to_string();
+                    }
+                }
+                if y >= 6 && y <= 13 {
+                    if x == 4 || x == 11 {
+                        grid[y][x] = outline_color.clone();
+                    } else if x > 4 && x < 11 {
+                        if y >= 9 {
+                            grid[y][x] = main_color.clone();
+                        } else {
+                            grid[y][x] = "#93c5fd".to_string();
+                        }
+                    }
+                }
+                if y == 14 {
+                    if x >= 5 && x <= 10 {
+                        grid[y][x] = outline_color.clone();
+                    }
+                }
+            }
+        }
+        grid[7][6] = highlight_color.clone();
+        grid[8][6] = highlight_color.clone();
+        grid[1][7] = "#78350f".to_string();
+        grid[1][8] = "#78350f".to_string();
+    } else if p.contains("gem") || p.contains("crystal") || p.contains("ruby") || p.contains("diamond") || p.contains("jewel") || p.contains("emerald") || p.contains("sapphire") {
+        for y in 2..14 {
+            for x in 2..14 {
+                let dist_x = (x as i32 - 8).abs();
+                let dist_y = (y as i32 - 8).abs();
+                if dist_x + dist_y <= 6 {
+                    if dist_x + dist_y == 6 {
+                        grid[y][x] = outline_color.clone();
+                    } else {
+                        grid[y][x] = main_color.clone();
+                    }
+                }
+            }
+        }
+        grid[5][7] = highlight_color.clone();
+        grid[6][6] = highlight_color.clone();
+    } else if p.contains("heart") || p.contains("love") || p.contains("health") || p.contains("life") {
+        let heart_pixels = [
+            (3, 5), (3, 6), (3, 10), (3, 11),
+            (4, 4), (4, 5), (4, 6), (4, 7), (4, 9), (4, 10), (4, 11), (4, 12),
+            (5, 3), (5, 4), (5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11), (5, 12), (5, 13),
+            (6, 3), (6, 4), (6, 5), (6, 6), (6, 7), (6, 8), (6, 9), (6, 10), (6, 11), (6, 12), (6, 13),
+            (7, 3), (7, 4), (7, 5), (7, 6), (7, 7), (7, 8), (7, 9), (7, 10), (7, 11), (7, 12), (7, 13),
+            (8, 4), (8, 5), (8, 6), (8, 7), (8, 8), (8, 9), (8, 10), (8, 11), (8, 12),
+            (9, 5), (9, 6), (9, 7), (9, 8), (9, 9), (9, 10), (9, 11),
+            (10, 6), (10, 7), (10, 8), (10, 9), (10, 10),
+            (11, 7), (11, 8), (11, 9),
+            (12, 8)
+        ];
+        for &(y, x) in &heart_pixels {
+            grid[y][x] = main_color.clone();
+        }
+        for y in 2..14 {
+            for x in 2..14 {
+                if grid[y][x] == main_color {
+                    let mut is_edge = false;
+                    for &(dx, dy) in &[(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                        let nx = (x as i32 + dx) as usize;
+                        let ny = (y as i32 + dy) as usize;
+                        if grid[ny][nx] == "transparent" {
+                            is_edge = true;
+                        }
+                    }
+                    if is_edge {
+                        grid[y][x] = outline_color.clone();
+                    }
+                }
+            }
+        }
+        for &(y, x) in &heart_pixels {
+            if grid[y][x] != outline_color {
+                grid[y][x] = main_color.clone();
+            }
+        }
+        grid[5][5] = highlight_color.clone();
+        grid[6][5] = highlight_color.clone();
+    } else if p.contains("star") || p.contains("sun") || p.contains("sparkle") || p.contains("wish") || p.contains("light") {
+        let star_pixels = [
+            (2, 8),
+            (3, 8),
+            (4, 7), (4, 8), (4, 9),
+            (5, 7), (5, 8), (5, 9),
+            (6, 2), (6, 3), (6, 4), (6, 5), (6, 6), (6, 7), (6, 8), (6, 9), (6, 10), (6, 11), (6, 12), (6, 13), (6, 14),
+            (7, 3), (7, 4), (7, 5), (7, 6), (7, 7), (7, 8), (7, 9), (7, 10), (7, 11), (7, 12), (7, 13),
+            (8, 4), (8, 5), (8, 6), (8, 7), (8, 8), (8, 9), (8, 10), (8, 11), (8, 12),
+            (9, 5), (9, 6), (9, 7), (9, 8), (9, 9), (9, 10), (9, 11),
+            (10, 5), (10, 6), (10, 7), (10, 9), (10, 10), (10, 11),
+            (11, 4), (11, 5), (11, 11), (11, 12),
+            (12, 4), (12, 12)
+        ];
+        for &(y, x) in &star_pixels {
+            grid[y][x] = main_color.clone();
+        }
+        for y in 1..14 {
+            for x in 1..15 {
+                if grid[y][x] == main_color {
+                    let mut is_edge = false;
+                    for &(dx, dy) in &[(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                        let nx = (x as i32 + dx) as usize;
+                        let ny = (y as i32 + dy) as usize;
+                        if grid[ny][nx] == "transparent" {
+                            is_edge = true;
+                        }
+                    }
+                    if is_edge {
+                        grid[y][x] = outline_color.clone();
+                    }
+                }
+            }
+        }
+        for &(y, x) in &star_pixels {
+            if grid[y][x] != outline_color {
+                grid[y][x] = main_color.clone();
+            }
+        }
+        grid[5][8] = highlight_color.clone();
+    } else if p.contains("shield") || p.contains("buckler") || p.contains("plate") || p.contains("barrier") {
+        for y in 2..14 {
+            for x in 3..13 {
+                let is_edge = x == 3 || x == 12 || y == 2 || (y == 13 && x == 8) || (y == 12 && (x == 7 || x == 9)) || (y == 11 && (x == 6 || x == 10)) || (y == 10 && (x == 5 || x == 11)) || (y == 9 && (x == 4 || x == 12));
+                if is_edge {
+                    grid[y][x] = outline_color.clone();
+                } else {
+                    if x >= 4 && x <= 11 && y <= (8 + (11 - x as i32) as usize) && y <= (8 + (x as i32 - 4) as usize) {
+                        if x == 7 || x == 8 || y == 7 || y == 8 {
+                            grid[y][x] = sec_color.clone();
+                        } else {
+                            grid[y][x] = main_color.clone();
+                        }
+                    }
+                }
+            }
+        }
+        grid[3][5] = highlight_color.clone();
+    } else if p.contains("key") || p.contains("lock") {
+        for y in 3..9 {
+            for x in 3..9 {
+                let dist_x = (x as i32 - 5).abs();
+                let dist_y = (y as i32 - 5).abs();
+                if dist_x == 2 || dist_y == 2 {
+                    grid[y][x] = main_color.clone();
+                }
+            }
+        }
+        for i in 0..7 {
+            let x = 7 + i;
+            let y = 7 + i;
+            grid[y][x] = main_color.clone();
+        }
+        grid[11][13] = main_color.clone();
+        grid[12][12] = main_color.clone();
+        grid[13][11] = main_color.clone();
+        grid[10][12] = main_color.clone();
+
+        for y in 1..15 {
+            for x in 1..15 {
+                if grid[y][x] == main_color {
+                    let mut is_edge = false;
+                    for &(dx, dy) in &[(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                        let nx = (x as i32 + dx) as usize;
+                        let ny = (y as i32 + dy) as usize;
+                        if grid[ny][nx] == "transparent" {
+                            is_edge = true;
+                        }
+                    }
+                    if is_edge {
+                        grid[y][x] = outline_color.clone();
+                    }
+                }
+            }
+        }
+    } else if p.contains("slime") || p.contains("monster") || p.contains("ghost") || p.contains("creature") || p.contains("beast") || p.contains("dragon") || p.contains("enemy") {
+        for y in 4..14 {
+            for x in 2..14 {
+                if y == 4 && (x < 5 || x > 10) { continue; }
+                if y == 5 && (x < 4 || x > 11) { continue; }
+                if y == 13 && (x < 3 || x > 12) { continue; }
+                grid[y][x] = main_color.clone();
+            }
+        }
+        grid[7][5] = "#ffffff".to_string();
+        grid[7][6] = "#000000".to_string();
+        grid[7][9] = "#ffffff".to_string();
+        grid[7][10] = "#000000".to_string();
+        grid[10][7] = "#000000".to_string();
+        grid[10][8] = "#000000".to_string();
+        grid[9][4] = "#ec4899".to_string();
+        grid[9][11] = "#ec4899".to_string();
+
+        for y in 3..15 {
+            for x in 1..15 {
+                if grid[y][x] == main_color {
+                    let mut is_edge = false;
+                    for &(dx, dy) in &[(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                        let nx = (x as i32 + dx) as usize;
+                        let ny = (y as i32 + dy) as usize;
+                        if grid[ny][nx] == "transparent" {
+                            is_edge = true;
+                        }
+                    }
+                    if is_edge {
+                        grid[y][x] = outline_color.clone();
+                    }
+                }
+            }
+        }
+    } else if p.contains("block") || p.contains("brick") || p.contains("floor") || p.contains("wall") || p.contains("tile") || p.contains("stone") || p.contains("dirt") {
+        for y in 0..16 {
+            for x in 0..16 {
+                if x == 0 || x == 15 || y == 0 || y == 15 {
+                    grid[y][x] = outline_color.clone();
+                } else if x == 1 || y == 1 {
+                    grid[y][x] = highlight_color.clone();
+                } else if x == 14 || y == 14 {
+                    grid[y][x] = "#334155".to_string();
+                } else {
+                    grid[y][x] = main_color.clone();
+                }
+            }
+        }
+        if p.contains("brick") {
+            for x in 1..15 {
+                grid[8][x] = outline_color.clone();
+            }
+            for y in 1..8 {
+                grid[y][8] = outline_color.clone();
+            }
+            for y in 8..15 {
+                grid[y][4] = outline_color.clone();
+                grid[y][12] = outline_color.clone();
+            }
+        }
+    } else if p.contains("flower") || p.contains("tree") || p.contains("plant") || p.contains("leaf") || p.contains("bush") {
+        for y in 9..15 {
+            grid[y][8] = "#10b981".to_string();
+        }
+        grid[11][7] = "#10b981".to_string();
+        grid[12][9] = "#10b981".to_string();
+        grid[6][8] = "#eab308".to_string();
+        grid[5][8] = main_color.clone();
+        grid[7][8] = main_color.clone();
+        grid[6][7] = main_color.clone();
+        grid[6][9] = main_color.clone();
+        grid[5][7] = main_color.clone();
+        grid[5][9] = main_color.clone();
+        grid[7][7] = main_color.clone();
+        grid[7][9] = main_color.clone();
+    } else if p.contains("coin") {
+        for y in 2..14 {
+            for x in 2..14 {
+                let dist_x = (x as i32 - 8).abs();
+                let dist_y = (y as i32 - 8).abs();
+                if dist_x * dist_x + dist_y * dist_y <= 25 {
+                    if dist_x * dist_x + dist_y * dist_y >= 20 {
+                        grid[y][x] = outline_color.clone();
+                    } else if dist_x == 0 || dist_y == 0 {
+                        grid[y][x] = highlight_color.clone();
+                    } else {
+                        grid[y][x] = main_color.clone();
+                    }
+                }
+            }
+        }
+    } else {
+        for y in 3..13 {
+            for x in 3..13 {
+                if x == 3 || x == 12 || y == 3 || y == 12 {
+                    grid[y][x] = outline_color.clone();
+                } else if x == 4 || y == 4 {
+                    grid[y][x] = highlight_color.clone();
+                } else if x == 7 || x == 8 || y == 7 || y == 8 {
+                    grid[y][x] = sec_color.clone();
+                } else {
+                    grid[y][x] = main_color.clone();
+                }
+            }
+        }
+    }
+
+    grid
+}
+
+#[tauri::command]
+pub fn generate_magic_stamp(
+    asset_id: String,
+    category: String,
+    prompt: String,
+) -> Result<Vec<Vec<String>>, String> {
+    let grid = generate_procedural_pixel_grid(&prompt);
+    let repo_root = locate_repo_root()?;
+    let target_dir = repo_root
+        .join("engine")
+        .join("data")
+        .join("assets")
+        .join(&category)
+        .join(&asset_id);
+
+    fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+
+    let mut rgba_buf = vec![0u8; 16 * 16 * 4];
+    for y in 0..16 {
+        for x in 0..16 {
+            let color = &grid[y][x];
+            let idx = (y * 16 + x) * 4;
+            if color == "transparent" {
+                rgba_buf[idx] = 0;
+                rgba_buf[idx + 1] = 0;
+                rgba_buf[idx + 2] = 0;
+                rgba_buf[idx + 3] = 0;
+            } else {
+                let (r, g, b) = parse_hex_color(color);
+                rgba_buf[idx] = r;
+                rgba_buf[idx + 1] = g;
+                rgba_buf[idx + 2] = b;
+                rgba_buf[idx + 3] = 255;
+            }
+        }
+    }
+
+    let png_filename = format!("{}.png", asset_id);
+    let png_path = target_dir.join(&png_filename);
+    let file = fs::File::create(&png_path).map_err(|e| e.to_string())?;
+    let mut w = std::io::BufWriter::new(file);
+
+    let mut encoder = png::Encoder::new(&mut w, 16, 16);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+    writer
+        .write_image_data(&rgba_buf)
+        .map_err(|e| e.to_string())?;
+
+    let template_type = match category.as_str() {
+        "heroes" => "player",
+        "enemies" => "enemy",
+        "terrain" => "terrain",
+        "collectibles" => "collectible",
+        "portals" => "portal",
+        _ => "decoration",
+    };
+
+    let (col_w, col_h) = match template_type {
+        "player" => (32, 48),
+        "terrain" => (128, 32),
+        "enemy" => (32, 32),
+        "collectible" => (24, 24),
+        "portal" => (48, 64),
+        _ => (48, 48),
+    };
+
+    let sidecar_filename = format!("{}.json", asset_id);
+    let sidecar_path = target_dir.join(&sidecar_filename);
+
+    let sidecar_payload = serde_json::json!({
+        "schema_version": 1,
+        "asset_id": asset_id,
+        "asset_name": format!("Magic {}", asset_id),
+        "category": category,
+        "runtime_template": template_type,
+        "visual": png_filename,
+        "placement_logic": {
+            "snapping_type": if category == "terrain" { "edge_to_edge" } else { "gravity_snap" },
+            "parallax_bucket": "play_layer"
+        },
+        "collision": {
+            "shape": "rectangle",
+            "size": [col_w, col_h]
+        }
+    });
+
+    fs::write(
+        &sidecar_path,
+        serde_json::to_string_pretty(&sidecar_payload)
+            .map_err(|err| format!("Failed to serialize sprite sidecar: {err}"))?,
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(grid)
+}
+

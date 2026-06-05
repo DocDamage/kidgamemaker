@@ -105,6 +105,19 @@ var calm_mode: bool = false
 var enemy_speed_multiplier: float = 1.0
 var boss_intro_played: bool = false
 var current_boss_node: Node2D = null
+var card_battle_bonus: String = ""
+
+# Turf War Mode
+var turf_war_enabled: bool = false
+var turf_war_time_left: float = 180.0
+var turf_war_ended: bool = false
+
+# Celestial Brush
+var brush_active: bool = false
+var brush_points: Array[Vector2] = []
+var brush_line_node: Line2D = null
+var brush_overlay_label: Label = null
+var game_speed_multiplier: float = 1.0
 
 var hud_canvas: CanvasLayer = null
 var hud_health_label: Label = null
@@ -358,6 +371,7 @@ func _on_js_live_update(args: Array) -> void:
 	_ensure_rule_executor()
 	if rule_executor != null and is_instance_valid(rule_executor) and rule_executor.has_method("auto_connect_proximity_triggers"):
 		rule_executor.auto_connect_proximity_triggers(room_rules)
+	_initialize_logic_gates()
 
 	_apply_weather_particles()
 	_configure_camera_limits()
@@ -371,6 +385,47 @@ func _unhandled_input(event: InputEvent) -> void:
 		if current_run.size() > 20:
 			run_record = current_run
 		get_tree().reload_current_scene()
+		return
+
+	if event is InputEventKey and event.pressed and event.keycode == KEY_B:
+		toggle_celestial_brush()
+		get_viewport().set_input_as_handled()
+		return
+
+	if brush_active:
+		if event is InputEventMouseButton:
+			if event.button_index == MOUSE_BUTTON_LEFT:
+				if event.pressed:
+					brush_points.clear()
+					if brush_line_node != null:
+						brush_line_node.clear_points()
+					var mouse_pos := get_global_mouse_position()
+					brush_points.append(mouse_pos)
+					if brush_line_node != null:
+						brush_line_node.add_point(mouse_pos)
+				else:
+					if brush_points.size() >= 10:
+						var gesture = _classify_stroke(brush_points)
+						_execute_brush_miracle(gesture, brush_points)
+					else:
+						if brush_line_node != null:
+							brush_line_node.clear_points()
+						var center_pos = get_global_mouse_position()
+						spawn_floating_text("❌ TOO SHORT", center_pos, Color.RED)
+					brush_points.clear()
+					_deactivate_brush()
+				get_viewport().set_input_as_handled()
+				return
+
+		elif event is InputEventMouseMotion:
+			if event.button_mask & MOUSE_BUTTON_MASK_LEFT:
+				var mouse_pos := get_global_mouse_position()
+				if brush_points.is_empty() or brush_points.back().distance_to(mouse_pos) > 8.0:
+					brush_points.append(mouse_pos)
+					if brush_line_node != null:
+						brush_line_node.add_point(mouse_pos)
+				get_viewport().set_input_as_handled()
+				return
 
 
 var _pulse_timer: float = 0.0
@@ -478,10 +533,10 @@ func load_level_from_string(json_string: String) -> void:
 			spawn_entity(entity_data)
 
 	_build_physics_contraptions()
-
 	_ensure_rule_executor()
 	if rule_executor != null and is_instance_valid(rule_executor) and rule_executor.has_method("auto_connect_proximity_triggers"):
 		rule_executor.auto_connect_proximity_triggers(room_rules)
+	_initialize_logic_gates()
 
 	if target_spawn_portal_id != "" and found_spawn_portal_pos != null and active_player != null:
 		active_player.global_position = found_spawn_portal_pos
@@ -848,6 +903,27 @@ func _update_logic_gates_for_trigger(trigger_id: String, active: bool) -> void:
 						entity.set_input(idx + 1, active)
 
 
+func _initialize_logic_gates() -> void:
+	for entity in spawned_entities:
+		if is_instance_valid(entity) and entity.has_method("set_input"):
+			var mods = entity.get_meta("modifiers") if entity.has_meta("modifiers") else {}
+			if mods.has("logic_inputs"):
+				var inputs = mods.get("logic_inputs")
+				if typeof(inputs) == TYPE_ARRAY:
+					for idx in range(inputs.size()):
+						var trigger_id = str(inputs[idx])
+						var trigger_active = false
+						for candidate in spawned_entities:
+							if is_instance_valid(candidate) and candidate.name == trigger_id:
+								if "output_state" in candidate:
+									trigger_active = bool(candidate.get("output_state"))
+								elif "is_pressed" in candidate:
+									trigger_active = bool(candidate.get("is_pressed"))
+								elif "active" in candidate:
+									trigger_active = bool(candidate.get("active"))
+						entity.set_input(idx + 1, trigger_active)
+
+
 func execute_rules(trigger_type: String, trigger_id: String = "") -> void:
 	_ensure_rule_executor()
 	if rule_executor != null and is_instance_valid(rule_executor) and rule_executor.has_method("execute_rules"):
@@ -957,6 +1033,17 @@ func _apply_world_settings(settings: Dictionary) -> void:
 	calm_mode = bool(applied.get("calm_mode", false))
 	health_style = str(settings.get("health_style", "hearts"))
 	camera_autoscroll_enabled = bool(applied.get("camera_autoscroll_enabled", false))
+	turf_war_enabled = bool(applied.get("turf_war_enabled", false))
+	
+	card_battle_bonus = str(settings.get("card_battle_bonus", ""))
+	if OS.has_feature("web"):
+		var web_bonus = JavaScriptBridge.eval("window.parent.currentGameBonus || window.currentGameBonus || ''")
+		if web_bonus:
+			card_battle_bonus = str(web_bonus)
+	game_speed_multiplier = float(applied.get("game_speed_multiplier", 1.0))
+	if turf_war_enabled:
+		turf_war_time_left = 180.0
+		turf_war_ended = false
 	camera_autoscroll_direction = str(applied.get("camera_autoscroll_direction", "right"))
 	camera_autoscroll_speed = float(applied.get("camera_autoscroll_speed", 40.0))
 	audio_debug = bool(applied.get("audio_debug", false))
@@ -989,7 +1076,32 @@ func _apply_audio_if_needed(node: Node2D, sidecar: Dictionary) -> void:
 	RUNTIME_WORLD_ENVIRONMENT_SCRIPT.apply_audio_if_needed(node, sidecar, ASSET_ROOT)
 
 
+func get_paint_coverage_percentage() -> float:
+	var total_terrain := 0
+	var painted_terrain := 0
+	for entity in spawned_entities:
+		if is_instance_valid(entity):
+			if entity.has_meta("runtime_template") and entity.get_meta("runtime_template") == "terrain":
+				total_terrain += 1
+				if entity.has_meta("paint_color") and entity.get_meta("paint_color") == "green":
+					painted_terrain += 1
+	if total_terrain > 0:
+		return (float(painted_terrain) * 100.0) / float(total_terrain)
+	return 0.0
+
+
 func _process(delta: float) -> void:
+	if turf_war_enabled and not turf_war_ended and active_player != null and is_instance_valid(active_player):
+		turf_war_time_left -= delta
+		if turf_war_time_left <= 0.0:
+			turf_war_time_left = 0.0
+			turf_war_ended = true
+			var pct = get_paint_coverage_percentage()
+			if pct >= 50.0:
+				trigger_victory()
+			else:
+				trigger_game_over()
+
 	_update_hud()
 
 	# Boss Intro trigger check
@@ -1460,3 +1572,269 @@ func _spawn_stuck_ghost_helper(stuck_pos: Vector2) -> void:
 	tween.tween_property(label, "modulate:a", 0.0, 2.0).set_trans(Tween.TRANS_QUAD)
 	tween.chain().tween_callback(label.queue_free)
 	spawn_floating_text("Try going another way!", stuck_pos + Vector2(0, -80), Color(1.0, 0.9, 0.4))
+
+
+# --- Celestial Brush (Okami) ---
+
+func toggle_celestial_brush() -> void:
+	brush_active = not brush_active
+	if brush_active:
+		Engine.time_scale = 0.0
+		
+		# Spawn visual line node to draw with
+		brush_line_node = Line2D.new()
+		brush_line_node.width = 6.0
+		brush_line_node.default_color = Color(0.2, 0.8, 1.0, 0.85)
+		add_child(brush_line_node)
+		
+		# Create an overlay label
+		brush_overlay_label = Label.new()
+		brush_overlay_label.text = "🖌️ CELESTIAL BRUSH ACTIVATED! 🖌️\nDraw on screen to perform miracles!\n- STRAIGHT SLASH: Defeat Hazards & Enemies\n- LOOP CIRCLE: Bloom Platform / Heal Self\n- WIND SPIRAL: Summon Wind Gale Updraft\n(Press [B] to Cancel)"
+		brush_overlay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		brush_overlay_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		var settings := LabelSettings.new()
+		settings.font_size = 20
+		settings.font_color = Color(0.2, 0.9, 1.0)
+		settings.outline_size = 4
+		settings.outline_color = Color.BLACK
+		brush_overlay_label.label_settings = settings
+		
+		var viewport_size := get_viewport_rect().size
+		brush_overlay_label.size = Vector2(700, 150)
+		brush_overlay_label.position = (viewport_size - brush_overlay_label.size) / 2.0
+		brush_overlay_label.position.y = 80
+		
+		var hud = get_node_or_null("HudCanvas")
+		if hud != null:
+			hud.add_child(brush_overlay_label)
+		else:
+			add_child(brush_overlay_label)
+		
+		if has_method("play_sfx"):
+			play_sfx("coin")
+			
+		spawn_floating_text("🖌️ CELESTIAL BRUSH ON 🖌️", active_player.global_position if active_player else Vector2.ZERO, Color.CYAN)
+	else:
+		_deactivate_brush()
+
+
+func _deactivate_brush() -> void:
+	brush_active = false
+	Engine.time_scale = game_speed_multiplier
+	
+	if brush_line_node != null and is_instance_valid(brush_line_node):
+		var line_tween = create_tween()
+		line_tween.tween_property(brush_line_node, "modulate:a", 0.0, 0.3)
+		var old_line := brush_line_node
+		line_tween.tween_callback(old_line.queue_free)
+		brush_line_node = null
+		
+	if brush_overlay_label != null and is_instance_valid(brush_overlay_label):
+		brush_overlay_label.queue_free()
+		brush_overlay_label = null
+
+
+func _classify_stroke(points: Array) -> String:
+	if points.size() < 10:
+		return ""
+	
+	var total_len := 0.0
+	for i in range(points.size() - 1):
+		total_len += points[i].distance_to(points[i+1])
+	if total_len < 60.0:
+		return ""
+		
+	var start: Vector2 = points[0]
+	var end: Vector2 = points[points.size() - 1]
+	var start_end_dist := start.distance_to(end)
+	
+	# Calculate bounding box & centroid
+	var min_x: float = points[0].x
+	var max_x: float = points[0].x
+	var min_y: float = points[0].y
+	var max_y: float = points[0].y
+	var avg := Vector2.ZERO
+	for p in points:
+		min_x = min(min_x, p.x)
+		max_x = max(max_x, p.x)
+		min_y = min(min_y, p.y)
+		max_y = max(max_y, p.y)
+		avg += p
+	avg /= points.size()
+	
+	# Calculate cumulative angle change around average center
+	var cumulative_angle := 0.0
+	var prev_angle := (points[0] - avg).angle()
+	for i in range(1, points.size()):
+		var curr_angle := (points[i] - avg).angle()
+		var diff := curr_angle - prev_angle
+		# Normalize diff to [-PI, PI]
+		while diff < -PI: diff += 2.0 * PI
+		while diff > PI: diff -= 2.0 * PI
+		cumulative_angle += diff
+		prev_angle = curr_angle
+		
+	var abs_angle := abs(cumulative_angle)
+	print("Stroke classification details: dist=", start_end_dist, " len=", total_len, " angle=", abs_angle)
+	
+	# Heuristics:
+	# 1. Straight Slash: High end-to-end ratio, low rotation
+	if (start_end_dist / total_len) > 0.70 and abs_angle < 3.0:
+		return "slash"
+	# 2. Spiral: High rotation winding
+	if abs_angle >= 7.0:
+		return "spiral"
+	# 3. Circle: Moderate rotation winding, start and end points close enough
+	if abs_angle >= 3.8:
+		return "circle"
+		
+	return ""
+
+
+func _execute_brush_miracle(gesture: String, points: Array) -> void:
+	if gesture == "":
+		var center_pos = points[points.size() / 2]
+		spawn_floating_text("❌ UNKNOWN MIRACLE", center_pos, Color.RED)
+		if has_method("play_sfx"):
+			play_sfx("coin")
+		return
+		
+	var avg := Vector2.ZERO
+	for p in points:
+		avg += p
+	avg /= points.size()
+	
+	if gesture == "slash":
+		var hit_count := 0
+		for entity in spawned_entities.duplicate():
+			if is_instance_valid(entity):
+				var is_target = false
+				if entity.has_meta("runtime_template"):
+					var template = entity.get_meta("runtime_template")
+					if template == "enemy" or template == "hazard" or template == "destructible_terrain":
+						is_target = true
+				
+				if is_target:
+					var hit := false
+					for p in points:
+						if entity.global_position.distance_to(p) < 64.0:
+							hit = true
+							break
+					if hit:
+						hit_count += 1
+						if entity.has_method("take_damage"):
+							entity.call("take_damage", 100)
+						else:
+							entity.queue_free()
+							if spawned_entities.has(entity):
+								spawned_entities.erase(entity)
+		
+		spawn_floating_text("✨ SLASH DETECTED! Hit %d targets ✨" % hit_count, avg, Color.CHARTREUSE)
+		if has_method("play_sfx"):
+			play_sfx("coin")
+			
+	elif gesture == "circle":
+		var healed_player := false
+		if active_player != null and is_instance_valid(active_player):
+			var player_dist := active_player.global_position.distance_to(avg)
+			if player_dist < 150.0:
+				var max_hp = active_player.get("max_health") if "max_health" in active_player else 100
+				active_player.set("current_health", max_hp)
+				healed_player = true
+				
+		if healed_player:
+			spawn_floating_text("🌸 HEALED SELF! 🌸", active_player.global_position, Color.MAGENTA)
+		else:
+			# Spawn bloom block
+			var bloom_block = StaticBody2D.new()
+			bloom_block.global_position = avg
+			
+			var col_shape := CollisionShape2D.new()
+			var rect_shape := RectangleShape2D.new()
+			rect_shape.size = Vector2(96, 32)
+			col_shape.shape = rect_shape
+			bloom_block.add_child(col_shape)
+			
+			var color_rect := ColorRect.new()
+			color_rect.color = Color(0.15, 0.75, 0.35, 0.9)
+			color_rect.size = Vector2(96, 32)
+			color_rect.position = -Vector2(48, 16)
+			bloom_block.add_child(color_rect)
+			
+			var flower_label := Label.new()
+			flower_label.text = "🌸 BLOOM 🌸"
+			flower_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			flower_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			var settings := LabelSettings.new()
+			settings.font_size = 11
+			settings.outline_size = 2
+			settings.outline_color = Color.BLACK
+			flower_label.label_settings = settings
+			flower_label.size = Vector2(96, 32)
+			flower_label.position = -Vector2(48, 16)
+			bloom_block.add_child(flower_label)
+			
+			bloom_block.set_meta("runtime_template", "terrain")
+			add_child(bloom_block)
+			spawned_entities.append(bloom_block)
+			
+			get_tree().create_timer(5.0).timeout.connect(func():
+				if is_instance_valid(bloom_block):
+					var tween = create_tween()
+					tween.tween_property(bloom_block, "modulate:a", 0.0, 0.5)
+					tween.tween_callback(func():
+						bloom_block.queue_free()
+						if spawned_entities.has(bloom_block):
+							spawned_entities.erase(bloom_block)
+					)
+			)
+			
+			spawn_floating_text("🌸 BLOOM BLOCK SPAWNED! 🌸", avg, Color.GREEN)
+		if has_method("play_sfx"):
+			play_sfx("coin")
+			
+	elif gesture == "spiral":
+		var wind_zone = Area2D.new()
+		wind_zone.global_position = avg
+		wind_zone.set_script(load("res://scripts/RuntimeWindZone.gd"))
+		wind_zone.set("force_vector", Vector2(0, -900.0))
+		
+		var col_shape := CollisionShape2D.new()
+		var rect_shape := RectangleShape2D.new()
+		rect_shape.size = Vector2(180, 240)
+		col_shape.shape = rect_shape
+		wind_zone.add_child(col_shape)
+		
+		var particles := CPUParticles2D.new()
+		particles.amount = 35
+		particles.lifetime = 1.0
+		particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+		particles.emission_rect_extents = Vector2(90, 10)
+		particles.direction = Vector2(0, -1)
+		particles.gravity = Vector2.ZERO
+		particles.initial_velocity_min = 180.0
+		particles.initial_velocity_max = 280.0
+		particles.color = Color(0.5, 0.85, 1.0, 0.65)
+		particles.scale_amount_min = 2.0
+		particles.scale_amount_max = 5.0
+		particles.position = Vector2(0, 120)
+		wind_zone.add_child(particles)
+		particles.emitting = true
+		
+		add_child(wind_zone)
+		spawned_entities.append(wind_zone)
+		
+		get_tree().create_timer(8.0).timeout.connect(func():
+			if is_instance_valid(wind_zone):
+				var tween = create_tween()
+				tween.tween_property(wind_zone, "modulate:a", 0.0, 0.5)
+				tween.tween_callback(func():
+					wind_zone.queue_free()
+					if spawned_entities.has(wind_zone):
+						spawned_entities.erase(wind_zone)
+				)
+		)
+		
+		spawn_floating_text("🌀 WIND GALE SUMMONED! 🌀", avg, Color.CYAN)
+		if has_method("play_sfx"):
+			play_sfx("jump")

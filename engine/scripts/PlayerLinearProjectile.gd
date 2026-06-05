@@ -7,6 +7,7 @@ var lifetime: float = 3.0
 var rotate_to_velocity: bool = false
 var gravity_y: float = 0.0
 var pierce: bool = false
+var element: String = ""
 var applies_burn: bool = false
 
 var _hit_entities: Array = []
@@ -35,7 +36,7 @@ func _on_body_entered(body: Node) -> void:
 			return
 		_hit_entities.append(body)
 
-	body.take_damage(damage)
+	body.take_damage(damage, element, shooter)
 	if applies_burn and "is_burning" in body:
 		body.set("is_burning", true)
 		body.set("burn_timer", 3.0)

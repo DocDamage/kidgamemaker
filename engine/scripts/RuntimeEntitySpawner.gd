@@ -175,6 +175,7 @@ static func _register_node(
 	runtime_template: String,
 	_asset_id: String
 ) -> void:
+	node.set_meta("runtime_template", runtime_template)
 	app.add_child(node)
 	app.spawned_entities.append(node)
 
@@ -198,7 +199,12 @@ static func _register_node(
 				for item in items:
 					if node.has_method("add_to_backpack"):
 						node.add_to_backpack(str(item))
-		
+
+		if app.get("turf_war_enabled") == true:
+			node.set("has_paint_gun", true)
+			if node.has_method("add_to_backpack"):
+				node.add_to_backpack("weapon_paint_gun")
+
 		# Attach visual progression tracker
 		if app.has_method("_attach_visual_progression"):
 			app._attach_visual_progression(node)

@@ -148,9 +148,16 @@ func update_hud() -> void:
 	else:
 		hud_health_label.text = ""
 
-	hud_score_label.text = "⭐ " + str(main_context.get("score"))
-	if active_player != null and is_instance_valid(active_player) and active_player.get("has_jetpack") == true:
-		hud_score_label.text = "🚀 " + str(int(active_player.get("jetpack_fuel"))) + "% | " + hud_score_label.text
+	if main_context.get("turf_war_enabled"):
+		var time_left: float = main_context.get("turf_war_time_left")
+		var minutes := int(time_left) / 60
+		var seconds := int(time_left) % 60
+		var pct: float = main_context.call("get_paint_coverage_percentage")
+		hud_score_label.text = "⏱️ %d:%02d | 🎨 %d%%" % [minutes, seconds, int(round(pct))]
+	else:
+		hud_score_label.text = "⭐ " + str(main_context.get("score"))
+		if active_player != null and is_instance_valid(active_player) and active_player.get("has_jetpack") == true:
+			hud_score_label.text = "🚀 " + str(int(active_player.get("jetpack_fuel"))) + "% | " + hud_score_label.text
 
 	var keys_collected: Dictionary = main_context.get("keys_collected")
 	var keys_str := ""

@@ -110,10 +110,20 @@ static func _apply_forces(contraption: RigidBody2D, delta: float) -> void:
 			if main != null and main.has_method("get"):
 				var player = main.get("active_player")
 				if player != null and is_instance_valid(player):
+					var dismount_timer: float = child.get_meta("dismount_timer") if child.has_meta("dismount_timer") else 0.0
+					if dismount_timer > 0.0:
+						child.set_meta("dismount_timer", dismount_timer - delta)
+						continue
+
 					var dist = child.global_position.distance_to(player.global_position)
 					if dist < 45.0:
 						player.global_position = child.global_position
 						player.velocity = Vector2.ZERO
+						
+						if player.has_method("is_jump_just_pressed") and player.is_jump_just_pressed():
+							child.set_meta("dismount_timer", 1.0)
+							player.velocity = Vector2(0, -400.0)
+							continue
 						
 						var thrust := 0.0
 						var torque := 0.0

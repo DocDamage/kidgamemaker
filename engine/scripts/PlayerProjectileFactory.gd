@@ -45,12 +45,51 @@ static func fire_mage_wand_bolt(player: CharacterBody2D, main: Node, copied_enem
 		fire_copied_projectile(player, main, copied_enemy_projectile)
 		return
 
+	var element_idx: int = player.get_meta("mage_wand_element_index", 0)
+	var elements := ["fire", "ice", "lightning", "water"]
+	var element: String = elements[element_idx]
+	player.set_meta("mage_wand_element_index", (element_idx + 1) % 4)
+
 	var facing := _facing(player)
 	_play_sfx(main, "hit")
-	_spawn_text(main, "🔮 WAND!", player.global_position, Color.PURPLE)
+	
+	var label_text := ""
+	var color := Color.PURPLE
+	if element == "fire":
+		label_text = "🔥"
+		color = Color(1.0, 0.3, 0.1)
+	elif element == "ice":
+		label_text = "❄️"
+		color = Color(0.4, 0.8, 1.0)
+	elif element == "lightning":
+		label_text = "⚡"
+		color = Color(1.0, 0.9, 0.1)
+	elif element == "water":
+		label_text = "💧"
+		color = Color(0.1, 0.5, 1.0)
+		
+	_spawn_text(main, "🔮 WAND (" + label_text + ")!", player.global_position, color)
 
-	var bullet := _create_circle_area("MageWandBolt", 4.0, Color(0.8, 0.4, 1.0), Vector2(8, 8))
-	_configure_linear_projectile(bullet, player, Vector2(facing * 350.0, 0.0), 8, 2.0)
+	var bullet := Area2D.new()
+	bullet.name = "MageWandBolt_" + element.capitalize()
+	
+	var visual := Label.new()
+	visual.text = label_text
+	visual.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	visual.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var settings := LabelSettings.new()
+	settings.font_size = 12
+	visual.label_settings = settings
+	visual.size = Vector2(16, 16)
+	visual.position = -Vector2(8, 8)
+	bullet.add_child(visual)
+	
+	_add_circle_collision(bullet, 6.0)
+	bullet.collision_layer = 0
+	bullet.collision_mask = 1
+	
+	_configure_linear_projectile(bullet, player, Vector2(facing * 350.0, 0.0), 10, 2.0)
+	bullet.set("element", element)
 	bullet.global_position = player.global_position + Vector2(facing * 16.0, -10.0)
 	main.add_child(bullet)
 

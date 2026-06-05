@@ -134,6 +134,12 @@
       <ZonaiCustomizerControls {entity} on:saveRoom={saveRoom} />
     {:else if entity.type === 'zonai_battery'}
       <ZonaiCustomizerControls {entity} on:saveRoom={saveRoom} />
+    {:else if entity.type === 'zonai_steering_stick'}
+      <ZonaiCustomizerControls {entity} on:saveRoom={saveRoom} />
+    {:else if entity.type === 'zonai_stabilizer'}
+      <ZonaiCustomizerControls {entity} on:saveRoom={saveRoom} />
+    {:else if entity.type === 'zonai_flamethrower'}
+      <ZonaiCustomizerControls {entity} on:saveRoom={saveRoom} />
     {:else if entity.type === 'companion_pikmin'}
       <CompanionCustomizerControls {entity} on:saveRoom={saveRoom} />
     {:else if entity.type === 'companion_ghost'}

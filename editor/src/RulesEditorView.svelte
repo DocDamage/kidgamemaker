@@ -137,6 +137,17 @@
             </label>
           {/if}
         </section>
+
+        <section class="rule-section turf-war">
+          <strong>🎨 TURF WAR MINIGAME</strong>
+          <label>
+            <span>Turf War Mode:</span>
+            <select bind:value={worldSettings.turf_war_enabled} on:change={saveRoom}>
+              <option value={false}>🚫 Disabled</option>
+              <option value={true}>🟢 Enabled (3-Min Paint Run)</option>
+            </select>
+          </label>
+        </section>
       </div>
     </div>
 

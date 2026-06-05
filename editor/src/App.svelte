@@ -14,6 +14,7 @@
   import RulesEditorView from './RulesEditorView.svelte';
   import SelectedEntityCustomizer from './SelectedEntityCustomizer.svelte';
   import ToyRibbon from './ToyRibbon.svelte';
+  import ConstellationDrawer from './ConstellationDrawer.svelte';
   import {
     favoriteInventoryItems,
     findInventoryAsset,
@@ -82,6 +83,7 @@
   } from './lib/canvasState';
   import EditorTopbar from './EditorTopbar.svelte';
   import MagicWandConsole from './MagicWandConsole.svelte';
+  import { buildProceduralRoom } from './lib/proceduralLevel';
 
   let spriteEditorOpen = false;
   let editingAssetId = '';
@@ -98,6 +100,7 @@
   let showMapView = false;
   let showRulesEditor = false;
   let scrapbookOpen = false;
+  let levelBuilderOpen = false;
 
   let activeCelebration: { name: string; emoji: string } | null = null;
   let confettiParticles: Array<{ x: number; y: number; color: string; speedX: number; speedY: number; size: number; angle: number; spin: number }> = [];
@@ -361,6 +364,7 @@
 
   // --- Daily Discovery & Weekly Challenges ---
   let unlockedStamps: string[] = [];
+  let constellationDrawerOpen = false;
   try {
     const stored = localStorage.getItem('toybox_unlocked_stamps');
     if (stored) unlockedStamps = JSON.parse(stored);
@@ -679,6 +683,13 @@
     status = res.status;
   }
 
+  function handleCardBattleBonus(bonus: string | null) {
+    worldSettings = {
+      ...worldSettings,
+      card_battle_bonus: bonus
+    };
+  }
+
   async function launchNativeWindow() {
     status = await runNativePlay(placed, worldSettings, activeRoomId, playUiSound);
   }
@@ -761,6 +772,27 @@
     }
   }
 
+  async function handleGenerateLevel(event: CustomEvent<{ biome: 'forest' | 'castle' | 'space'; difficulty: 'easy' | 'medium' | 'hard'; seed: string }>) {
+    const { biome, difficulty, seed } = event.detail;
+    status = `🧬 Compiling seed "${seed}" into a ${biome} (${difficulty}) layout...`;
+    try {
+      const room = buildProceduralRoom(seed, biome, difficulty, findAsset);
+      
+      activeRoomId = room.roomId;
+      worldSettings = room.worldSettings;
+      placed = room.placed;
+      
+      levelBuilderOpen = false;
+      await saveCurrentRoom();
+      levelHistoryState = createLevelHistory(placed);
+      status = `✨ Seed "${seed}" successfully compiled into a ${biome} (${difficulty}) layout!`;
+      playUiSound('chime');
+    } catch (err) {
+      console.error(err);
+      status = `Failed to generate level: ${String(err)}`;
+    }
+  }
+
   async function remixCurrentRoom() {
     if (placed.length === 0) return;
     const remixed = remixPlacedRoom(placed, worldSettings);
@@ -809,6 +841,7 @@
     on:play={play}
     on:toggleParents={() => parentsPanelOpen = !parentsPanelOpen}
     on:openScrapbook={() => scrapbookOpen = true}
+    on:openLevelBuilder={() => levelBuilderOpen = true}
   />
 
   {#if parentsPanelOpen}
@@ -892,6 +925,14 @@
             <span class="quest-desc">Place 3 Star Pieces ({placed.filter(e => e.asset_id === 'star_piece').length}/3)</span>
           </div>
         </div>
+
+        <div class="quest-item clickable" class:completed={unlockedStamps.includes('celestial_sprite')} on:click={() => constellationDrawerOpen = true} style="cursor: pointer; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.2); transition: background 0.2s;" on:mouseenter={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)'} on:mouseleave={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'}>
+          <span class="quest-status">{unlockedStamps.includes('celestial_sprite') ? '✅' : '🌌'}</span>
+          <div class="quest-details">
+            <span class="quest-title" style="color: #a5b4fc; font-weight: bold;">Pegasus Star Mapper</span>
+            <span class="quest-desc">{unlockedStamps.includes('celestial_sprite') ? 'Summoned Celestial Sprite 🦄' : 'Connect coordinate stars to unlock!'}</span>
+          </div>
+        </div>
       </div>
 
       <div class="quest-section">
@@ -950,6 +991,7 @@
     {beatComposerOpen}
     {playModalOpen}
     {scrapbookOpen}
+    {levelBuilderOpen}
     {inventory}
     {isMuted}
     bind:favorites
@@ -980,7 +1022,10 @@
     on:toggleMute={toggleMute}
     on:restartSound={() => playUiSound('chime')}
     on:launchWindow={() => { playModalOpen = false; launchNativeWindow(); }}
+    on:cardBattleBonus={(event) => handleCardBattleBonus(event.detail)}
     on:closeScrapbook={() => scrapbookOpen = false}
+    on:closeLevelBuilder={() => levelBuilderOpen = false}
+    on:generateLevel={handleGenerateLevel}
   />
 
   {#if shareModalOpen}
@@ -1019,6 +1064,13 @@
     />
   {/if}
 
+  <ConstellationDrawer
+    isOpen={constellationDrawerOpen}
+    {unlockedStamps}
+    on:unlockStamp={(event) => unlockStamp(event.detail, 'Celestial Sprite 🦄')}
+    on:close={() => constellationDrawerOpen = false}
+  />
+
   {#if activeCelebration}
     <div class="celebration-overlay">
       <div class="celebration-card">
@@ -1054,6 +1106,7 @@
       bind:worldSettings
       on:close={() => magicWandOpen = false}
       on:saveRoom={saveCurrentRoom}
+      on:generateLevel={handleGenerateLevel}
     />
   {/if}
 </main>
