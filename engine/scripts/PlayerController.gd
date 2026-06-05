@@ -29,6 +29,8 @@ var current_health: int = max_health
 var state_history: Array = []
 const MAX_HISTORY_FRAMES: int = 300
 var is_rewinding: bool = false
+var _jump_was_pressed: bool = false
+var _jump_released_this_frame: bool = false
 
 func get_player_input_dir() -> float:
 	if player_index == 2:
@@ -65,10 +67,7 @@ func is_jump_pressed() -> bool:
 		return Input.is_physical_key_pressed(KEY_UP) or Input.is_action_pressed("ui_accept") or Input.is_action_pressed("ui_up")
 
 func is_jump_just_released() -> bool:
-	if player_index == 2:
-		return Input.is_physical_key_released(KEY_W) or Input.is_physical_key_released(KEY_Q)
-	else:
-		return Input.is_physical_key_released(KEY_UP) or Input.is_action_just_released("ui_accept") or Input.is_action_just_released("ui_up")
+	return _jump_released_this_frame
 
 func is_block_pressed() -> bool:
 	if player_index == 2:
@@ -400,6 +399,10 @@ func take_damage(amount: int) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	var jump_pressed_now: bool = is_jump_pressed()
+	_jump_released_this_frame = _jump_was_pressed and not jump_pressed_now
+	_jump_was_pressed = jump_pressed_now
+
 	# Diegetic Health red pulsing under 25% health
 	if not is_bubbled:
 		var main_node = get_tree().get_root().get_node_or_null("Main")
@@ -520,25 +523,28 @@ func _physics_process(delta: float) -> void:
 					loop_angle = entry_vec.angle()
 					loop_direction = 1.0 if velocity.x > 0.0 else -1.0
 					loop_accumulated_angle = 0.0
-					if main != null and main.has_method("play_sfx"):
-						main.play_sfx("coin")
+					var loop_main = get_tree().get_root().get_node_or_null("Main")
+					if loop_main != null and loop_main.has_method("play_sfx"):
+						loop_main.play_sfx("coin")
 					break
 
 	if is_looping:
-		var angular_velocity = (active_speed * 2.0) / loop_radius
+		var loop_speed := movement_speed
+		var angular_velocity = (loop_speed * 2.0) / loop_radius
 		var angle_step = angular_velocity * delta
 		loop_angle += loop_direction * angle_step
 		loop_accumulated_angle += angle_step
 		
 		global_position = loop_center + Vector2(cos(loop_angle), sin(loop_angle)) * loop_radius
-		velocity = Vector2(-sin(loop_angle), cos(loop_angle)) * loop_direction * active_speed * 2.0
+		velocity = Vector2(-sin(loop_angle), cos(loop_angle)) * loop_direction * loop_speed * 2.0
 		
 		if loop_accumulated_angle >= TAU:
 			is_looping = false
-			velocity.x = loop_direction * active_speed * 2.5
+			velocity.x = loop_direction * loop_speed * 2.5
 			velocity.y = -200.0
-			if main != null and main.has_method("spawn_floating_text"):
-				main.spawn_floating_text("🚀 LOOP-DE-LOOP!", global_position, Color.GOLD)
+			var loop_main = get_tree().get_root().get_node_or_null("Main")
+			if loop_main != null and loop_main.has_method("spawn_floating_text"):
+				loop_main.spawn_floating_text("🚀 LOOP-DE-LOOP!", global_position, Color.GOLD)
 		move_and_slide()
 		queue_redraw()
 		return

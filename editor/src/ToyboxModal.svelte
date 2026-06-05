@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { favoriteInventoryItems, getInventoryAssetUrl, isEmojiVisual } from './lib/assetInventory';
+  import { favoriteInventoryItems, getInventoryAssetUrl, isEmojiVisual, isStampReadyAsset } from './lib/assetInventory';
   import { createAudioContext } from './lib/webAudio';
   import type { AssetInventory, ToyboxAsset } from './lib/canvasState';
 
@@ -36,6 +36,7 @@
   }>();
 
   let activeCategory = 'terrain';
+  let activePack = 'all';
 
   const CATEGORY_MAP: Record<string, { label: string; emoji: string; color: string }> = {
     favorites: { label: 'Favorites', emoji: '⭐', color: '#fbbf24' },
@@ -48,18 +49,63 @@
     particles: { label: 'Effects', emoji: '✨', color: '#c084fc' }
   };
 
-  // Keep first available category active if 'terrain' doesn't exist
-  $: if (isVisible && inventory) {
+  $: packOptions = buildPackOptions(inventory);
+  $: if (isVisible && !packOptions.some((pack) => pack.id === activePack)) {
+    activePack = 'all';
+  }
+  $: packFilteredInventory = filterInventoryByPack(inventory, activePack);
+
+  // Keep first available category active inside the selected pack.
+  $: if (isVisible && packFilteredInventory) {
     const keys = Object.keys(CATEGORY_MAP);
-    const available = keys.filter(k => k === 'favorites' || (inventory[k] && inventory[k].length > 0));
+    const available = keys.filter(k => k === 'favorites' || (packFilteredInventory[k] && packFilteredInventory[k].length > 0));
     if (available.length > 0 && !available.includes(activeCategory)) {
       activeCategory = available[0];
     }
   }
 
-  $: itemsToDisplay = activeCategory === 'favorites'
-    ? favoriteInventoryItems(inventory, favorites)
-    : (inventory[activeCategory] || []);
+  $: itemsToDisplay = (activeCategory === 'favorites'
+    ? favoriteInventoryItems(packFilteredInventory, favorites)
+    : (packFilteredInventory[activeCategory] || [])).filter(isStampReadyAsset);
+
+  function packIdFor(item: ToyboxAsset) {
+    return item.source_pack || item.source_author || 'built-in';
+  }
+
+  function packLabelFor(packId: string) {
+    if (packId === 'all') return 'All Toyboxes';
+    if (packId === 'built-in') return 'Built-in';
+    return packId;
+  }
+
+  function buildPackOptions(sourceInventory: AssetInventory) {
+    const counts = new Map<string, number>();
+    for (const items of Object.values(sourceInventory)) {
+      for (const item of items) {
+        if (!isStampReadyAsset(item)) continue;
+        const packId = packIdFor(item);
+        counts.set(packId, (counts.get(packId) ?? 0) + 1);
+      }
+    }
+
+    return [
+      { id: 'all', label: 'All Toyboxes', count: Array.from(counts.values()).reduce((total, count) => total + count, 0) },
+      ...Array.from(counts.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([id, count]) => ({ id, label: packLabelFor(id), count }))
+    ];
+  }
+
+  function filterInventoryByPack(sourceInventory: AssetInventory, packId: string): AssetInventory {
+    const next: AssetInventory = {};
+    for (const [category, items] of Object.entries(sourceInventory)) {
+      const filtered = items.filter((item) => isStampReadyAsset(item) && (packId === 'all' || packIdFor(item) === packId));
+      if (filtered.length > 0) {
+        next[category] = filtered;
+      }
+    }
+    return next;
+  }
 
   function toggleFavorite(itemId: string, event: Event) {
     event.stopPropagation();
@@ -109,14 +155,31 @@
   <div class="backdrop" role="button" tabindex="-1" on:click={() => dispatch('close')} on:keydown={(e) => e.key === 'Escape' && dispatch('close')}>
     <div class="modal" role="dialog" aria-modal="true" aria-label="Toybox" tabindex="0" on:click|stopPropagation on:keydown|stopPropagation>
       <header>
-        <h2>🧸 Toybox</h2>
+        <div>
+          <h2>🧸 Toybox</h2>
+          <p class="pack-credit">{activePack === 'all' ? 'Choose a creator pack or browse everything.' : `Creator pack: ${packLabelFor(activePack)}`}</p>
+        </div>
         <button class="close-btn" on:click={() => dispatch('close')}>✕ Close</button>
       </header>
+
+      <div class="pack-tabs" aria-label="Toybox packs">
+        {#each packOptions as pack}
+          <button
+            class="pack-btn"
+            class:active={activePack === pack.id}
+            type="button"
+            on:click={() => { activePack = pack.id; playTabSound(); }}
+          >
+            <span>{pack.label}</span>
+            <small>{pack.count}</small>
+          </button>
+        {/each}
+      </div>
 
       <!-- Emoji tabs -->
       <div class="tabs-container">
         {#each Object.entries(CATEGORY_MAP) as [catId, info]}
-          {#if catId === 'favorites' ? favorites.length > 0 : (inventory[catId] && inventory[catId].length > 0)}
+          {#if catId === 'favorites' ? favoriteInventoryItems(packFilteredInventory, favorites).length > 0 : (packFilteredInventory[catId] && packFilteredInventory[catId].length > 0)}
             <button
               class="tab-btn"
               class:active={activeCategory === catId}
@@ -185,6 +248,9 @@
                   {/if}
                 </span>
                 <strong>{isItemLocked(item.id) ? 'Locked' : item.name}</strong>
+                {#if !isItemLocked(item.id)}
+                  <span class="source-credit">{packLabelFor(packIdFor(item))}</span>
+                {/if}
                 {#if isItemLocked(item.id)}
                   <span class="recipe-hint">{LOCK_RECIPES[item.id]}</span>
                 {/if}
@@ -234,6 +300,53 @@
     margin: 0;
     font-size: 2.2rem;
     color: #fbbf24;
+  }
+
+  .pack-credit {
+    margin: 4px 0 0;
+    color: #cbd5e1;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .pack-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+    padding: 10px;
+    border-radius: 18px;
+    background: rgba(15, 23, 42, 0.45);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+  }
+
+  .pack-btn {
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 10px;
+    padding: 8px 10px;
+    background: #0f172a;
+    color: #cbd5e1;
+    font-weight: 900;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: none;
+  }
+
+  .pack-btn small {
+    color: #94a3b8;
+    font-size: 0.75rem;
+  }
+
+  .pack-btn.active {
+    background: #fbbf24;
+    color: #0f172a;
+    border-color: #fbbf24;
+  }
+
+  .pack-btn.active small {
+    color: #334155;
   }
 
   .close-btn {
@@ -311,38 +424,38 @@
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 18px;
   }
 
   .toy {
     position: relative;
-    min-height: 116px;
+    min-height: 104px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
     border: 0;
-    border-radius: 24px;
-    background: #f8fafc;
-    color: #0f172a;
+    border-radius: 8px;
+    background: transparent;
+    color: #f8fafc;
     cursor: pointer;
     font-weight: 900;
-    padding: 12px;
-    box-shadow: 0 5px 0 #cbd5e1;
-    transition: transform 0.1s, box-shadow 0.1s, background 0.2s;
+    padding: 8px;
+    box-shadow: none;
+    transition: transform 0.1s, background 0.2s;
   }
 
   .toy:hover {
-    background: #ffffff;
-    transform: translateY(-4px);
-    box-shadow: 0 9px 0 #cbd5e1;
+    background: rgba(148, 163, 184, 0.12);
+    transform: translateY(-2px);
+    box-shadow: none;
   }
 
   .toy:active {
-    transform: translateY(3px);
-    box-shadow: 0 2px 0 #cbd5e1;
+    transform: translateY(1px);
+    box-shadow: none;
   }
 
   .favorite-btn {
@@ -391,17 +504,17 @@
   }
 
   .toy-locked {
-    background: #475569 !important;
+    background: rgba(71, 85, 105, 0.35) !important;
     color: #94a3b8 !important;
     cursor: not-allowed;
-    box-shadow: 0 5px 0 #334155 !important;
+    box-shadow: none !important;
     opacity: 0.8;
   }
 
   .toy-locked:hover {
-    background: #475569 !important;
+    background: rgba(71, 85, 105, 0.35) !important;
     transform: none !important;
-    box-shadow: 0 5px 0 #334155 !important;
+    box-shadow: none !important;
   }
 
   .lock-overlay-emoji {
@@ -413,5 +526,13 @@
     color: #fca5a5;
     text-align: center;
     line-height: 1.1;
+  }
+
+  .source-credit {
+    font-size: 0.65rem !important;
+    line-height: 1;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0;
   }
 </style>

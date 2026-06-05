@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_rocky_terrain_d0ef0a4d",
+  "asset_name": "Rocky Terrain",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_rocky_terrain_d0ef0a4d.png",
+  "visual_tags": [
+    "ansimuz",
+    "rocky",
+    "terrain",
+    "d0ef0a4d",
+    "tiles",
+    "and",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "mist",
+    "forest",
+    "background",
+    "layers"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Gothicvania/Environments/mist-forest-background/layers/mist_forest_background_rocks",
+  "source_category": "tiles_and_terrain",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.98,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 208,
+      "h": 224
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      208,
+      224
+    ]
+  }
+}

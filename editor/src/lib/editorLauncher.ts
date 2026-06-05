@@ -2,6 +2,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { toRoomPayload, type PlacedEntity, type WorldSettings } from './canvasState';
 import { setGlobalGameLevel, setGlobalGameMuted } from './playbackControls';
 
+function hasTauriHost(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
 export async function runWebGLPlay(
   placed: PlacedEntity[],
   worldSettings: WorldSettings,
@@ -16,6 +20,11 @@ export async function runWebGLPlay(
     const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
     setGlobalGameLevel(JSON.stringify(payload));
     setGlobalGameMuted(isMuted);
+
+    if (!hasTauriHost()) {
+      playUiSound('chime');
+      return { success: true, modalOpen: true, status: 'Loaded browser play mode!' };
+    }
 
     try {
       await invoke('build_web_runner');
@@ -38,6 +47,9 @@ export async function runNativePlay(
   playUiSound: (type: 'pop' | 'squeak' | 'chime') => void
 ): Promise<string> {
   try {
+    if (!hasTauriHost()) {
+      return 'Native play is only available in the desktop app. Browser play mode is ready above.';
+    }
     const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
     const status = await invoke<string>('compile_and_play', { roomPayload: payload });
     playUiSound('chime');
@@ -52,6 +64,9 @@ export async function runExportGame(
   saveCurrentRoom: () => Promise<void>
 ): Promise<string> {
   try {
+    if (!hasTauriHost()) {
+      return 'Export is only available in the desktop app.';
+    }
     await saveCurrentRoom();
     const payload = toRoomPayload(placed);
     const status = await invoke<string>('export_game', { projectId: payload.project_id });
@@ -66,6 +81,9 @@ export async function runShareGame(
   playUiSound: (type: 'pop' | 'squeak' | 'chime') => void
 ): Promise<string> {
   try {
+    if (!hasTauriHost()) {
+      return 'Packaging is only available in the desktop app.';
+    }
     await saveCurrentRoom();
     const path = await invoke<string>('package_game_project');
     playUiSound('chime');

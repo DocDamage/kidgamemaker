@@ -6,7 +6,6 @@
 
   export let rooms: string[] = [];
   export let activeRoomId = '';
-  export let activeAsset: ToyboxAsset;
   export let difficultyMode: DifficultyMode = 'normal';
   export let calmMode = false;
   export let worldSettings: WorldSettings;

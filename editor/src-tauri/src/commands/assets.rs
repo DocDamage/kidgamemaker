@@ -1,4 +1,5 @@
 use super::utils::locate_repo_root;
+use crate::inbox::ingest::humanize_name;
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,6 +16,9 @@ pub struct AssetSummary {
     #[serde(rename = "type")]
     pub asset_type: Option<String>,
     pub sidecar_path: String,
+    pub source_pack: Option<String>,
+    pub source_author: Option<String>,
+    pub source_collection: Option<String>,
     pub is_spritesheet: Option<bool>,
     pub frames: Option<Vec<Value>>,
     pub snapping_type: Option<String>,
@@ -129,6 +133,20 @@ fn read_asset_summary(
 
     let is_spritesheet = json.get("is_spritesheet").and_then(Value::as_bool);
     let frames = json.get("frames").and_then(Value::as_array).cloned();
+    let source_pack = json
+        .get("source_pack")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let source_author = json
+        .get("source_author")
+        .or_else(|| json.get("creator_name"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let source_collection = json
+        .get("source_collection")
+        .or_else(|| json.get("source_group"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
 
     let snapping_type = json
         .get("placement_logic")
@@ -148,6 +166,9 @@ fn read_asset_summary(
         visual,
         asset_type,
         sidecar_path: sidecar_path.display().to_string(),
+        source_pack,
+        source_author,
+        source_collection,
         is_spritesheet,
         frames,
         snapping_type,
@@ -167,6 +188,9 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
             visual: Some("hero_knight.svg".to_string()),
             asset_type: Some("player".to_string()),
             sidecar_path: "engine/data/assets/heroes/hero_knight/hero_knight.json".to_string(),
+            source_pack: Some("built-in".to_string()),
+            source_author: Some("KidGameMaker".to_string()),
+            source_collection: Some("Starter Toybox".to_string()),
             is_spritesheet: None,
             frames: None,
             snapping_type: Some("gravity_snap".to_string()),
@@ -183,6 +207,9 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
             visual: Some("stone_floor.svg".to_string()),
             asset_type: Some("terrain".to_string()),
             sidecar_path: "engine/data/assets/terrain/stone_floor/stone_floor.json".to_string(),
+            source_pack: Some("built-in".to_string()),
+            source_author: Some("KidGameMaker".to_string()),
+            source_collection: Some("Starter Toybox".to_string()),
             is_spritesheet: None,
             frames: None,
             snapping_type: Some("edge_to_edge".to_string()),
@@ -201,6 +228,9 @@ fn fallback_inventory() -> BTreeMap<String, Vec<AssetSummary>> {
             ),
             asset_type: Some("enemy".to_string()),
             sidecar_path: "engine/data/assets/enemies/slime_patrol/slime_patrol.json".to_string(),
+            source_pack: Some("built-in".to_string()),
+            source_author: Some("KidGameMaker".to_string()),
+            source_collection: Some("Starter Toybox".to_string()),
             is_spritesheet: None,
             frames: None,
             snapping_type: Some("gravity_snap".to_string()),
@@ -450,7 +480,7 @@ pub fn save_child_sprite(
     let mut sidecar_payload = serde_json::json!({
         "schema_version": 1,
         "asset_id": asset_id,
-        "asset_name": format!("Custom {}", asset_id),
+        "asset_name": humanize_name(&asset_id),
         "category": category,
         "runtime_template": template_type,
         "visual": png_filename,
@@ -970,7 +1000,7 @@ pub fn generate_magic_stamp(
     let sidecar_payload = serde_json::json!({
         "schema_version": 1,
         "asset_id": asset_id,
-        "asset_name": format!("Magic {}", asset_id),
+        "asset_name": humanize_name(&asset_id),
         "category": category,
         "runtime_template": template_type,
         "visual": png_filename,
@@ -993,4 +1023,3 @@ pub fn generate_magic_stamp(
 
     Ok(grid)
 }
-

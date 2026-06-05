@@ -105,6 +105,7 @@
   let showRulesEditor = false;
   let scrapbookOpen = false;
   let levelBuilderOpen = false;
+  let questsOpen = true;
 
   let activeCelebration: { name: string; emoji: string } | null = null;
   let confettiParticles: Array<{ x: number; y: number; color: string; speedX: number; speedY: number; size: number; angle: number; spin: number }> = [];
@@ -492,9 +493,15 @@
           status = `Using fallback toybox: ${error}`;
         }
       } else {
-        inventory = fallbackInventory;
-        activeAsset = inventory.terrain?.[0] ?? activeAsset;
-        status = 'Browser preview mode: using fallback toybox.';
+        try {
+          inventory = await loadAssetInventory();
+          activeAsset = firstInventoryAsset(inventory) ?? activeAsset;
+          status = 'Browser preview mode: loaded engine toybox assets.';
+        } catch (error) {
+          inventory = fallbackInventory;
+          activeAsset = inventory.terrain?.[0] ?? activeAsset;
+          status = `Browser preview mode: using fallback toybox (${error}).`;
+        }
       }
 
       await loadRoomList();
@@ -522,7 +529,6 @@
 
     // Refresh Toybox inventory every 5 seconds (picks up inbox-ingested assets)
     const refreshId = setInterval(async () => {
-      if (!hasTauriHost()) return;
       try {
         inventory = await loadAssetInventory();
       } catch { /* silent */ }
@@ -572,6 +578,10 @@
   async function saveCurrentRoom() {
     if (!hasTauriHost()) {
       status = `Browser preview mode: ${activeRoomId} is not persisted.`;
+      const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
+      if (playModalOpen) {
+        liveUpdateGameIframe(JSON.stringify(payload));
+      }
       return;
     }
 
@@ -656,6 +666,7 @@
   async function refreshInventory() {
     try {
       inventory = await loadAssetInventory();
+      activeAsset = findAsset(activeAsset.id) ?? firstInventoryAsset(inventory) ?? activeAsset;
       status = 'Toybox refreshed.';
     } catch (error) {
       status = `Refresh failed: ${error}`;
@@ -772,11 +783,18 @@
     return findInventoryAsset(inventory, assetId);
   }
 
+  async function setGridSize(size: number) {
+    const clampedSize = Math.max(1, Math.min(128, Math.round(Number.isFinite(size) ? size : 32)));
+    worldSettings = { ...worldSettings, snap_size: clampedSize };
+    status = `Grid size set to ${clampedSize}px.`;
+    await saveCurrentRoom();
+  }
+
   // ── Feature: 🎲 Surprise Me! Level Generator ──────────────────────────────
   async function surpriseMe() {
     status = '🎲 Generating connected 4x4 Spelunky-style Metroidvania world...';
     try {
-      const generatedRooms = buildSurpriseWorld(findAsset, difficultyMode, calmMode);
+      const generatedRooms = buildSurpriseWorld(findAsset, difficultyMode, calmMode, inventory);
       for (const r of generatedRooms) {
         const payload = toRoomPayload(r.placed, r.worldSettings, 'demo_project', r.roomId);
         payload.world_settings.difficulty = r.worldSettings.difficulty ?? 'normal';
@@ -803,7 +821,7 @@
     const { biome, difficulty, seed } = event.detail;
     status = `🧬 Compiling seed "${seed}" into a ${biome} (${difficulty}) layout...`;
     try {
-      const room = buildProceduralRoom(seed, biome, difficulty, findAsset);
+      const room = buildProceduralRoom(seed, biome, difficulty, findAsset, inventory);
       
       activeRoomId = room.roomId;
       worldSettings = room.worldSettings;
@@ -848,6 +866,7 @@
     canRedo={levelHistoryIndex < levelHistory.length - 1}
     {parentsPanelOpen}
     {magicWandOpen}
+    gridSize={worldSettings.snap_size ?? 32}
     on:cycleTime={cycleTime}
     on:cycleWeather={cycleWeather}
     on:toggleMute={toggleMute}
@@ -859,6 +878,7 @@
     on:editActiveAsset={editActiveAsset}
     on:toggleEraser={() => eraserMode = !eraserMode}
     on:toggleSnap={() => snapEnabled = !snapEnabled}
+    on:setGridSize={(event) => setGridSize(event.detail)}
     on:undo={undoLevel}
     on:redo={redoLevel}
     on:openToybox={() => toyboxOpen = true}
@@ -875,7 +895,6 @@
     <ParentsPanel
       {rooms}
       {activeRoomId}
-      {activeAsset}
       {difficultyMode}
       {calmMode}
       {worldSettings}
@@ -927,7 +946,9 @@
     />
 
     <!-- Floating Quests Widget -->
+    {#if questsOpen}
     <div class="quests-floating-widget">
+      <button class="quests-close-btn" type="button" aria-label="Close quests" title="Close quests" on:click={() => questsOpen = false}>×</button>
       <h3>🎯 Daily & Weekly Quests</h3>
       
       <div class="quest-section">
@@ -981,6 +1002,17 @@
         </div>
       </div>
     </div>
+    {/if}
+
+    <aside class="coach-panel" aria-label="Editor guidance">
+      <h3>Next Steps</h3>
+      <p>{eraserMode ? 'Click a stamp to erase it.' : `Click the grid to place ${activeAsset.name}.`}</p>
+      <div class="coach-actions">
+        <span>Drag-hold a stamp to move it</span>
+        <span>Use Toybox for creator packs</span>
+        <span>Press Play to test</span>
+      </div>
+    </aside>
 
     <CanvasWorkspace
       {worldSettings}
@@ -1134,7 +1166,12 @@
     <MagicWandConsole
       bind:placed
       bind:worldSettings
+      {inventory}
       on:close={() => magicWandOpen = false}
+      on:changed={(event) => {
+        placed = event.detail.placed;
+        worldSettings = event.detail.worldSettings;
+      }}
       on:saveRoom={saveCurrentRoom}
       on:generateLevel={handleGenerateLevel}
     />
@@ -1163,13 +1200,76 @@
     color: white;
   }
 
+  .quests-close-btn {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.9);
+    color: #f8fafc;
+    font-size: 1.1rem;
+    font-weight: 900;
+    line-height: 1;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.35);
+  }
+
+  .quests-close-btn:hover {
+    background: #ef4444;
+  }
+
   .quests-floating-widget h3 {
-    margin: 0 0 12px 0;
+    margin: 0 28px 12px 0;
     font-size: 1.1rem;
     color: #fbbf24;
     text-align: center;
     border-bottom: 2px solid rgba(255, 255, 255, 0.1);
     padding-bottom: 6px;
+  }
+
+  .coach-panel {
+    position: absolute;
+    left: 16px;
+    bottom: 42px;
+    z-index: 8;
+    width: min(330px, calc(100vw - 32px));
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.9);
+    color: #e2e8f0;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28);
+  }
+
+  .coach-panel h3 {
+    margin: 0 0 6px;
+    color: #fbbf24;
+    font-size: 0.95rem;
+  }
+
+  .coach-panel p {
+    margin: 0 0 8px;
+    font-size: 0.9rem;
+    font-weight: 800;
+  }
+
+  .coach-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .coach-actions span {
+    background: rgba(51, 65, 85, 0.85);
+    border-radius: 6px;
+    padding: 4px 6px;
+    font-size: 0.72rem;
+    color: #cbd5e1;
   }
 
   .quest-section {

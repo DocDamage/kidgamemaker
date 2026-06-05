@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_stone_golem_46776b30",
+  "asset_name": "Stone Golem",
+  "category": "enemies",
+  "runtime_template": "enemy",
+  "visual": "ansimuz_stone_golem_46776b30.png",
+  "visual_tags": [
+    "ansimuz",
+    "stone",
+    "golem",
+    "46776b30",
+    "characters",
+    "and",
+    "creatures",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "hauntedforest",
+    "layers",
+    "props"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Gothicvania/Environments/HauntedForest/Layers/Props/pillars",
+  "source_category": "characters_and_creatures",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.95,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 128,
+      "h": 48
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "gravity_snap",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      128,
+      48
+    ]
+  }
+}

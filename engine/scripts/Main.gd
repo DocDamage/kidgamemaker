@@ -1115,7 +1115,7 @@ func _process(delta: float) -> void:
 	# Smoothly lerp Engine.time_scale toward the target (struggle slow or recovery)
 	if tutorial_whisperer_enabled:
 		var current_ts := Engine.time_scale
-		var ts_delta := delta * (1.0 / max(current_ts, 0.01))  # real-time delta
+		var ts_delta: float = delta * (1.0 / max(current_ts, 0.01))  # real-time delta
 		Engine.time_scale = move_toward(current_ts, _struggle_time_scale_target, ts_delta * 0.5)
 		# Gradually recover back to 1.0 when not struggling
 		if _struggle_time_scale_target < 1.0 and respawn_count <= 1:
@@ -1663,18 +1663,18 @@ func _classify_stroke(points: Array) -> String:
 	avg /= points.size()
 	
 	# Calculate cumulative angle change around average center
-	var cumulative_angle := 0.0
-	var prev_angle := (points[0] - avg).angle()
+	var cumulative_angle: float = 0.0
+	var prev_angle: float = (points[0] - avg).angle()
 	for i in range(1, points.size()):
-		var curr_angle := (points[i] - avg).angle()
-		var diff := curr_angle - prev_angle
+		var curr_angle: float = (points[i] - avg).angle()
+		var diff: float = curr_angle - prev_angle
 		# Normalize diff to [-PI, PI]
 		while diff < -PI: diff += 2.0 * PI
 		while diff > PI: diff -= 2.0 * PI
 		cumulative_angle += diff
 		prev_angle = curr_angle
 		
-	var abs_angle := abs(cumulative_angle)
+	var abs_angle: float = abs(cumulative_angle)
 	print("Stroke classification details: dist=", start_end_dist, " len=", total_len, " angle=", abs_angle)
 	
 	# Heuristics:

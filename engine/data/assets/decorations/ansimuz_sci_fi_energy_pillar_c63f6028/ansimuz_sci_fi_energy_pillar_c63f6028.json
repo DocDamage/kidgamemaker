@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_sci_fi_energy_pillar_c63f6028",
+  "asset_name": "Sci Fi Energy Pillar",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_sci_fi_energy_pillar_c63f6028.png",
+  "visual_tags": [
+    "ansimuz",
+    "sci",
+    "fi",
+    "energy",
+    "pillar",
+    "c63f6028",
+    "props",
+    "and",
+    "items",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "ocean",
+    "view",
+    "files",
+    "layers",
+    "night"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Warped/Environments/Ocean View Files/Layers/Night/props/tower",
+  "source_category": "props_and_items",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.95,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 112
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      112
+    ]
+  }
+}

@@ -15,6 +15,57 @@ pub fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBu
 
     let (category, template, snapping, parallax) = classify_asset(filename);
 
+    let lower_name = filename.to_lowercase();
+    let is_audio = lower_name.ends_with(".wav")
+        || lower_name.ends_with(".mp3")
+        || lower_name.ends_with(".ogg");
+
+    // Audio assets are routed to a dedicated sidecar with audio_logic.
+    // They skip PNG slicing and image-dimension detection entirely.
+    if is_audio {
+        let dest_dir = repo_root
+            .join("engine")
+            .join("data")
+            .join("assets")
+            .join(category)
+            .join(asset_id);
+        fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+
+        let target_file_path = dest_dir.join(filename);
+        fs::copy(file_path, &target_file_path).map_err(|err| err.to_string())?;
+
+        let asset_name = humanize_name(asset_id);
+        let tags = extract_tags(asset_id);
+        let loop_audio = lower_name.contains("bgm")
+            || lower_name.contains("music")
+            || lower_name.contains("ambient")
+            || lower_name.contains("loop");
+
+        let sidecar_value = serde_json::json!({
+            "schema_version": 1,
+            "asset_id": asset_id,
+            "asset_name": asset_name,
+            "category": category,
+            "runtime_template": template,
+            "visual": null,
+            "visual_tags": tags,
+            "audio_logic": {
+                "stream_file": filename,
+                "loop": loop_audio,
+                "global_bgm": loop_audio
+            }
+        });
+
+        let sidecar_content = serde_json::to_string_pretty(&sidecar_value)
+            .map_err(|err| format!("Failed to serialize audio sidecar for {asset_id}: {err}"))?;
+        let sidecar_path = dest_dir.join(format!("{}.json", asset_id));
+        fs::write(&sidecar_path, sidecar_content).map_err(|err| err.to_string())?;
+
+        return Ok(target_file_path);
+    }
+
+    // --- Image asset path below ---
+
     // Determine default sizes based on template
     let (mut width, mut height) = match template {
         "terrain" => (128, 32),
@@ -31,7 +82,7 @@ pub fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBu
     let mut confidence = 1.0;
     let mut frames = Vec::new();
 
-    if filename.to_lowercase().ends_with(".png") {
+    if lower_name.ends_with(".png") {
         if let Ok(slice_res) = crate::slicer::slice_sprite_sheet(file_path, category) {
             is_spritesheet = slice_res.is_spritesheet;
             is_uniform = slice_res.is_uniform;

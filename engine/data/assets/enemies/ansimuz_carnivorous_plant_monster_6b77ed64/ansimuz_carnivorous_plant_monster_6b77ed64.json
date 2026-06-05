@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_carnivorous_plant_monster_6b77ed64",
+  "asset_name": "Carnivorous Plant Monster",
+  "category": "enemies",
+  "runtime_template": "enemy",
+  "visual": "ansimuz_carnivorous_plant_monster_6b77ed64.png",
+  "visual_tags": [
+    "ansimuz",
+    "carnivorous",
+    "plant",
+    "monster",
+    "6b77ed64",
+    "characters",
+    "and",
+    "creatures",
+    "legacy",
+    "collection",
+    "assets",
+    "tinyrpg",
+    "battle",
+    "sprites",
+    "pack",
+    "files",
+    "static"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/TinyRPG/Characters/Battle Sprites/Monster Pack Files/static/treant",
+  "source_category": "characters_and_creatures",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.98,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 80,
+      "h": 84
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "gravity_snap",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      80,
+      84
+    ]
+  }
+}

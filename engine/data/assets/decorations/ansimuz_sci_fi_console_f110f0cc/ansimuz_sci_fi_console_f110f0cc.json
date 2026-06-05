@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_sci_fi_console_f110f0cc",
+  "asset_name": "Sci Fi Console",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_sci_fi_console_f110f0cc.png",
+  "visual_tags": [
+    "ansimuz",
+    "sci",
+    "fi",
+    "console",
+    "f110f0cc",
+    "props",
+    "and",
+    "items",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "cyberpunk",
+    "detective",
+    "png"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Warped/Environments/cyberpunk-detective-props/PNG/big_computer",
+  "source_category": "props_and_items",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.98,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 106,
+      "h": 123
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      106,
+      123
+    ]
+  }
+}

@@ -124,6 +124,7 @@
 
 <ProceduralLevelModal
   isVisible={levelBuilderOpen}
+  {inventory}
   on:close={() => dispatch('closeLevelBuilder')}
   on:generate={(event) => dispatch('generateLevel', event.detail)}
 />

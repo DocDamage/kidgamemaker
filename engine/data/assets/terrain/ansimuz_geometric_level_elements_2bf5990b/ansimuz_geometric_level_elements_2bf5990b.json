@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_geometric_level_elements_2bf5990b",
+  "asset_name": "Geometric Level Elements",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_geometric_level_elements_2bf5990b.png",
+  "visual_tags": [
+    "ansimuz",
+    "geometric",
+    "level",
+    "elements",
+    "2bf5990b",
+    "tiles",
+    "and",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "cyberpunk",
+    "corridor",
+    "files",
+    "png"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Warped/Environments/cyberpunk-corridor-files/PNG/cyberpunk_corridor_foreground",
+  "source_category": "tiles_and_terrain",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.75,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 272,
+      "h": 176
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      272,
+      176
+    ]
+  }
+}

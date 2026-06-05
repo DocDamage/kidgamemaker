@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_wooden_plank_tile_2909f0f6",
+  "asset_name": "Wooden Plank Tile",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_wooden_plank_tile_2909f0f6.png",
+  "visual_tags": [
+    "ansimuz",
+    "wooden",
+    "plank",
+    "tile",
+    "2909f0f6",
+    "tiles",
+    "and",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "bulkhead",
+    "walls",
+    "v2",
+    "png"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Warped/Environments/bulkhead-walls/v2/PNG/floor",
+  "source_category": "tiles_and_terrain",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.95,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 48,
+      "h": 19
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      48,
+      19
+    ]
+  }
+}

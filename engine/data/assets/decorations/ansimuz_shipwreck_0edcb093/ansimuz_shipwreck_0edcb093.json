@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_shipwreck_0edcb093",
+  "asset_name": "Shipwreck",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_shipwreck_0edcb093.png",
+  "visual_tags": [
+    "ansimuz",
+    "shipwreck",
+    "0edcb093",
+    "props",
+    "and",
+    "items",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "ships",
+    "graveyard",
+    "png",
+    "mockup"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Gothicvania/Environments/ships-graveyard/PNG/mockup/middle",
+  "source_category": "props_and_items",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.98,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 288,
+      "h": 256
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      288,
+      256
+    ]
+  }
+}

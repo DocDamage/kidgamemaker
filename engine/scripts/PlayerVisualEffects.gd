@@ -153,12 +153,12 @@ static func draw_player_overlays(player: Node2D) -> void:
 
 	# Rewind visual clock overlays
 	if bool(player.get("is_rewinding")):
-		var t := Time.get_ticks_msec() / 100.0
-		var pulse_radius := 20.0 + abs(sin(t)) * 25.0
+		var t: float = float(Time.get_ticks_msec()) / 100.0
+		var pulse_radius: float = 20.0 + abs(sin(t)) * 25.0
 		player.draw_arc(Vector2.ZERO, pulse_radius, 0, TAU, 24, Color(0.7, 0.4, 1.0, 0.45), 2.0)
 		player.draw_arc(Vector2.ZERO, clamp(pulse_radius - 12.0, 5.0, 50.0), 0, TAU, 24, Color(0.7, 0.4, 1.0, 0.25), 1.5)
-		var angle_hr := t * 0.4
-		var angle_min := t * 2.5
+		var angle_hr: float = t * 0.4
+		var angle_min: float = t * 2.5
 		player.draw_line(Vector2.ZERO, Vector2(cos(angle_hr), sin(angle_hr)) * 14.0, Color(0.8, 0.6, 1.0, 0.8), 2.5)
 		player.draw_line(Vector2.ZERO, Vector2(cos(angle_min), sin(angle_min)) * 22.0, Color(0.8, 0.6, 1.0, 0.8), 1.8)
 

@@ -100,13 +100,24 @@ fn process_inbox(inbox_dir: &Path, repo_root: &Path) -> Result<(), String> {
             );
         } else if is_supported_asset(name) {
             println!("Asset inbox found single asset: {}", name);
-            if let Ok(target_path) = ingest::process_single_asset(&path, repo_root) {
-                println!(
-                    "Successfully imported asset: {} to {}",
-                    name,
-                    target_path.display()
-                );
-                let _ = fs::remove_file(&path);
+            match ingest::process_single_asset(&path, repo_root) {
+                Ok(target_path) => {
+                    println!(
+                        "Successfully imported asset: {} to {}",
+                        name,
+                        target_path.display()
+                    );
+                    let _ = fs::remove_file(&path);
+                }
+                Err(err) => {
+                    eprintln!("Failed to ingest asset {}: {}", name, err);
+                    // Rename to .failed so the watcher doesn't retry endlessly
+                    let failed_path = path.with_extension(
+                        format!("{}.failed", path.extension().and_then(|e| e.to_str()).unwrap_or(""))
+                    );
+                    let _ = fs::rename(&path, &failed_path);
+                    eprintln!("Renamed {} to {} to prevent retry loop", name, failed_path.display());
+                }
             }
         }
     }
@@ -506,4 +517,54 @@ mod tests {
         let _ = fs::remove_dir_all(&temp_base);
         Ok(())
     }
+
+    #[test]
+    fn test_process_single_audio_asset() -> Result<(), Box<dyn Error>> {
+        let temp_base = std::env::temp_dir().join("kdm_test_repo_audio");
+        let _ = fs::remove_dir_all(&temp_base);
+        fs::create_dir_all(&temp_base)?;
+
+        let source_file = temp_base.join("jungle_bgm.wav");
+        // A minimal dummy wav header (at least 44 bytes)
+        let mut mock_wav = vec![0u8; 100];
+        mock_wav[0..4].copy_from_slice(b"RIFF");
+        mock_wav[8..12].copy_from_slice(b"WAVE");
+        fs::write(&source_file, &mock_wav)?;
+
+        ingest::process_single_asset(&source_file, &temp_base).map_err(test_error)?;
+
+        let dest_file = temp_base
+            .join("engine")
+            .join("data")
+            .join("assets")
+            .join("decorations")
+            .join("jungle_bgm")
+            .join("jungle_bgm.wav");
+        assert!(dest_file.exists());
+
+        let sidecar_file = temp_base
+            .join("engine")
+            .join("data")
+            .join("assets")
+            .join("decorations")
+            .join("jungle_bgm")
+            .join("jungle_bgm.json");
+        assert!(sidecar_file.exists());
+
+        let sidecar_content = fs::read_to_string(&sidecar_file)?;
+        let sidecar_json: serde_json::Value = serde_json::from_str(&sidecar_content)?;
+
+        assert_eq!(sidecar_json["asset_id"], "jungle_bgm");
+        assert_eq!(sidecar_json["asset_name"], "Jungle Bgm");
+        assert_eq!(sidecar_json["category"], "decorations");
+        assert_eq!(sidecar_json["runtime_template"], "decoration");
+        assert_eq!(sidecar_json["visual"], serde_json::Value::Null);
+        assert_eq!(sidecar_json["audio_logic"]["stream_file"], "jungle_bgm.wav");
+        assert_eq!(sidecar_json["audio_logic"]["loop"], true);
+        assert_eq!(sidecar_json["audio_logic"]["global_bgm"], true);
+
+        let _ = fs::remove_dir_all(&temp_base);
+        Ok(())
+    }
 }
+

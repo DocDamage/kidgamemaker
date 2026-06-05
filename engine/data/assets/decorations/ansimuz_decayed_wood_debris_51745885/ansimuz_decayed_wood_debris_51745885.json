@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_decayed_wood_debris_51745885",
+  "asset_name": "Decayed Wood Debris",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_decayed_wood_debris_51745885.png",
+  "visual_tags": [
+    "ansimuz",
+    "decayed",
+    "wood",
+    "debris",
+    "51745885",
+    "props",
+    "and",
+    "items",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "ships",
+    "graveyard",
+    "png",
+    "layers"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Gothicvania/Environments/ships-graveyard/PNG/layers/boat_front",
+  "source_category": "props_and_items",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.95,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 113,
+      "h": 132
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      113,
+      132
+    ]
+  }
+}

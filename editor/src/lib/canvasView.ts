@@ -37,27 +37,33 @@ export function getCanvasCoords(clientX: number, clientY: number, rect: DOMRect,
   };
 }
 
-export function getSnappedPosition(rawCoords: Vec2, asset: ToyboxAsset, placed: PlacedEntity[], snapEnabled: boolean): Vec2 {
+export function getSnappedPosition(rawCoords: Vec2, asset: ToyboxAsset, placed: PlacedEntity[], snapEnabled: boolean, snapSize = 32): Vec2 {
   if (!snapEnabled) return rawCoords;
 
+  const gridSize = Math.max(1, Math.min(128, snapSize || 32));
   const snapping = asset.snapping_type ?? (asset.category === 'terrain' ? 'edge_to_edge' : 'gravity_snap');
+  const stampWidth = asset.category === 'terrain' ? Math.max(gridSize, gridSize * 5) : 56;
+  const stampHeight = asset.category === 'terrain' ? 56 : (asset.category === 'heroes' ? 48 : 32);
+
   if (snapping === 'edge_to_edge') {
+    const left = Math.round((rawCoords.x - stampWidth / 2) / gridSize) * gridSize;
+    const top = Math.round((rawCoords.y - stampHeight / 2) / gridSize) * gridSize;
     return {
-      x: Math.round(rawCoords.x / 32) * 32,
-      y: Math.round(rawCoords.y / 32) * 32
+      x: left + stampWidth / 2,
+      y: top + stampHeight / 2
     };
   }
 
-  const snapX = Math.round(rawCoords.x / 8) * 8;
+  const snapX = Math.round(rawCoords.x / gridSize) * gridSize;
   if (snapping !== 'gravity_snap') {
     return {
       x: snapX,
-      y: Math.round(rawCoords.y / 8) * 8
+      y: Math.round(rawCoords.y / gridSize) * gridSize
     };
   }
-  let stampHeight = asset.category === 'heroes' ? 48 : 32;
+  let gravityStampHeight = stampHeight;
   if (asset.frames?.[0]) {
-    stampHeight = asset.frames[0].h;
+    gravityStampHeight = asset.frames[0].h;
   }
 
   let bestTopY: number | null = null;
@@ -77,13 +83,13 @@ export function getSnappedPosition(rawCoords: Vec2, asset: ToyboxAsset, placed: 
   if (bestTopY !== null) {
     return {
       x: snapX,
-      y: bestTopY - stampHeight / 2
+      y: bestTopY - gravityStampHeight / 2
     };
   }
 
   return {
     x: snapX,
-    y: Math.round(rawCoords.y / 8) * 8
+    y: Math.round(rawCoords.y / gridSize) * gridSize
   };
 }
 

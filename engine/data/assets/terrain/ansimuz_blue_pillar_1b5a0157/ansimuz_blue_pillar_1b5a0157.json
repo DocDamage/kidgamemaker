@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_blue_pillar_1b5a0157",
+  "asset_name": "Blue Pillar",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_blue_pillar_1b5a0157.png",
+  "visual_tags": [
+    "ansimuz",
+    "blue",
+    "pillar",
+    "1b5a0157",
+    "tiles",
+    "and",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "scifi",
+    "lab",
+    "files",
+    "layers"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Warped/Environments/Scifi lab Files/layers/front",
+  "source_category": "tiles_and_terrain",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.9,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 320,
+      "h": 240
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      320,
+      240
+    ]
+  }
+}

@@ -72,12 +72,12 @@ func _apply_tier(tier: int, animate: bool) -> void:
 	if parent == null or not is_instance_valid(parent):
 		return
 
-	var target_scale := TIER_SCALES[tier]
-	var aura_color := TIER_AURA_COLORS[tier]
+	var target_scale: float = float(TIER_SCALES[tier])
+	var aura_color: Color = TIER_AURA_COLORS[tier]
 
 	if animate:
 		# Growth pulse tween — expand → contract → settle
-		var base_s := Vector2.ONE * target_scale
+		var base_s: Vector2 = Vector2.ONE * target_scale
 		var tween := create_tween()
 		tween.tween_property(parent, "scale",
 			Vector2.ONE * target_scale * 1.45, 0.12).set_trans(Tween.TRANS_QUAD)

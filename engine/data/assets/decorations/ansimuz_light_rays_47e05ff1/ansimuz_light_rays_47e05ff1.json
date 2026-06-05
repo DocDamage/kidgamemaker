@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_light_rays_47e05ff1",
+  "asset_name": "Light Rays",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_light_rays_47e05ff1.png",
+  "visual_tags": [
+    "ansimuz",
+    "light",
+    "rays",
+    "47e05ff1",
+    "effects",
+    "and",
+    "particles",
+    "legacy",
+    "collection",
+    "assets",
+    "tinyrpg",
+    "environments",
+    "parallax",
+    "forest",
+    "pack",
+    "web",
+    "v1",
+    "layers"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/TinyRPG/Environments/parallax_forest_pack web/v1/layers/parallax_forest_lights",
+  "source_category": "effects_and_particles",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.95,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 272,
+      "h": 160
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      272,
+      160
+    ]
+  }
+}

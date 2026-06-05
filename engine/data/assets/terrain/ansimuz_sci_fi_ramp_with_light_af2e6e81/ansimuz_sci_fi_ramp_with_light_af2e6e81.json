@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_sci_fi_ramp_with_light_af2e6e81",
+  "asset_name": "Sci Fi Ramp With Light",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_sci_fi_ramp_with_light_af2e6e81.png",
+  "visual_tags": [
+    "ansimuz",
+    "sci",
+    "fi",
+    "ramp",
+    "with",
+    "light",
+    "af2e6e81",
+    "tiles",
+    "and",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "bulkhead",
+    "walls",
+    "v2",
+    "png"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Warped/Environments/bulkhead-walls/v2/PNG/bg_wall_with_supports",
+  "source_category": "tiles_and_terrain",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.95,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 144,
+      "h": 224
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      144,
+      224
+    ]
+  }
+}

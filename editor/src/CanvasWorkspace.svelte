@@ -53,6 +53,8 @@
   let longPressTriggered = false;
 
   let weaponLinks: Array<{p1: {x: number, y: number}, p2: {x: number, y: number}}> = [];
+  $: snapSize = Math.max(1, Math.min(128, worldSettings.snap_size ?? 32));
+  $: terrainStampWidth = Math.max(snapSize, snapSize * 5);
   $: {
     // Svelte reactive block to keep weaponLinks in sync and detect new links
     const oldLinksCount = weaponLinks.length;
@@ -72,7 +74,7 @@
   }
 
   function getSnappedPosition(rawCoords: { x: number; y: number }, asset: ToyboxAsset): { x: number; y: number } {
-    return snapCanvasPosition(rawCoords, asset, placed, snapEnabled);
+    return snapCanvasPosition(rawCoords, asset, placed, snapEnabled, snapSize);
   }
 
   function handleCanvasClick(event: MouseEvent) {
@@ -334,8 +336,8 @@
 
     // Snap position
     if (snapEnabled) {
-      draggingEntity.position.x = Math.round(rawX / 8) * 8;
-      draggingEntity.position.y = Math.round(rawY / 8) * 8;
+      draggingEntity.position.x = Math.round(rawX / snapSize) * snapSize;
+      draggingEntity.position.y = Math.round(rawY / snapSize) * snapSize;
     } else {
       draggingEntity.position.x = rawX;
       draggingEntity.position.y = rawY;
@@ -355,7 +357,9 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="canvas theme-{worldSettings.theme || 'default'}"
+    class="canvas theme-{worldSettings.theme || 'default'}"
+  style:--grid-size={`${snapSize}px`}
+  style:--terrain-stamp-width={`${terrainStampWidth}px`}
   on:mousedown={startDrawing}
   on:mousemove={handleCanvasMove}
   on:mouseup={handleCanvasMouseUp}
@@ -389,7 +393,7 @@
         on:mousedown|stopPropagation={(event) => handleStampLongPressStart(event, item)}
         on:mouseup|stopPropagation={handleStampLongPressEnd}
         style:border-radius={item.category === 'terrain' ? '14px' : '50%'}
-        style:width={item.category === 'terrain' ? '160px' : '56px'}
+        style:width={item.category === 'terrain' ? `${terrainStampWidth}px` : '56px'}
         style:overflow="hidden"
       >
         <StampVisual {asset} category={item.category} />
@@ -402,7 +406,7 @@
         style:left={`${hoverPos.x}px`}
         style:top={`${hoverPos.y}px`}
         style:border-radius={activeAsset.category === 'terrain' ? '14px' : '50%'}
-        style:width={activeAsset.category === 'terrain' ? '160px' : '56px'}
+        style:width={activeAsset.category === 'terrain' ? `${terrainStampWidth}px` : '56px'}
         style:overflow="hidden"
       >
         <StampVisual asset={activeAsset} category={activeAsset.category} />
@@ -455,7 +459,7 @@
     background:
       linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
       linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-    background-size: 32px 32px, 32px 32px;
+    background-size: var(--grid-size) var(--grid-size), var(--grid-size) var(--grid-size);
   }
 
   .canvas-inner :global(*) {
@@ -488,7 +492,7 @@
   }
 
   .stamp.terrain {
-    width: 160px;
+    width: var(--terrain-stamp-width);
     border-radius: 14px;
   }
 
@@ -507,7 +511,7 @@
   }
 
   .hover-guide.terrain {
-    width: 160px;
+    width: var(--terrain-stamp-width);
     border-radius: 14px;
   }
 

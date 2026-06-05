@@ -1,0 +1,34 @@
+{
+  "source_root": "G:\\All 2D Assets Stay Here\\ansimuz",
+  "manifest": "G:\\All 2D Assets Stay Here\\ansimuz\\ansimuz_sprite_final_renames.kimi.json",
+  "source_index": "G:\\All 2D Assets Stay Here\\ansimuz\\ansimuz_sprite_learning_index.vision.json",
+  "dry_run": false,
+  "imported_groups": 92,
+  "imported_files": 92,
+  "skipped_groups": 1024,
+  "categories": {
+    "collectibles": 5,
+    "decorations": 46,
+    "enemies": 9,
+    "terrain": 32
+  },
+  "files_by_category": {
+    "collectibles": 5,
+    "decorations": 46,
+    "enemies": 9,
+    "terrain": 32
+  },
+  "supported_extensions": [
+    ".jpeg",
+    ".jpg",
+    ".png",
+    ".svg",
+    ".webp"
+  ],
+  "validation": {
+    "sidecars": 92,
+    "image_files": 92,
+    "errors": [],
+    "error_count": 0
+  }
+}

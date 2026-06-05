@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_pixel_art_trees_c41ba18a",
+  "asset_name": "Pixel Art Trees",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_pixel_art_trees_c41ba18a.png",
+  "visual_tags": [
+    "ansimuz",
+    "pixel",
+    "art",
+    "trees",
+    "c41ba18a",
+    "vegetation",
+    "and",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "parallax",
+    "industrial",
+    "web",
+    "layers"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Warped/Environments/parallax-industrial-web/Layers/far_buildings",
+  "source_category": "vegetation_and_trees",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.95,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 213,
+      "h": 142
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      213,
+      142
+    ]
+  }
+}

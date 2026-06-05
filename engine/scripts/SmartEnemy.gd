@@ -607,18 +607,18 @@ func take_damage(amount: int, element: String = "", attacker: Node2D = null) -> 
 	current_health -= final_amount
 	knockback_timer = 0.25
 
-	var main = get_tree().get_root().get_node_or_null("Main")
-	if main != null:
-		if main.has_method("spawn_floating_text"):
-			main.spawn_floating_text(str(-amount), global_position, Color.RED)
-		if main.has_method("play_custom_sfx"):
-			main.play_custom_sfx(str(get_meta("asset_id")) if has_meta("asset_id") else "slime_patrol", "hit")
-		elif main.has_method("play_sfx"):
-			main.play_sfx("hurt")
-		if main.has_method("trigger_screen_shake"):
-			main.trigger_screen_shake(4.0 if not boss_mode else 10.0, 0.15 if not boss_mode else 0.3)
-		if main.has_method("trigger_hit_stop"):
-			main.trigger_hit_stop(0.08 if not boss_mode else 0.2)
+	var damage_main = get_tree().get_root().get_node_or_null("Main")
+	if damage_main != null:
+		if damage_main.has_method("spawn_floating_text"):
+			damage_main.spawn_floating_text(str(-amount), global_position, Color.RED)
+		if damage_main.has_method("play_custom_sfx"):
+			damage_main.play_custom_sfx(str(get_meta("asset_id")) if has_meta("asset_id") else "slime_patrol", "hit")
+		elif damage_main.has_method("play_sfx"):
+			damage_main.play_sfx("hurt")
+		if damage_main.has_method("trigger_screen_shake"):
+			damage_main.trigger_screen_shake(4.0 if not boss_mode else 10.0, 0.15 if not boss_mode else 0.3)
+		if damage_main.has_method("trigger_hit_stop"):
+			damage_main.trigger_hit_stop(0.08 if not boss_mode else 0.2)
 
 	# Wobble Scale Animation using Tween
 	var base_scale = scale

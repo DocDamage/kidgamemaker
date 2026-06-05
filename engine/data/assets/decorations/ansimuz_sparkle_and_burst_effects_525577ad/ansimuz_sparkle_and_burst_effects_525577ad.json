@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_sparkle_and_burst_effects_525577ad",
+  "asset_name": "Sparkle And Burst Effects",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_sparkle_and_burst_effects_525577ad.png",
+  "visual_tags": [
+    "ansimuz",
+    "sparkle",
+    "and",
+    "burst",
+    "effects",
+    "525577ad",
+    "particles",
+    "legacy",
+    "collection",
+    "assets",
+    "explosions",
+    "magic",
+    "hit"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Explosions and Magic/Hit/hit",
+  "source_category": "effects_and_particles",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.95,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 93,
+      "h": 32
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      93,
+      32
+    ]
+  }
+}

@@ -1,7 +1,10 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { getInventoryAssetUrl, isEmojiVisual } from './lib/assetInventory';
+  import type { AssetInventory, ToyboxAsset } from './lib/canvasState';
 
   export let isVisible = false;
+  export let inventory: AssetInventory = {};
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -18,6 +21,10 @@
     randomizeSeed();
   }
 
+  $: forestPreview = pickPreview(['forest', 'grass', 'jungle', 'tree', 'plant'], 'terrain');
+  $: castlePreview = pickPreview(['castle', 'dungeon', 'stone', 'torch', 'lava'], 'terrain');
+  $: spacePreview = pickPreview(['space', 'sci', 'metal', 'alien', 'tech'], 'terrain');
+
   function randomizeSeed() {
     seed = SEED_WORDS[Math.floor(Math.random() * SEED_WORDS.length)] + '-' + Math.floor(Math.random() * 900 + 100);
   }
@@ -29,6 +36,16 @@
       seed: seed.trim() || 'default-seed'
     });
   }
+
+  function pickPreview(terms: string[], preferredCategory: string): ToyboxAsset | undefined {
+    const preferred = inventory[preferredCategory] ?? [];
+    const all = [...preferred, ...Object.values(inventory).flat()];
+    return all.find((asset) => {
+      const visual = asset.visual ?? '';
+      const searchable = `${asset.id} ${asset.name} ${asset.type ?? ''} ${asset.source_pack ?? ''}`.toLowerCase();
+      return visual && !isEmojiVisual(visual) && terms.some((term) => searchable.includes(term));
+    }) ?? all.find((asset) => asset.visual && !isEmojiVisual(asset.visual));
+  }
 </script>
 
 {#if isVisible}
@@ -37,7 +54,7 @@
   <div class="backdrop" role="button" tabindex="-1" on:click={() => dispatch('close')}>
     <div class="modal" role="dialog" tabindex="0" on:click|stopPropagation>
       <header>
-        <h2>🧬 Procedural Level Builder</h2>
+        <h2>Procedural Level Builder</h2>
         <button class="close-btn" on:click={() => dispatch('close')}>✕</button>
       </header>
 
@@ -48,20 +65,20 @@
 
         <!-- Biome selection -->
         <div class="section">
-          <h3>🌳 Choose Biome Theme:</h3>
+          <h3>Choose Biome Theme:</h3>
           <div class="cards-grid">
             <button class="card" class:active={selectedBiome === 'forest'} on:click={() => selectedBiome = 'forest'}>
-              <span class="icon">🌳</span>
+              <span class="preview">{#if forestPreview}<img src={getInventoryAssetUrl(forestPreview)} alt="Forest preview" />{/if}</span>
               <span class="title">Forest Biome</span>
               <span class="card-desc">Charming green woods, cute slimes, hidden gems, and butterflies.</span>
             </button>
             <button class="card" class:active={selectedBiome === 'castle'} on:click={() => selectedBiome = 'castle'}>
-              <span class="icon">🏰</span>
+              <span class="preview">{#if castlePreview}<img src={getInventoryAssetUrl(castlePreview)} alt="Castle preview" />{/if}</span>
               <span class="title">Spooky Castle</span>
               <span class="card-desc">Fiery volcanic dungeon with spikes, locked security gates, and red bats.</span>
             </button>
             <button class="card" class:active={selectedBiome === 'space'} on:click={() => selectedBiome = 'space'}>
-              <span class="icon">🚀</span>
+              <span class="preview">{#if spacePreview}<img src={getInventoryAssetUrl(spacePreview)} alt="Space preview" />{/if}</span>
               <span class="title">Cosmic Space</span>
               <span class="card-desc">Zero-gravity zones, neon tiles, futuristic platforms, and stardust.</span>
             </button>
@@ -70,32 +87,32 @@
 
         <!-- Difficulty selection -->
         <div class="section">
-          <h3>⚡ Choose Challenge Level:</h3>
+          <h3>Choose Challenge Level:</h3>
           <div class="options-row">
             <button class="difficulty-btn easy" class:active={selectedDifficulty === 'easy'} on:click={() => selectedDifficulty = 'easy'}>
-              🟢 Easy
+              Easy
             </button>
             <button class="difficulty-btn medium" class:active={selectedDifficulty === 'medium'} on:click={() => selectedDifficulty = 'medium'}>
-              🟡 Medium
+              Medium
             </button>
             <button class="difficulty-btn hard" class:active={selectedDifficulty === 'hard'} on:click={() => selectedDifficulty = 'hard'}>
-              🔴 Hard
+              Hard
             </button>
           </div>
         </div>
 
         <!-- Seed input -->
         <div class="section">
-          <h3>🧬 Custom Level Seed:</h3>
+          <h3>Custom Level Seed:</h3>
           <div class="input-row">
             <input type="text" bind:value={seed} placeholder="Type a seed word..." />
-            <button class="random-btn" on:click={randomizeSeed}>🎲 Randomize</button>
+            <button class="random-btn" on:click={randomizeSeed}>Randomize</button>
           </div>
         </div>
 
         <!-- Generate Button -->
         <button class="generate-btn" on:click={handleGenerate}>
-          ✨ Compile & Generate Level! ✨
+          Compile & Generate Level
         </button>
       </div>
     </div>
@@ -215,8 +232,21 @@
     background: rgba(251, 191, 36, 0.1);
   }
 
-  .card .icon {
-    font-size: 2.2rem;
+  .preview {
+    width: 72px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 6px;
+    background: rgba(148, 163, 184, 0.12);
+  }
+
+  .preview img {
+    max-width: 72px;
+    max-height: 46px;
+    object-fit: contain;
+    display: block;
   }
 
   .card .title {

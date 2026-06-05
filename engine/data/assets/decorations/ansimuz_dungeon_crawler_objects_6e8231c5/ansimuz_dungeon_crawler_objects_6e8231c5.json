@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_dungeon_crawler_objects_6e8231c5",
+  "asset_name": "Dungeon Crawler Objects",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_dungeon_crawler_objects_6e8231c5.png",
+  "visual_tags": [
+    "ansimuz",
+    "dungeon",
+    "crawler",
+    "objects",
+    "6e8231c5",
+    "unknown",
+    "legacy",
+    "collection",
+    "assets",
+    "tinyrpg",
+    "environments",
+    "single",
+    "png"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/TinyRPG/Environments/single-dungeon-crawler-objects/PNG/dungeon_crawler_objects",
+  "source_category": "unknown",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 272,
+      "h": 144
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      272,
+      144
+    ]
+  }
+}

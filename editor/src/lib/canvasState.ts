@@ -100,6 +100,9 @@ export type ToyboxAsset = {
   visual?: string;
   type?: string;
   sidecar_path?: string;
+  source_pack?: string;
+  source_author?: string;
+  source_collection?: string;
   is_spritesheet?: boolean;
   frames?: Array<{ x: number; y: number; w: number; h: number }>;
   snapping_type?: string;

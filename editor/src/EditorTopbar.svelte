@@ -14,6 +14,7 @@
   export let canRedo = false;
   export let parentsPanelOpen = false;
   export let magicWandOpen = false;
+  export let gridSize = 32;
 
   const dispatch = createEventDispatcher<{
     cycleTime: void;
@@ -27,6 +28,7 @@
     editActiveAsset: void;
     toggleEraser: void;
     toggleSnap: void;
+    setGridSize: number;
     undo: void;
     redo: void;
     openToybox: void;
@@ -136,6 +138,17 @@
   <button class="edit-toy-btn" on:click={(event) => clickDispatch(event, 'editActiveAsset')} title="Paint/Edit this toy">🎨 Edit</button>
   <button class="eraser-btn-top" class:active={eraserMode} on:click={(event) => clickDispatch(event, 'toggleEraser')} title="Eraser">🧽 Eraser</button>
   <button class="snap-btn-top" class:active={snapEnabled} on:click={(event) => clickDispatch(event, 'toggleSnap')} title="Snap to Grid">🧲 Snap</button>
+  <label class="grid-size-control" title="Grid size">
+    <span>Grid</span>
+    <input
+      type="number"
+      min="1"
+      max="128"
+      step="1"
+      value={gridSize}
+      on:change={(event) => dispatch('setGridSize', Number((event.currentTarget as HTMLInputElement).value))}
+    />
+  </label>
   <button class="undo-btn-top" disabled={!canUndo} on:click={(event) => clickDispatch(event, 'undo')} title="Undo last action">↺ Undo</button>
   <button class="redo-btn-top" disabled={!canRedo} on:click={(event) => clickDispatch(event, 'redo')} title="Redo action">↻ Redo</button>
   <button class="toybox-btn-top" on:click={(event) => clickDispatch(event, 'openToybox')} title="Toybox">🧰 Toybox</button>
@@ -258,6 +271,28 @@
     background: #3b82f6;
     color: white;
     box-shadow: 0 4px 0 #1e40af;
+  }
+
+  .grid-size-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #0f172a;
+    color: #e2e8f0;
+    border: 2px solid #334155;
+    border-radius: 12px;
+    padding: 7px 10px;
+    font-weight: 900;
+  }
+
+  .grid-size-control input {
+    width: 58px;
+    background: #1e293b;
+    color: #f8fafc;
+    border: 1px solid #64748b;
+    border-radius: 8px;
+    padding: 5px 7px;
+    font-weight: 900;
   }
 
   .undo-btn-top {

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_female_character_portrait_2abad8d9",
+  "asset_name": "Female Character Portrait",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_female_character_portrait_2abad8d9.png",
+  "visual_tags": [
+    "ansimuz",
+    "female",
+    "character",
+    "portrait",
+    "2abad8d9",
+    "portraits",
+    "and",
+    "faces",
+    "legacy",
+    "collection",
+    "assets",
+    "tinyrpg",
+    "characters",
+    "top",
+    "down",
+    "16",
+    "bit",
+    "fantasy",
+    "pack",
+    "1",
+    "pirategirl"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/TinyRPG/Characters/Top-Down-16-bit-fantasy/Characters pack 1/PirateGirl/profile",
+  "source_category": "portraits_and_faces",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      32,
+      32
+    ]
+  }
+}

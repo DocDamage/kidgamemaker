@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_hanging_wooden_platform_4333476f",
+  "asset_name": "Hanging Wooden Platform",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_hanging_wooden_platform_4333476f.png",
+  "visual_tags": [
+    "ansimuz",
+    "hanging",
+    "wooden",
+    "platform",
+    "4333476f",
+    "tiles",
+    "and",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "tinyrpg",
+    "environments",
+    "tiny",
+    "rpg",
+    "mountain",
+    "files",
+    "png"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/TinyRPG/Environments/Tiny RPG Mountain Files/png/bridge",
+  "source_category": "tiles_and_terrain",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.95,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 160,
+      "h": 80
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      160,
+      80
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-import { makeInstanceId, type PlacedEntity, type ToyboxAsset, type WorldSettings } from './canvasState';
+import { makeInstanceId, type AssetInventory, type PlacedEntity, type ToyboxAsset, type WorldSettings } from './canvasState';
 
 export type ThemeName = 'space' | 'candy' | 'jungle' | 'ice' | 'volcano';
 export type FindAsset = (assetId: string) => ToyboxAsset | undefined;
@@ -118,7 +118,7 @@ export function buildThemeStarterEntities(findAsset: FindAsset): PlacedEntity[] 
   return entities;
 }
 
-export function buildSurpriseRoom(findAsset: FindAsset, difficultyMode: string, calmMode: boolean): GeneratedRoom {
+export function buildSurpriseRoom(findAsset: FindAsset, difficultyMode: string, calmMode: boolean, inventory?: AssetInventory): GeneratedRoom {
   const theme = randomThemeName();
   const worldSettings: WorldSettings = {
     ...buildThemeWorldSettings(theme),
@@ -129,11 +129,11 @@ export function buildSurpriseRoom(findAsset: FindAsset, difficultyMode: string, 
     calm_mode: calmMode
   } as WorldSettings;
 
-  const terrainAsset = findAsset('stone_floor') ?? { id: 'stone_floor', name: 'Stone Floor', category: 'terrain', type: 'terrain' };
-  const heroAsset = findAsset('hero_knight') ?? { id: 'hero_knight', name: 'Hero Knight', category: 'heroes', type: 'player' };
-  const rubyAsset = findAsset('gold_ruby') ?? { id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', type: 'collectible' };
-  const slimeAsset = findAsset('slime_patrol') ?? { id: 'slime_patrol', name: 'Slime', category: 'enemies', type: 'enemy' };
-  const portalAsset = findAsset('exit_portal');
+  const terrainAsset = pickAsset(inventory, 'terrain', ['platform', 'tile', 'stone', 'grass', 'metal'], ['stone_floor']) ?? findAsset('stone_floor') ?? fallbackAsset('stone_floor', 'Stone Floor', 'terrain', 'terrain');
+  const heroAsset = pickAsset(inventory, 'heroes', ['hero', 'player', 'knight'], ['hero_knight', 'player_knight']) ?? findAsset('hero_knight') ?? fallbackAsset('hero_knight', 'Hero Knight', 'heroes', 'player');
+  const rubyAsset = pickAsset(inventory, 'collectibles', ['gem', 'ruby', 'coin', 'heart', 'dagger', 'sword'], ['gold_ruby']) ?? findAsset('gold_ruby') ?? fallbackAsset('gold_ruby', 'Gold Ruby', 'collectibles', 'collectible');
+  const slimeAsset = pickAsset(inventory, 'enemies', ['slime', 'demon', 'monster', 'dragon', 'spider'], ['slime_patrol']) ?? findAsset('slime_patrol') ?? fallbackAsset('slime_patrol', 'Slime', 'enemies', 'enemy');
+  const portalAsset = pickAsset(inventory, 'portals', ['portal', 'door', 'gate'], ['exit_portal', 'portal_door']) ?? findAsset('exit_portal');
   const placed: PlacedEntity[] = [
     {
       instance_id: makeInstanceId(heroAsset.id),
@@ -292,16 +292,17 @@ function shufflePositions(entities: PlacedEntity[]): Array<{ x: number; y: numbe
 export function buildSurpriseWorld(
   findAsset: FindAsset,
   difficultyMode: string,
-  calmMode: boolean
+  calmMode: boolean,
+  inventory?: AssetInventory
 ): GeneratedRoom[] {
   const worldTheme = randomThemeName();
   const roomsList: GeneratedRoom[] = [];
   
-  const terrainAsset = findAsset('stone_floor') ?? { id: 'stone_floor', name: 'Stone Floor', category: 'terrain', type: 'terrain' };
-  const heroAsset = findAsset('hero_knight') ?? { id: 'hero_knight', name: 'Hero Knight', category: 'heroes', type: 'player' };
-  const rubyAsset = findAsset('gold_ruby') ?? { id: 'gold_ruby', name: 'Gold Ruby', category: 'collectibles', type: 'collectible' };
-  const slimeAsset = findAsset('slime_patrol') ?? { id: 'slime_patrol', name: 'Slime', category: 'enemies', type: 'enemy' };
-  const portalAsset = findAsset('portal_door') ?? findAsset('exit_portal') ?? { id: 'portal_door', name: 'Portal Door', category: 'portals', type: 'portal' };
+  const terrainAsset = pickAsset(inventory, 'terrain', ['platform', 'tile', 'stone', 'grass', 'metal'], ['stone_floor']) ?? findAsset('stone_floor') ?? fallbackAsset('stone_floor', 'Stone Floor', 'terrain', 'terrain');
+  const heroAsset = pickAsset(inventory, 'heroes', ['hero', 'player', 'knight'], ['hero_knight', 'player_knight']) ?? findAsset('hero_knight') ?? fallbackAsset('hero_knight', 'Hero Knight', 'heroes', 'player');
+  const rubyAsset = pickAsset(inventory, 'collectibles', ['gem', 'ruby', 'coin', 'heart', 'dagger', 'sword'], ['gold_ruby']) ?? findAsset('gold_ruby') ?? fallbackAsset('gold_ruby', 'Gold Ruby', 'collectibles', 'collectible');
+  const slimeAsset = pickAsset(inventory, 'enemies', ['slime', 'demon', 'monster', 'dragon', 'spider'], ['slime_patrol']) ?? findAsset('slime_patrol') ?? fallbackAsset('slime_patrol', 'Slime', 'enemies', 'enemy');
+  const portalAsset = pickAsset(inventory, 'portals', ['portal', 'door', 'gate'], ['portal_door', 'exit_portal']) ?? findAsset('portal_door') ?? findAsset('exit_portal') ?? fallbackAsset('portal_door', 'Portal Door', 'portals', 'portal');
 
   const worldId = `surprise_world_${Math.floor(Math.random() * 9000 + 1000)}`;
 
@@ -450,9 +451,9 @@ export function buildSurpriseWorld(
       if (x === 3 && y === 3) {
         placed.push({
           instance_id: 'exit_portal_goal',
-          asset_id: 'exit_portal',
-          category: 'portals',
-          type: 'portal',
+          asset_id: portalAsset.id,
+          category: portalAsset.category,
+          type: portalAsset.type ?? portalAsset.category,
           position: { x: 800, y: 300 },
           modifiers: {
             variant: 'default',
@@ -472,4 +473,30 @@ export function buildSurpriseWorld(
   }
 
   return roomsList;
+}
+
+function fallbackAsset(id: string, name: string, category: string, type: string): ToyboxAsset {
+  return { id, name, category, type };
+}
+
+function pickAsset(
+  inventory: AssetInventory | undefined,
+  category: string,
+  terms: string[],
+  fallbackIds: string[]
+): ToyboxAsset | undefined {
+  const candidates = (inventory?.[category] ?? []).filter((asset) => {
+    const visual = asset.visual ?? '';
+    return Boolean(asset.sidecar_path) && /\.(png|jpg|jpeg|webp|svg)$/i.test(visual);
+  });
+
+  for (const id of fallbackIds) {
+    const match = candidates.find((asset) => asset.id === id);
+    if (match) return match;
+  }
+
+  return candidates.find((asset) => {
+    const searchable = `${asset.id} ${asset.name} ${asset.type ?? ''} ${asset.source_pack ?? ''}`.toLowerCase();
+    return terms.some((term) => searchable.includes(term));
+  }) ?? candidates[0];
 }

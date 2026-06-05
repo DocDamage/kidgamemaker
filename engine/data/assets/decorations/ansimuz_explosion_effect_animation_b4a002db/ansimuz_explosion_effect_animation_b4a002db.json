@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_explosion_effect_animation_b4a002db",
+  "asset_name": "Explosion Effect Animation",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_explosion_effect_animation_b4a002db.png",
+  "visual_tags": [
+    "ansimuz",
+    "explosion",
+    "effect",
+    "animation",
+    "b4a002db",
+    "effects",
+    "and",
+    "particles",
+    "legacy",
+    "collection",
+    "assets",
+    "explosions",
+    "magic",
+    "pack",
+    "1",
+    "f"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Explosions and Magic/Explosions pack/explosion-1-f/explosion_1_f",
+  "source_category": "effects_and_particles",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 384,
+      "h": 48
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      384,
+      48
+    ]
+  }
+}

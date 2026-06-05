@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_pixel_art_tree_and_grass_terrain_4d61818f",
+  "asset_name": "Pixel Art Tree And Grass Terrain",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_pixel_art_tree_and_grass_terrain_4d61818f.png",
+  "visual_tags": [
+    "ansimuz",
+    "pixel",
+    "art",
+    "tree",
+    "and",
+    "grass",
+    "terrain",
+    "4d61818f",
+    "tiles",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "country",
+    "platform",
+    "files",
+    "layers"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Gothicvania/Environments/country-platform-files/layers/country_platform_tiles_example",
+  "source_category": "tiles_and_terrain",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.98,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 384,
+      "h": 224
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      384,
+      224
+    ]
+  }
+}

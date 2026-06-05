@@ -1,13 +1,15 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { PlacedEntity, WorldSettings, ToyboxAsset } from './lib/canvasState';
+  import type { AssetInventory, PlacedEntity, WorldSettings, ToyboxAsset } from './lib/canvasState';
 
   export let placed: PlacedEntity[];
   export let worldSettings: WorldSettings;
+  export let inventory: AssetInventory = {};
 
   const dispatch = createEventDispatcher<{
     close: void;
     saveRoom: void;
+    changed: { placed: PlacedEntity[]; worldSettings: WorldSettings };
     generateLevel: { biome: 'forest' | 'castle' | 'space'; difficulty: 'easy' | 'medium' | 'hard'; seed: string };
   }>();
 
@@ -58,6 +60,21 @@
     executeCommand();
   }
 
+  function commitRoomChange() {
+    dispatch('changed', { placed, worldSettings });
+    dispatch('saveRoom');
+  }
+
+  function setWorldSetting(next: Partial<WorldSettings>) {
+    worldSettings = { ...worldSettings, ...next };
+    commitRoomChange();
+  }
+
+  function setPlaced(next: PlacedEntity[]) {
+    placed = next;
+    commitRoomChange();
+  }
+
   function executeCommand() {
     if (!commandText.trim()) return;
 
@@ -66,29 +83,25 @@
 
     // 1. Time of Day Commands
     if (cmd.includes('make it night') || cmd === 'night') {
-      worldSettings.time_of_day = 'night';
-      dispatch('saveRoom');
+      setWorldSetting({ time_of_day: 'night' });
       showSuccess('🌌 The sky turns into a cozy starry night!');
       commandText = '';
       return;
     }
     if (cmd.includes('make it day') || cmd === 'day') {
-      worldSettings.time_of_day = 'day';
-      dispatch('saveRoom');
+      setWorldSetting({ time_of_day: 'day' });
       showSuccess('☀️ The sun shines bright over the land!');
       commandText = '';
       return;
     }
     if (cmd.includes('make it morning') || cmd === 'morning') {
-      worldSettings.time_of_day = 'morning';
-      dispatch('saveRoom');
+      setWorldSetting({ time_of_day: 'morning' });
       showSuccess('🌅 A beautiful morning dawn rises!');
       commandText = '';
       return;
     }
     if (cmd.includes('make it sunset') || cmd === 'sunset') {
-      worldSettings.time_of_day = 'sunset';
-      dispatch('saveRoom');
+      setWorldSetting({ time_of_day: 'sunset' });
       showSuccess('🌇 A warm orange sunset paints the horizon!');
       commandText = '';
       return;
@@ -96,22 +109,19 @@
 
     // 2. Weather Commands
     if (cmd.includes('make it rain') || cmd === 'rain') {
-      worldSettings.weather = 'rain';
-      dispatch('saveRoom');
+      setWorldSetting({ weather: 'rain' });
       showSuccess('🌧️ Pitter-patter! The rain starts to fall!');
       commandText = '';
       return;
     }
     if (cmd.includes('make it snow') || cmd === 'snow') {
-      worldSettings.weather = 'snow';
-      dispatch('saveRoom');
+      setWorldSetting({ weather: 'snow' });
       showSuccess('❄️ Brrr! Magical snowflakes begin to drift down!');
       commandText = '';
       return;
     }
     if (cmd.includes('make it clear') || cmd === 'clear') {
-      worldSettings.weather = 'clear';
-      dispatch('saveRoom');
+      setWorldSetting({ weather: 'clear' });
       showSuccess('🌤️ The clouds clear up for a perfect day!');
       commandText = '';
       return;
@@ -120,11 +130,10 @@
     // 3. Clear Hazards Command
     if (cmd.includes('clear hazards') || cmd.includes('remove hazards') || cmd.includes('delete hazards') || cmd.includes('no hazards')) {
       const originalCount = placed.length;
-      placed = placed.filter(
+      setPlaced(placed.filter(
         (item) => item.type !== 'hazard' && item.asset_id !== 'cactus_hazard' && item.asset_id !== 'spike_hazard'
-      );
+      ));
       const cleared = originalCount - placed.length;
-      dispatch('saveRoom');
       showSuccess(`🧹 Poof! Cleared ${cleared} dangerous hazard spikes/cacti!`);
       commandText = '';
       return;
@@ -136,48 +145,28 @@
     if (match) {
       const count = parseInt(match[1], 10);
       const rawType = match[2].trim();
-      let assetId = '';
-      let category = '';
-      let type = '';
-      let name = '';
-      let visual = '';
+      let asset: ToyboxAsset | undefined;
 
       if (rawType.startsWith('slime') || rawType.startsWith('enemy')) {
-        assetId = 'slime_patrol';
-        category = 'enemies';
-        type = 'enemy';
-        name = 'Slime Patrol';
-        visual = 'res://data/assets/enemies/red_slime_enemy/red_slime_enemy.png';
+        asset = pickCommandAsset('enemies', ['slime', 'enemy', 'monster', 'demon'], ['slime_patrol']);
       } else if (rawType.startsWith('gem') || rawType.startsWith('ruby') || rawType.startsWith('coin')) {
-        assetId = 'gold_ruby';
-        category = 'collectibles';
-        type = 'collectible';
-        name = 'Gold Ruby';
-        visual = 'gold_ruby.svg';
+        asset = pickCommandAsset('collectibles', ['gem', 'ruby', 'coin', 'heart'], ['gold_ruby']);
       } else if (rawType.startsWith('spike') || rawType.startsWith('hazard')) {
-        assetId = 'spike_hazard';
-        category = 'enemies';
-        type = 'hazard';
-        name = 'Ice Spike';
-        visual = '🧊';
+        asset = pickCommandAsset('enemies', ['spike', 'hazard', 'demon', 'monster'], ['spike_hazard', 'cactus_hazard']);
       } else if (rawType.startsWith('cactus')) {
-        assetId = 'cactus_hazard';
-        category = 'enemies';
-        type = 'hazard';
-        name = 'Prickly Cactus';
-        visual = '🌵';
+        asset = pickCommandAsset('enemies', ['cactus', 'hazard', 'plant'], ['cactus_hazard']);
       }
 
-      if (assetId && count > 0 && count <= 20) {
+      if (asset && count > 0 && count <= 20) {
         const newEntities: PlacedEntity[] = [];
         const startX = 200;
         const startY = 150;
         for (let i = 0; i < count; i++) {
           newEntities.push({
-            instance_id: `${assetId}_wand_${Math.random().toString(36).substring(2, 8)}`,
-            asset_id: assetId,
-            category: category,
-            type: type,
+            instance_id: `${asset.id}_wand_${Math.random().toString(36).substring(2, 8)}`,
+            asset_id: asset.id,
+            category: asset.category,
+            type: asset.type ?? asset.category,
             position: { x: startX + i * 64, y: startY },
             modifiers: {
               variant: 'default',
@@ -185,9 +174,8 @@
             }
           });
         }
-        placed = [...placed, ...newEntities];
-        dispatch('saveRoom');
-        showSuccess(`🪄 Abracadabra! Spawned ${count} ${name}s on the canvas!`);
+        setPlaced([...placed, ...newEntities]);
+        showSuccess(`Placed ${count} ${asset.name} stamp${count === 1 ? '' : 's'} on the canvas.`);
         commandText = '';
         return;
       } else if (count > 20) {
@@ -238,6 +226,23 @@
   function showError(msg: string) {
     statusMessage = msg;
     statusColor = '#ef4444';
+  }
+
+  function pickCommandAsset(category: string, terms: string[], fallbackIds: string[]): ToyboxAsset | undefined {
+    const candidates = (inventory[category] ?? []).filter((asset) => {
+      const visual = asset.visual ?? '';
+      return Boolean(asset.sidecar_path) && /\.(png|jpg|jpeg|webp|svg)$/i.test(visual);
+    });
+
+    for (const id of fallbackIds) {
+      const match = candidates.find((asset) => asset.id === id);
+      if (match) return match;
+    }
+
+    return candidates.find((asset) => {
+      const searchable = `${asset.id} ${asset.name} ${asset.type ?? ''} ${asset.source_pack ?? ''}`.toLowerCase();
+      return terms.some((term) => searchable.includes(term));
+    }) ?? candidates[0];
   }
 
   function handleKeydown(event: KeyboardEvent) {

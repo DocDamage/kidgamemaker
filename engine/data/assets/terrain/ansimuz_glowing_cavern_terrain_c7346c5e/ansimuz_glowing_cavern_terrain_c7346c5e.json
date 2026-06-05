@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_glowing_cavern_terrain_c7346c5e",
+  "asset_name": "Glowing Cavern Terrain",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_glowing_cavern_terrain_c7346c5e.png",
+  "visual_tags": [
+    "ansimuz",
+    "glowing",
+    "cavern",
+    "terrain",
+    "c7346c5e",
+    "tiles",
+    "and",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "lava",
+    "background",
+    "png"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "source_group": "Legacy Collection/Assets/Gothicvania/Environments/lava-background/PNG/background",
+  "source_category": "tiles_and_terrain",
+  "source_kind": "single_sprite",
+  "source_file_count": 1,
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 0.95,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 432,
+      "h": 240
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      432,
+      240
+    ]
+  }
+}
