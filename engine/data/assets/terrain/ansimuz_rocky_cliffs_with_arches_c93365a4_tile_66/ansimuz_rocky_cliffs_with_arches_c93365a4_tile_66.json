@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_rocky_cliffs_with_arches_c93365a4_tile_66",
+  "asset_name": "Rocky Cliffs With Arches Tile 66",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_rocky_cliffs_with_arches_c93365a4_tile_66.png",
+  "visual_tags": [
+    "ansimuz",
+    "rocky",
+    "cliffs",
+    "with",
+    "arches",
+    "c93365a4",
+    "tiles",
+    "and",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "pass",
+    "files",
+    "png",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

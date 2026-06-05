@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_rock_with_sword_in_water_47a56e62_tile_36",
+  "asset_name": "Rock With Sword In Water Tile 36",
+  "category": "collectibles",
+  "runtime_template": "collectible",
+  "visual": "ansimuz_rock_with_sword_in_water_47a56e62_tile_36.png",
+  "visual_tags": [
+    "ansimuz",
+    "rock",
+    "with",
+    "sword",
+    "in",
+    "water",
+    "47a56e62",
+    "props",
+    "and",
+    "items",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "ships",
+    "graveyard",
+    "png",
+    "mockup",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      32,
+      32
+    ]
+  }
+}

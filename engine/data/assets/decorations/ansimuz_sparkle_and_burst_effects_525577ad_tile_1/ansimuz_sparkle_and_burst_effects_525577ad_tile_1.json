@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_sparkle_and_burst_effects_525577ad_tile_1",
+  "asset_name": "Sparkle And Burst Effects Tile 1",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_sparkle_and_burst_effects_525577ad_tile_1.png",
+  "visual_tags": [
+    "ansimuz",
+    "sparkle",
+    "and",
+    "burst",
+    "effects",
+    "525577ad",
+    "particles",
+    "legacy",
+    "collection",
+    "assets",
+    "explosions",
+    "magic",
+    "hit",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 6,
+      "h": 6
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      6,
+      6
+    ]
+  }
+}

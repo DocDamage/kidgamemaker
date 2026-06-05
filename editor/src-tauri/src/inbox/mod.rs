@@ -566,5 +566,96 @@ mod tests {
         let _ = fs::remove_dir_all(&temp_base);
         Ok(())
     }
+
+    fn create_mock_png_bytes(
+        width: u32,
+        height: u32,
+        active_rects: &[(u32, u32, u32, u32)],
+    ) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut pixels = vec![0u8; (width * height * 4) as usize];
+        for &(rx, ry, rw, rh) in active_rects {
+            for y in ry..(ry + rh) {
+                for x in rx..(rx + rw) {
+                    let idx = (y * width + x) as usize;
+                    pixels[idx * 4] = 255;
+                    pixels[idx * 4 + 1] = 0;
+                    pixels[idx * 4 + 2] = 0;
+                    pixels[idx * 4 + 3] = 255;
+                }
+            }
+        }
+        let mut file_bytes = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut file_bytes, width, height);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header()?;
+            writer.write_image_data(&pixels)?;
+        }
+        Ok(file_bytes)
+    }
+
+    #[test]
+    fn test_process_spritesheet_tile_slicing() -> Result<(), Box<dyn Error>> {
+        let temp_base = std::env::temp_dir().join("kdm_test_repo_spritesheet");
+        let _ = fs::remove_dir_all(&temp_base);
+        fs::create_dir_all(&temp_base)?;
+
+        // Create 2 uniform components: one at (0,0) size 16x16, and one at (16,0) size 16x16 on a 32x16 image
+        let bytes = create_mock_png_bytes(32, 16, &[(0, 0, 16, 16), (16, 0, 16, 16)])?;
+        let source_file = temp_base.join("mossy_stones_sheet.png");
+        fs::write(&source_file, &bytes)?;
+
+        ingest::process_single_asset(&source_file, &temp_base).map_err(test_error)?;
+
+        // 1. Verify original spritesheet asset exists
+        let orig_dest_file = temp_base
+            .join("engine")
+            .join("data")
+            .join("assets")
+            .join("terrain")
+            .join("mossy_stones_sheet")
+            .join("mossy_stones_sheet.png");
+        assert!(orig_dest_file.exists());
+
+        // 2. Verify extracted individual tile assets exist
+        let tile0_file = temp_base
+            .join("engine")
+            .join("data")
+            .join("assets")
+            .join("terrain")
+            .join("mossy_stones_sheet_tile_0")
+            .join("mossy_stones_sheet_tile_0.png");
+        assert!(tile0_file.exists());
+
+        let tile1_file = temp_base
+            .join("engine")
+            .join("data")
+            .join("assets")
+            .join("terrain")
+            .join("mossy_stones_sheet_tile_1")
+            .join("mossy_stones_sheet_tile_1.png");
+        assert!(tile1_file.exists());
+
+        // Verify sidecar for tile 0
+        let tile0_sidecar = temp_base
+            .join("engine")
+            .join("data")
+            .join("assets")
+            .join("terrain")
+            .join("mossy_stones_sheet_tile_0")
+            .join("mossy_stones_sheet_tile_0.json");
+        assert!(tile0_sidecar.exists());
+
+        let content = fs::read_to_string(&tile0_sidecar)?;
+        let json: serde_json::Value = serde_json::from_str(&content)?;
+        assert_eq!(json["asset_id"], "mossy_stones_sheet_tile_0");
+        assert_eq!(json["is_spritesheet"], false);
+        assert_eq!(json["frames"][0]["w"], 16);
+        assert_eq!(json["frames"][0]["h"], 16);
+
+        let _ = fs::remove_dir_all(&temp_base);
+        Ok(())
+    }
 }
 

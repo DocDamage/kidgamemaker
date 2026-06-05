@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_platform_with_hanging_ropes_b211d306_tile_20",
+  "asset_name": "Platform With Hanging Ropes Tile 20",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_platform_with_hanging_ropes_b211d306_tile_20.png",
+  "visual_tags": [
+    "ansimuz",
+    "platform",
+    "with",
+    "hanging",
+    "ropes",
+    "b211d306",
+    "tiles",
+    "and",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "bulkhead",
+    "walls",
+    "v1",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      32,
+      32
+    ]
+  }
+}

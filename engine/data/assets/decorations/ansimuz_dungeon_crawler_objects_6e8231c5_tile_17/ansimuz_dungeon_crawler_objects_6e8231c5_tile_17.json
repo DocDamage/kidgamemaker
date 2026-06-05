@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_dungeon_crawler_objects_6e8231c5_tile_17",
+  "asset_name": "Dungeon Crawler Objects Tile 17",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_dungeon_crawler_objects_6e8231c5_tile_17.png",
+  "visual_tags": [
+    "ansimuz",
+    "dungeon",
+    "crawler",
+    "objects",
+    "6e8231c5",
+    "unknown",
+    "legacy",
+    "collection",
+    "assets",
+    "tinyrpg",
+    "environments",
+    "single",
+    "png",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

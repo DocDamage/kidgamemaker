@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_pine_tree_line_0372dced_tile_5",
+  "asset_name": "Pine Tree Line Tile 5",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_pine_tree_line_0372dced_tile_5.png",
+  "visual_tags": [
+    "ansimuz",
+    "pine",
+    "tree",
+    "line",
+    "0372dced",
+    "vegetation",
+    "and",
+    "trees",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "mountain",
+    "dusk",
+    "old",
+    "version",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      32,
+      32
+    ]
+  }
+}

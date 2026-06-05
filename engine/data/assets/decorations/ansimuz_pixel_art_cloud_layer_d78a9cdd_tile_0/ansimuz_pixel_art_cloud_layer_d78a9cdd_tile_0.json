@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_pixel_art_cloud_layer_d78a9cdd_tile_0",
+  "asset_name": "Pixel Art Cloud Layer Tile 0",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_pixel_art_cloud_layer_d78a9cdd_tile_0.png",
+  "visual_tags": [
+    "ansimuz",
+    "pixel",
+    "art",
+    "cloud",
+    "layer",
+    "d78a9cdd",
+    "effects",
+    "and",
+    "particles",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "mountain",
+    "dusk",
+    "version",
+    "b",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

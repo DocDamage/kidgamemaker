@@ -32,7 +32,7 @@
   "source_category": "props_and_items",
   "source_kind": "single_sprite",
   "source_file_count": 1,
-  "is_spritesheet": false,
+  "is_spritesheet": true,
   "is_uniform_grid": false,
   "grid_cell_size": null,
   "slicing_confidence": 0.95,
@@ -40,8 +40,26 @@
     {
       "x": 0,
       "y": 0,
-      "w": 240,
-      "h": 98
+      "w": 128,
+      "h": 13
+    },
+    {
+      "x": 15,
+      "y": 19,
+      "w": 9,
+      "h": 55
+    },
+    {
+      "x": 110,
+      "y": 13,
+      "w": 61,
+      "h": 85
+    },
+    {
+      "x": 176,
+      "y": 0,
+      "w": 64,
+      "h": 13
     }
   ],
   "placement_logic": {

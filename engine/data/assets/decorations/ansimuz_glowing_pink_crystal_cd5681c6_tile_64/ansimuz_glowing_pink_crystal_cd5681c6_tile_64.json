@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_glowing_pink_crystal_cd5681c6_tile_64",
+  "asset_name": "Glowing Pink Crystal Tile 64",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_glowing_pink_crystal_cd5681c6_tile_64.png",
+  "visual_tags": [
+    "ansimuz",
+    "glowing",
+    "pink",
+    "crystal",
+    "cd5681c6",
+    "props",
+    "and",
+    "items",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "caverns",
+    "files",
+    "web",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      32,
+      32
+    ]
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_celestial_bodies_a066d9b5_tile_2",
+  "asset_name": "Celestial Bodies Tile 2",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_celestial_bodies_a066d9b5_tile_2.png",
+  "visual_tags": [
+    "ansimuz",
+    "celestial",
+    "bodies",
+    "a066d9b5",
+    "props",
+    "and",
+    "items",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "top",
+    "down",
+    "space",
+    "environment",
+    "png",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 49,
+      "h": 48
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      49,
+      48
+    ]
+  }
+}

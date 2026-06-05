@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_prison_bars_efe71d07_tile_18",
+  "asset_name": "Prison Bars Tile 18",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_prison_bars_efe71d07_tile_18.png",
+  "visual_tags": [
+    "ansimuz",
+    "prison",
+    "bars",
+    "efe71d07",
+    "props",
+    "and",
+    "items",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "bulkhead",
+    "walls",
+    "v1",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      32,
+      32
+    ]
+  }
+}

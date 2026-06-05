@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_spiky_green_terrain_2f2c2160_tile_7",
+  "asset_name": "Spiky Green Terrain Tile 7",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_spiky_green_terrain_2f2c2160_tile_7.png",
+  "visual_tags": [
+    "ansimuz",
+    "spiky",
+    "green",
+    "terrain",
+    "2f2c2160",
+    "tiles",
+    "and",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "junk",
+    "wastelands",
+    "files",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 48,
+      "h": 48
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      48,
+      48
+    ]
+  }
+}

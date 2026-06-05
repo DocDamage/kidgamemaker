@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_industrial_pipe_network_0eb453be_tile_13",
+  "asset_name": "Industrial Pipe Network Tile 13",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_industrial_pipe_network_0eb453be_tile_13.png",
+  "visual_tags": [
+    "ansimuz",
+    "industrial",
+    "pipe",
+    "network",
+    "0eb453be",
+    "props",
+    "and",
+    "items",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "bulkhead",
+    "walls",
+    "v1",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      32,
+      32
+    ]
+  }
+}

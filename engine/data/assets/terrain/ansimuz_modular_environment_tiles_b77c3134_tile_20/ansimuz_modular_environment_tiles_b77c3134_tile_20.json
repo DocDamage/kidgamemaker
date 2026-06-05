@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_modular_environment_tiles_b77c3134_tile_20",
+  "asset_name": "Modular Environment Tiles Tile 20",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_modular_environment_tiles_b77c3134_tile_20.png",
+  "visual_tags": [
+    "ansimuz",
+    "modular",
+    "environment",
+    "tiles",
+    "b77c3134",
+    "and",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "ocean",
+    "view",
+    "files",
+    "layers",
+    "day",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

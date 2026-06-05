@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_rugged_terrain_8b9f06b9_tile_5",
+  "asset_name": "Rugged Terrain Tile 5",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_rugged_terrain_8b9f06b9_tile_5.png",
+  "visual_tags": [
+    "ansimuz",
+    "rugged",
+    "terrain",
+    "8b9f06b9",
+    "tiles",
+    "and",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "ships",
+    "graveyard",
+    "png",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

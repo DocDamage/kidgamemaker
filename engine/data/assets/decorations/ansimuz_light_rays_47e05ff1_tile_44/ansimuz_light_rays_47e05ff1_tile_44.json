@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_light_rays_47e05ff1_tile_44",
+  "asset_name": "Light Rays Tile 44",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_light_rays_47e05ff1_tile_44.png",
+  "visual_tags": [
+    "ansimuz",
+    "light",
+    "rays",
+    "47e05ff1",
+    "effects",
+    "and",
+    "particles",
+    "legacy",
+    "collection",
+    "assets",
+    "tinyrpg",
+    "environments",
+    "parallax",
+    "forest",
+    "pack",
+    "web",
+    "v1",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

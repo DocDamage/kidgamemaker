@@ -30,16 +30,52 @@
   "source_category": "tiles_and_terrain",
   "source_kind": "single_sprite",
   "source_file_count": 1,
-  "is_spritesheet": false,
+  "is_spritesheet": true,
   "is_uniform_grid": false,
   "grid_cell_size": null,
   "slicing_confidence": 0.98,
   "frames": [
     {
-      "x": 0,
-      "y": 0,
-      "w": 448,
-      "h": 143
+      "x": 16,
+      "y": 16,
+      "w": 16,
+      "h": 16
+    },
+    {
+      "x": 55,
+      "y": 16,
+      "w": 73,
+      "h": 35
+    },
+    {
+      "x": 144,
+      "y": 20,
+      "w": 32,
+      "h": 16
+    },
+    {
+      "x": 192,
+      "y": 16,
+      "w": 73,
+      "h": 35
+    },
+    {
+      "x": 280,
+      "y": 48,
+      "w": 56,
+      "h": 57
+    },
+    {
+      "x": 352,
+      "y": 32,
+      "w": 32,
+      "h": 33
+    },
+    {
+      "x": 400,
+      "y": 12,
+      "w": 44,
+      "h": 48
     }
   ],
   "placement_logic": {

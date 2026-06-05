@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_arch_vile_a30024ed_tile_189",
+  "asset_name": "Arch Vile Tile 189",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_arch_vile_a30024ed_tile_189.png",
+  "visual_tags": [
+    "ansimuz",
+    "arch",
+    "vile",
+    "a30024ed",
+    "characters",
+    "and",
+    "creatures",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "junk",
+    "wastelands",
+    "files",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

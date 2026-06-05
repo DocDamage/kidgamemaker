@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_overgrown_stone_walls_and_structures_70a6c001_tile_21",
+  "asset_name": "Overgrown Stone Walls And Structures Tile 21",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_overgrown_stone_walls_and_structures_70a6c001_tile_21.png",
+  "visual_tags": [
+    "ansimuz",
+    "overgrown",
+    "stone",
+    "walls",
+    "and",
+    "structures",
+    "70a6c001",
+    "tiles",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "mist",
+    "forest",
+    "background",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

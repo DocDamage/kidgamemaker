@@ -30,16 +30,40 @@
   "source_category": "vegetation_and_trees",
   "source_kind": "single_sprite",
   "source_file_count": 1,
-  "is_spritesheet": false,
+  "is_spritesheet": true,
   "is_uniform_grid": false,
   "grid_cell_size": null,
   "slicing_confidence": 0.95,
   "frames": [
     {
       "x": 0,
+      "y": 22,
+      "w": 14,
+      "h": 120
+    },
+    {
+      "x": 52,
       "y": 0,
-      "w": 213,
+      "w": 14,
       "h": 142
+    },
+    {
+      "x": 88,
+      "y": 39,
+      "w": 14,
+      "h": 103
+    },
+    {
+      "x": 127,
+      "y": 38,
+      "w": 14,
+      "h": 104
+    },
+    {
+      "x": 199,
+      "y": 11,
+      "w": 14,
+      "h": 131
     }
   ],
   "placement_logic": {

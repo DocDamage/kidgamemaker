@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_throwing_dagger_a69ae74c_tile_1",
+  "asset_name": "Throwing Dagger Tile 1",
+  "category": "collectibles",
+  "runtime_template": "collectible",
+  "visual": "ansimuz_throwing_dagger_a69ae74c_tile_1.png",
+  "visual_tags": [
+    "ansimuz",
+    "throwing",
+    "dagger",
+    "a69ae74c",
+    "weapons",
+    "and",
+    "projectiles",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "characters",
+    "terrible",
+    "knight",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

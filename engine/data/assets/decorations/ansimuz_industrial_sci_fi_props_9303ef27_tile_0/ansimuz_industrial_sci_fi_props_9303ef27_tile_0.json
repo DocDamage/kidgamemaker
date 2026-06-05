@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_industrial_sci_fi_props_9303ef27_tile_0",
+  "asset_name": "Industrial Sci Fi Props Tile 0",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_industrial_sci_fi_props_9303ef27_tile_0.png",
+  "visual_tags": [
+    "ansimuz",
+    "industrial",
+    "sci",
+    "fi",
+    "props",
+    "9303ef27",
+    "and",
+    "items",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "interior",
+    "platform",
+    "png",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 64,
+      "h": 64
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      64,
+      64
+    ]
+  }
+}

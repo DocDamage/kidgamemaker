@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_red_heart_c7f1eed9_tile_12",
+  "asset_name": "Red Heart Tile 12",
+  "category": "collectibles",
+  "runtime_template": "collectible",
+  "visual": "ansimuz_red_heart_c7f1eed9_tile_12.png",
+  "visual_tags": [
+    "ansimuz",
+    "red",
+    "heart",
+    "c7f1eed9",
+    "props",
+    "and",
+    "items",
+    "legacy",
+    "collection",
+    "assets",
+    "tinyrpg",
+    "environments",
+    "single",
+    "dungeon",
+    "crawler",
+    "objects",
+    "png",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

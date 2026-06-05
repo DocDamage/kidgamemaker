@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_blue_pillar_1b5a0157_tile_22",
+  "asset_name": "Blue Pillar Tile 22",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_blue_pillar_1b5a0157_tile_22.png",
+  "visual_tags": [
+    "ansimuz",
+    "blue",
+    "pillar",
+    "1b5a0157",
+    "tiles",
+    "and",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "scifi",
+    "lab",
+    "files",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

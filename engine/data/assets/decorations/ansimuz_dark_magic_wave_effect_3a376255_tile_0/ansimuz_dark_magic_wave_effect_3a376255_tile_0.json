@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_dark_magic_wave_effect_3a376255_tile_0",
+  "asset_name": "Dark Magic Wave Effect Tile 0",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_dark_magic_wave_effect_3a376255_tile_0.png",
+  "visual_tags": [
+    "ansimuz",
+    "dark",
+    "magic",
+    "wave",
+    "effect",
+    "3a376255",
+    "effects",
+    "and",
+    "particles",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "ships",
+    "graveyard",
+    "png",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 72,
+      "h": 57
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      72,
+      57
+    ]
+  }
+}

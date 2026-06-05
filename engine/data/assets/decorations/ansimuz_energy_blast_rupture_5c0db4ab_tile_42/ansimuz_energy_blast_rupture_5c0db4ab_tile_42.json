@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_energy_blast_rupture_5c0db4ab_tile_42",
+  "asset_name": "Energy Blast Rupture Tile 42",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_energy_blast_rupture_5c0db4ab_tile_42.png",
+  "visual_tags": [
+    "ansimuz",
+    "energy",
+    "blast",
+    "rupture",
+    "5c0db4ab",
+    "effects",
+    "and",
+    "particles",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "caverns",
+    "files",
+    "web",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      32,
+      32
+    ]
+  }
+}

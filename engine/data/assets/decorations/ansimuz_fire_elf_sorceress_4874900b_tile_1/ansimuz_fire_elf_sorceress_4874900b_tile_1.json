@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_fire_elf_sorceress_4874900b_tile_1",
+  "asset_name": "Fire Elf Sorceress Tile 1",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_fire_elf_sorceress_4874900b_tile_1.png",
+  "visual_tags": [
+    "ansimuz",
+    "fire",
+    "elf",
+    "sorceress",
+    "4874900b",
+    "characters",
+    "and",
+    "creatures",
+    "legacy",
+    "collection",
+    "assets",
+    "tinyrpg",
+    "battle",
+    "sprites",
+    "monster",
+    "pack",
+    "files",
+    "static",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 42,
+      "h": 8
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      42,
+      8
+    ]
+  }
+}

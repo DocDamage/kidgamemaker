@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_coastal_arch_terrain_6a7a4abb_tile_10",
+  "asset_name": "Coastal Arch Terrain Tile 10",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_coastal_arch_terrain_6a7a4abb_tile_10.png",
+  "visual_tags": [
+    "ansimuz",
+    "coastal",
+    "arch",
+    "terrain",
+    "6a7a4abb",
+    "tiles",
+    "and",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "rocky",
+    "beach",
+    "environment",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      32,
+      32
+    ]
+  }
+}

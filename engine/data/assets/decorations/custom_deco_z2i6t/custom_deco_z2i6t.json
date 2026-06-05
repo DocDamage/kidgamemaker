@@ -1,0 +1,19 @@
+{
+  "asset_id": "custom_deco_z2i6t",
+  "asset_name": "Custom Deco Z2i6t",
+  "category": "decorations",
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      48,
+      48
+    ]
+  },
+  "placement_logic": {
+    "parallax_bucket": "play_layer",
+    "snapping_type": "gravity_snap"
+  },
+  "runtime_template": "decoration",
+  "schema_version": 1,
+  "visual": "custom_deco_z2i6t.png"
+}

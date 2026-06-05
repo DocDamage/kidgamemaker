@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_hanging_wooden_platform_4333476f_tile_17",
+  "asset_name": "Hanging Wooden Platform Tile 17",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_hanging_wooden_platform_4333476f_tile_17.png",
+  "visual_tags": [
+    "ansimuz",
+    "hanging",
+    "wooden",
+    "platform",
+    "4333476f",
+    "tiles",
+    "and",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "tinyrpg",
+    "environments",
+    "tiny",
+    "rpg",
+    "mountain",
+    "files",
+    "png",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

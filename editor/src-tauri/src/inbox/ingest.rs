@@ -1,6 +1,7 @@
 use super::dimensions::read_image_dimensions;
 use crate::slicer::SpriteFrame;
-use std::fs;
+use std::fs::{self, File};
+use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
 pub fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBuf, String> {
@@ -254,6 +255,24 @@ pub fn process_single_asset(file_path: &Path, repo_root: &Path) -> Result<PathBu
     let sidecar_path = dest_dir.join(format!("{}.json", asset_id));
     fs::write(&sidecar_path, sidecar_content).map_err(|err| err.to_string())?;
 
+    // If it is a spritesheet in terrain, decorations, or collectibles category,
+    // extract and ingest each individual tile/stamp frame as a separate standalone asset
+    // so it shows up individually and ready to stamp in the editor's Toybox.
+    if is_spritesheet && (category == "terrain" || category == "decorations" || category == "collectibles") {
+        if let Err(err) = extract_individual_spritesheet_tiles(
+            file_path,
+            repo_root,
+            category,
+            template,
+            snapping,
+            parallax,
+            asset_id,
+            &frames,
+        ) {
+            eprintln!("Warning: Failed to extract individual tiles for spritesheet {asset_id}: {err}");
+        }
+    }
+
     Ok(target_file_path)
 }
 
@@ -357,3 +376,110 @@ pub fn humanize_name(stem: &str) -> String {
         .collect();
     parts.join(" ")
 }
+
+pub fn extract_individual_spritesheet_tiles(
+    file_path: &Path,
+    repo_root: &Path,
+    category: &str,
+    template: &str,
+    snapping: &str,
+    parallax: &str,
+    asset_id: &str,
+    frames: &[SpriteFrame],
+) -> Result<(), String> {
+    // 1. Load the original PNG pixels
+    let (orig_w, _orig_h, orig_rgba) = crate::slicer::load_png_pixels(file_path)?;
+
+    // 2. Loop through all frames and extract them
+    for (i, frame) in frames.iter().enumerate() {
+        let frame_asset_id = format!("{}_tile_{}", asset_id, i);
+        let frame_filename = format!("{}_tile_{}.png", asset_id, i);
+
+        let frame_dest_dir = repo_root
+            .join("engine")
+            .join("data")
+            .join("assets")
+            .join(category)
+            .join(&frame_asset_id);
+        fs::create_dir_all(&frame_dest_dir).map_err(|err| err.to_string())?;
+
+        let frame_target_file_path = frame_dest_dir.join(&frame_filename);
+
+        // Crop the pixel subregion
+        let crop_x = frame.x;
+        let crop_y = frame.y;
+        let crop_w = frame.w;
+        let crop_h = frame.h;
+
+        let mut cropped_buf = vec![0u8; (crop_w * crop_h * 4) as usize];
+
+        for y in 0..crop_h {
+            for x in 0..crop_w {
+                let orig_x = crop_x + x;
+                let orig_y = crop_y + y;
+                let orig_idx = ((orig_y * orig_w + orig_x) * 4) as usize;
+                let crop_idx = ((y * crop_w + x) * 4) as usize;
+                if orig_idx + 3 < orig_rgba.len() && crop_idx + 3 < cropped_buf.len() {
+                    cropped_buf[crop_idx] = orig_rgba[orig_idx];
+                    cropped_buf[crop_idx + 1] = orig_rgba[orig_idx + 1];
+                    cropped_buf[crop_idx + 2] = orig_rgba[orig_idx + 2];
+                    cropped_buf[crop_idx + 3] = orig_rgba[orig_idx + 3];
+                }
+            }
+        }
+
+        // Save cropped subregion PNG
+        let file = File::create(&frame_target_file_path).map_err(|e| e.to_string())?;
+        let mut w = BufWriter::new(file);
+
+        let mut encoder = png::Encoder::new(&mut w, crop_w, crop_h);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+        writer
+            .write_image_data(&cropped_buf)
+            .map_err(|e| e.to_string())?;
+
+        // Create individual sidecar JSON
+        let frame_asset_name = format!("{} Tile {}", humanize_name(asset_id), i);
+        let tags = extract_tags(&frame_asset_id);
+
+        let sidecar_value = serde_json::json!({
+            "schema_version": 1,
+            "asset_id": frame_asset_id,
+            "asset_name": frame_asset_name,
+            "category": category,
+            "runtime_template": template,
+            "visual": frame_filename,
+            "visual_tags": tags,
+            "is_spritesheet": false,
+            "is_uniform_grid": false,
+            "grid_cell_size": serde_json::Value::Null,
+            "slicing_confidence": 1.0,
+            "frames": [
+                {
+                    "x": 0,
+                    "y": 0,
+                    "w": crop_w,
+                    "h": crop_h
+                }
+            ],
+            "placement_logic": {
+                "snapping_type": snapping,
+                "parallax_bucket": parallax
+            },
+            "collision": {
+                "shape": "rectangle",
+                "size": [crop_w, crop_h]
+            }
+        });
+
+        let sidecar_content = serde_json::to_string_pretty(&sidecar_value)
+            .map_err(|err| format!("Failed to serialize sidecar for tile {frame_asset_id}: {err}"))?;
+        let sidecar_path = frame_dest_dir.join(format!("{}.json", frame_asset_id));
+        fs::write(&sidecar_path, sidecar_content).map_err(|err| err.to_string())?;
+    }
+
+    Ok(())
+}
+

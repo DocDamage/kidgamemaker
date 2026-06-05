@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_dark_cavern_level_chunk_8a911443_tile_90",
+  "asset_name": "Dark Cavern Level Chunk Tile 90",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_dark_cavern_level_chunk_8a911443_tile_90.png",
+  "visual_tags": [
+    "ansimuz",
+    "dark",
+    "cavern",
+    "level",
+    "chunk",
+    "8a911443",
+    "tiles",
+    "and",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "alien",
+    "environment",
+    "png",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

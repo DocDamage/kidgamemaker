@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_forest_silhouette_e78dc0a0_tile_3",
+  "asset_name": "Forest Silhouette Tile 3",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_forest_silhouette_e78dc0a0_tile_3.png",
+  "visual_tags": [
+    "ansimuz",
+    "forest",
+    "silhouette",
+    "e78dc0a0",
+    "vegetation",
+    "and",
+    "trees",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "mountain",
+    "dusk",
+    "old",
+    "version",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      32,
+      32
+    ]
+  }
+}

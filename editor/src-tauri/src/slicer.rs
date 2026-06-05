@@ -121,7 +121,7 @@ pub fn slice_sprite_sheet(path: &Path, category: &str) -> Result<SlicingResult, 
     }
 }
 
-fn load_png_pixels(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
+pub fn load_png_pixels(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
     let file = File::open(path).map_err(|e| format!("Failed to open file: {e}"))?;
     let mut decoder = png::Decoder::new(file);
     decoder.set_transformations(png::Transformations::EXPAND);

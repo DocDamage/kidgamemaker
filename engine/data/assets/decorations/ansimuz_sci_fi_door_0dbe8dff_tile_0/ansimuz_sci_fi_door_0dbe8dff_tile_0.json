@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_sci_fi_door_0dbe8dff_tile_0",
+  "asset_name": "Sci Fi Door Tile 0",
+  "category": "decorations",
+  "runtime_template": "decoration",
+  "visual": "ansimuz_sci_fi_door_0dbe8dff_tile_0.png",
+  "visual_tags": [
+    "ansimuz",
+    "sci",
+    "fi",
+    "door",
+    "0dbe8dff",
+    "props",
+    "and",
+    "items",
+    "legacy",
+    "collection",
+    "assets",
+    "warped",
+    "environments",
+    "ocean",
+    "view",
+    "files",
+    "layers",
+    "noon",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "free_float",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      16,
+      16
+    ]
+  }
+}

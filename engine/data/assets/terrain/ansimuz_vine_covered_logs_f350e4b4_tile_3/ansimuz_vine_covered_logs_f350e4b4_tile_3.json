@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "asset_id": "ansimuz_vine_covered_logs_f350e4b4_tile_3",
+  "asset_name": "Vine Covered Logs Tile 3",
+  "category": "terrain",
+  "runtime_template": "terrain",
+  "visual": "ansimuz_vine_covered_logs_f350e4b4_tile_3.png",
+  "visual_tags": [
+    "ansimuz",
+    "vine",
+    "covered",
+    "logs",
+    "f350e4b4",
+    "tiles",
+    "and",
+    "terrain",
+    "legacy",
+    "collection",
+    "assets",
+    "gothicvania",
+    "environments",
+    "hauntedforest",
+    "layers",
+    "tile",
+    "slice"
+  ],
+  "source_pack": "ansimuz",
+  "source_author": "ansimuz",
+  "source_collection": "ansimuz",
+  "is_spritesheet": false,
+  "is_uniform_grid": false,
+  "grid_cell_size": null,
+  "slicing_confidence": 1.0,
+  "frames": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 73,
+      "h": 35
+    }
+  ],
+  "placement_logic": {
+    "snapping_type": "edge_to_edge",
+    "parallax_bucket": "play_layer"
+  },
+  "collision": {
+    "shape": "rectangle",
+    "size": [
+      73,
+      35
+    ]
+  }
+}

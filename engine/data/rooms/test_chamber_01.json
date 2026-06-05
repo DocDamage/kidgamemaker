@@ -1,51 +1,4 @@
 {
-  "schema_version": "2.0.0",
-  "project_id": "demo_project",
-  "room_id": "test_chamber_01",
-  "world_settings": {
-    "time_of_day": "day",
-    "weather": "clear",
-    "theme": "default",
-    "level_balancer_enabled": true,
-    "tutorial_whisperer_enabled": true
-  },
-  "movement_system": {
-    "_meta": {
-      "feature_domain": "movement_system",
-      "minimum_schema_version": "2.0.0"
-    },
-    "enabled": true,
-    "movement_ids": ["wall_jump", "double_jump", "dash", "glide", "ledge_grab", "ground_pound"],
-    "params": {
-      "dash_cooldown_seconds": 1.2,
-      "dash_duration_seconds": 0.2,
-      "wall_cling_seconds": 0.3,
-      "glide_stamina_seconds": 4.0,
-      "ground_pound_speed": 900
-    }
-  },
-  "combat_system": {
-    "_meta": {
-      "feature_domain": "combat_system",
-      "minimum_schema_version": "2.0.0"
-    },
-    "enabled": true,
-    "mechanics": ["sword_combo", "charge_shot", "parry", "shield_block"],
-    "params": {
-      "combo_steps": 3,
-      "combo_reset_seconds": 1.0,
-      "parry_window_seconds": 0.18,
-      "charge_shot_full_seconds": 1.0
-    }
-  },
-  "rules_engine": {
-    "_meta": {
-      "feature_domain": "rules_engine",
-      "minimum_schema_version": "2.0.0"
-    },
-    "enabled": true,
-    "primitives": ["switch_door", "key_lock", "pressure_plate", "collectible_counter", "win_condition"]
-  },
   "ai_assist": {
     "_meta": {
       "feature_domain": "ai_assist",
@@ -54,79 +7,275 @@
     "level_balancer": true,
     "tutorial_whisperer": true
   },
+  "combat_system": {
+    "_meta": {
+      "feature_domain": "combat_system",
+      "minimum_schema_version": "2.0.0"
+    },
+    "enabled": true,
+    "mechanics": [
+      "sword_combo",
+      "charge_shot",
+      "parry",
+      "shield_block"
+    ],
+    "params": {
+      "charge_shot_full_seconds": 1,
+      "combo_reset_seconds": 1,
+      "combo_steps": 3,
+      "parry_window_seconds": 0.18
+    }
+  },
   "entities": [
     {
-      "instance_id": "hero_001",
       "asset_id": "hero_knight",
       "category": "heroes",
-      "type": "player",
-      "position": { "x": 128, "y": 300 },
+      "instance_id": "hero_001",
       "is_camera_target": true,
-      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 128,
+        "y": 300
+      },
+      "type": "player"
     },
     {
+      "asset_id": "stone_floor",
+      "category": "terrain",
       "instance_id": "floor_001",
-      "asset_id": "stone_floor",
-      "category": "terrain",
-      "type": "terrain",
-      "position": { "x": 128, "y": 392 },
-      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 128,
+        "y": 392
+      },
+      "type": "terrain"
     },
     {
+      "asset_id": "stone_floor",
+      "category": "terrain",
       "instance_id": "floor_002",
-      "asset_id": "stone_floor",
-      "category": "terrain",
-      "type": "terrain",
-      "position": { "x": 256, "y": 392 },
-      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 256,
+        "y": 392
+      },
+      "type": "terrain"
     },
     {
+      "asset_id": "stone_floor",
+      "category": "terrain",
       "instance_id": "floor_003",
-      "asset_id": "stone_floor",
-      "category": "terrain",
-      "type": "terrain",
-      "position": { "x": 384, "y": 392 },
-      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 384,
+        "y": 392
+      },
+      "type": "terrain"
     },
     {
+      "asset_id": "stone_floor",
+      "category": "terrain",
       "instance_id": "floor_004",
-      "asset_id": "stone_floor",
-      "category": "terrain",
-      "type": "terrain",
-      "position": { "x": 512, "y": 392 },
-      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 512,
+        "y": 392
+      },
+      "type": "terrain"
     },
     {
+      "asset_id": "stone_floor",
+      "category": "terrain",
       "instance_id": "floor_005",
-      "asset_id": "stone_floor",
-      "category": "terrain",
-      "type": "terrain",
-      "position": { "x": 640, "y": 392 },
-      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 640,
+        "y": 392
+      },
+      "type": "terrain"
     },
     {
+      "asset_id": "stone_floor",
+      "category": "terrain",
       "instance_id": "floor_006",
-      "asset_id": "stone_floor",
-      "category": "terrain",
-      "type": "terrain",
-      "position": { "x": 768, "y": 392 },
-      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 768,
+        "y": 392
+      },
+      "type": "terrain"
     },
     {
+      "asset_id": "stone_floor",
+      "category": "terrain",
       "instance_id": "floor_007",
-      "asset_id": "stone_floor",
-      "category": "terrain",
-      "type": "terrain",
-      "position": { "x": 896, "y": 392 },
-      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 896,
+        "y": 392
+      },
+      "type": "terrain"
     },
     {
-      "instance_id": "portal_001",
       "asset_id": "gold_ruby",
       "category": "collectibles",
-      "type": "collectible",
-      "position": { "x": 800, "y": 330 },
-      "modifiers": { "variant": "default", "scale_multiplier": 1.0 }
+      "instance_id": "portal_001",
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 800,
+        "y": 330
+      },
+      "type": "collectible"
+    },
+    {
+      "asset_id": "brick_destructible",
+      "category": "terrain",
+      "instance_id": "brick_destructible_deab9fde-d595-4ece-96a6-8b4bec31b1ad",
+      "is_camera_target": false,
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 864,
+        "y": 256
+      },
+      "type": "destructible_terrain"
+    },
+    {
+      "asset_id": "brick_destructible",
+      "category": "terrain",
+      "instance_id": "brick_destructible_bafadd76-e202-41bb-a912-27c13e0551c8",
+      "is_camera_target": false,
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 800,
+        "y": 256
+      },
+      "type": "destructible_terrain"
+    },
+    {
+      "asset_id": "brick_destructible",
+      "category": "terrain",
+      "instance_id": "brick_destructible_4669b1f0-6264-47a4-83a8-bbaccf8e45e9",
+      "is_camera_target": false,
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 736,
+        "y": 256
+      },
+      "type": "destructible_terrain"
+    },
+    {
+      "asset_id": "brick_destructible",
+      "category": "terrain",
+      "instance_id": "brick_destructible_88a0fd38-5ce6-40fc-9577-ce3e6aad3c0e",
+      "is_camera_target": false,
+      "modifiers": {
+        "scale_multiplier": 1,
+        "variant": "default"
+      },
+      "position": {
+        "x": 672,
+        "y": 256
+      },
+      "type": "destructible_terrain"
     }
-  ]
+  ],
+  "movement_system": {
+    "_meta": {
+      "feature_domain": "movement_system",
+      "minimum_schema_version": "2.0.0"
+    },
+    "enabled": true,
+    "movement_ids": [
+      "wall_jump",
+      "double_jump",
+      "dash",
+      "glide",
+      "ledge_grab",
+      "ground_pound"
+    ],
+    "params": {
+      "dash_cooldown_seconds": 1.2,
+      "dash_duration_seconds": 0.2,
+      "glide_stamina_seconds": 4,
+      "ground_pound_speed": 900,
+      "wall_cling_seconds": 0.3
+    }
+  },
+  "project_id": "demo_project",
+  "room_id": "test_chamber_01",
+  "rules_engine": {
+    "_meta": {
+      "feature_domain": "rules_engine",
+      "minimum_schema_version": "2.0.0"
+    },
+    "enabled": true,
+    "primitives": [
+      "switch_door",
+      "key_lock",
+      "pressure_plate",
+      "collectible_counter",
+      "win_condition"
+    ]
+  },
+  "schema_version": "2.0.0",
+  "world_settings": {
+    "calm_mode": false,
+    "camera_autoscroll": false,
+    "camera_autoscroll_direction": "right",
+    "camera_autoscroll_speed": 40,
+    "difficulty": "normal",
+    "health_style": "hearts",
+    "level_balancer_enabled": true,
+    "loss_rules": {
+      "action": "game_over",
+      "lose_condition": "health_0"
+    },
+    "rising_hazard_speed": 20,
+    "rising_hazard_type": "",
+    "room_rules": [],
+    "theme": "default",
+    "time_of_day": "day",
+    "tutorial_whisperer_enabled": true,
+    "victory_rules": {
+      "celebration": "confetti",
+      "win_condition": "all_enemies"
+    },
+    "weather": "clear"
+  }
 }
