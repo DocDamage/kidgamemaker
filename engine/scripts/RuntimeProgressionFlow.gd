@@ -81,10 +81,15 @@ func respawn_player() -> void:
 
 	if not runtime.calm_mode and runtime.active_player != null and is_instance_valid(runtime.active_player):
 		var lost_coins := int(runtime.score * 0.5)
-		if lost_coins > 0:
-			runtime.score -= lost_coins
-			runtime._update_hud()
-			runtime._spawn_recovery_ghost(runtime.active_player.global_position, lost_coins)
+		var lost_emeralds := 0
+		if "emeralds_collected" in runtime.active_player:
+			lost_emeralds = runtime.active_player.emeralds_collected
+			runtime.active_player.emeralds_collected = 0
+		if lost_coins > 0 or lost_emeralds > 0:
+			if lost_coins > 0:
+				runtime.score -= lost_coins
+				runtime._update_hud()
+			runtime._spawn_recovery_ghost(runtime.active_player.global_position, lost_coins, lost_emeralds)
 
 	if runtime.camera_autoscroll_enabled and is_instance_valid(runtime.autoscroll_camera_node):
 		runtime.autoscroll_camera_node.global_position = runtime.spawn_point

@@ -19,9 +19,9 @@ static func add_to_backpack_grid(backpack_grid: Array, item_type: String) -> boo
 
 
 static func _item_size(item_type: String) -> Vector2i:
-	if item_type == "shield":
+	if item_type in ["shield", "weapon_shield"]:
 		return Vector2i(2, 2)
-	if item_type in ["sword", "firesword"]:
+	if item_type in ["sword", "firesword", "weapon_sword", "tool_hammer"]:
 		return Vector2i(1, 2)
 	return Vector2i(1, 1)
 

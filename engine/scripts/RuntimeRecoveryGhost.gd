@@ -1,6 +1,7 @@
 extends Area2D
 
 var coins: int = 0
+var emeralds: int = 0
 
 
 func _ready() -> void:
@@ -17,9 +18,20 @@ func _on_body_entered(body: Node) -> void:
 		main.set("score", current_score + coins)
 		if main.has_method("_update_hud"):
 			main._update_hud()
+		
+		if "emeralds_collected" in body:
+			body.emeralds_collected += emeralds
+			
 		if main.has_method("play_sfx"):
 			main.play_sfx("coin")
 		if main.has_method("spawn_floating_text"):
-			main.spawn_floating_text("RECOVERED " + str(coins) + " COINS!", global_position, Color.GOLD)
+			var txt = "RECOVERED "
+			if coins > 0 and emeralds > 0:
+				txt += str(coins) + " COINS & " + str(emeralds) + " EMERALDS!"
+			elif emeralds > 0:
+				txt += str(emeralds) + " EMERALDS!"
+			else:
+				txt += str(coins) + " COINS!"
+			main.spawn_floating_text(txt, global_position, Color.GOLD)
 
 	queue_free()

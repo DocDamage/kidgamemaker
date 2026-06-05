@@ -7,7 +7,7 @@ static func remove_existing(root: Node) -> void:
 			child.queue_free()
 
 
-static func create(pos: Vector2, lost_coins: int, behavior_script: Script) -> Area2D:
+static func create(pos: Vector2, lost_coins: int, lost_emeralds: int, behavior_script: Script) -> Area2D:
 	var area := Area2D.new()
 	area.name = "RecoveryGhost"
 	area.global_position = pos
@@ -33,6 +33,7 @@ static func create(pos: Vector2, lost_coins: int, behavior_script: Script) -> Ar
 
 	area.set_script(behavior_script)
 	area.set("coins", lost_coins)
+	area.set("emeralds", lost_emeralds)
 	return area
 
 

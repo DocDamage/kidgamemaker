@@ -62,12 +62,14 @@ func _update_grid_ui() -> void:
 				drawn_roots[root_key] = true
 				label.text = _get_item_icon(item_type)
 
-			if item_type == "shield":
+			if item_type in ["shield", "weapon_shield"]:
 				rect.color = Color(0.1, 0.4, 0.5, 0.9)
-			elif item_type in ["sword", "firesword"]:
+			elif item_type in ["sword", "firesword", "weapon_sword", "tool_hammer"]:
 				rect.color = Color(0.5, 0.4, 0.1, 0.9)
-			elif item_type == "potion":
+			elif item_type in ["potion", "tool_lantern"]:
 				rect.color = Color(0.5, 0.1, 0.5, 0.9)
+			elif item_type in ["weapon_boomerang", "weapon_bomb", "weapon_paint_gun"]:
+				rect.color = Color(0.6, 0.2, 0.2, 0.9)
 			else:
 				rect.color = Color(0.2, 0.3, 0.25, 0.9)
 
@@ -85,13 +87,23 @@ func _update_grid_ui() -> void:
 		var details := ""
 		if selected_type == "potion":
 			details = " ( Heals 50 HP!)"
-		elif selected_type == "sword":
+		elif selected_type in ["sword", "weapon_sword"]:
 			details = " ( Equip to swing!)"
 		elif selected_type == "firesword":
 			details = " ( Attacks ignite enemies!)"
 		elif selected_type == "shield":
 			details = " ( Absorbs next hit!)"
-		desc_label.text = "Cursor: " + selected_type.capitalize() + details + "\n[E] Use/Equip | [Space] Move | [X] Discard"
+		elif selected_type == "weapon_boomerang":
+			details = " ( Press [C] to throw!)"
+		elif selected_type == "weapon_bomb":
+			details = " ( Press [V] to drop!)"
+		elif selected_type == "weapon_paint_gun":
+			details = " ( Press [G] to paint!)"
+		elif selected_type == "tool_hammer":
+			details = " ( Smash obstacles!)"
+		elif selected_type == "tool_lantern":
+			details = " ( See in the dark!)"
+		desc_label.text = "Cursor: " + selected_type.replace("weapon_", "").replace("tool_", "").replace("mat_", "").capitalize() + details + "\n[E] Use/Equip | [Space] Move | [X] Discard"
 	else:
 		desc_label.text = "Empty Slot\n[W/A/S/D] Navigate | [Tab/Esc] Close"
 
@@ -100,18 +112,28 @@ func _get_item_icon(type: String) -> String:
 	match type:
 		"potion":
 			return "POT"
-		"shield":
+		"shield", "weapon_shield":
 			return "SHD"
-		"sword":
+		"sword", "weapon_sword":
 			return "SWD"
 		"firesword":
 			return "FIRE"
+		"weapon_boomerang":
+			return "BMRG"
+		"weapon_bomb":
+			return "BMB"
+		"weapon_paint_gun":
+			return "GUN"
+		"tool_hammer":
+			return "HAM"
+		"tool_lantern":
+			return "LNTN"
 		"mat_metal_scrap":
 			return "SCR"
 		"mat_fire_powder":
-			return "FIRE"
+			return "SPCE"
 		"mat_green_herb":
-			return "HERB"
+			return "HRB"
 		"mat_sweet_honey":
 			return "HNY"
 		_:
@@ -244,7 +266,7 @@ func _use_item(item: Variant) -> void:
 		_remove_item_from_grid(player, item)
 		_play("coin")
 		_float_text("HEALED!", player, Color.GREEN)
-	elif item_type == "sword":
+	elif item_type in ["sword", "weapon_sword"]:
 		player.set("has_sword", true)
 		player.set("costume_tint", "default")
 		_play("coin")
@@ -254,11 +276,31 @@ func _use_item(item: Variant) -> void:
 		player.set("costume_tint", "orange")
 		_play("coin")
 		_float_text("FIRE SWORD EQUIPPED!", player, Color.ORANGE)
-	elif item_type == "shield":
+	elif item_type in ["shield", "weapon_shield"]:
 		player.set("shield_active", true)
 		_remove_item_from_grid(player, item)
 		_play("coin")
 		_float_text("SHIELD EQUIPPED!", player, Color.CYAN)
+	elif item_type == "weapon_boomerang":
+		player.set("has_boomerang", true)
+		_play("coin")
+		_float_text("BOOMERANG EQUIPPED!", player, Color.AQUAMARINE)
+	elif item_type == "weapon_bomb":
+		player.set("has_bomb", true)
+		_play("coin")
+		_float_text("BOMBS EQUIPPED!", player, Color.CRIMSON)
+	elif item_type == "weapon_paint_gun":
+		player.set("has_paint_gun", true)
+		_play("coin")
+		_float_text("PAINT GUN EQUIPPED!", player, Color.MEDIUM_SPRING_GREEN)
+	elif item_type == "tool_hammer":
+		player.set("has_hammer", true)
+		_play("coin")
+		_float_text("HAMMER EQUIPPED!", player, Color.GOLDENROD)
+	elif item_type == "tool_lantern":
+		player.set("has_lantern", true)
+		_play("coin")
+		_float_text("LANTERN EQUIPPED!", player, Color.YELLOW)
 
 	_update_grid_ui()
 

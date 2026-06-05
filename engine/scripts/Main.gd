@@ -1223,9 +1223,9 @@ func _remove_backpack_item_by_type(player, item_type: String) -> void:
 	RUNTIME_COMMERCE_SCRIPT.remove_backpack_item_by_type(player, item_type)
 
 
-func _spawn_recovery_ghost(pos: Vector2, lost_coins: int) -> void:
+func _spawn_recovery_ghost(pos: Vector2, lost_coins: int, lost_emeralds: int = 0) -> void:
 	RUNTIME_RECOVERY_GHOST_FACTORY_SCRIPT.remove_existing(self)
-	var area := RUNTIME_RECOVERY_GHOST_FACTORY_SCRIPT.create(pos, lost_coins, RUNTIME_RECOVERY_GHOST_SCRIPT)
+	var area := RUNTIME_RECOVERY_GHOST_FACTORY_SCRIPT.create(pos, lost_coins, lost_emeralds, RUNTIME_RECOVERY_GHOST_SCRIPT)
 	add_child(area)
 	RUNTIME_RECOVERY_GHOST_FACTORY_SCRIPT.animate(self, area)
 

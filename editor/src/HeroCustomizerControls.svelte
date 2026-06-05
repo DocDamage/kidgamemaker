@@ -54,6 +54,84 @@
     entity.modifiers.socketed_gems = gems;
     dispatch('saveRoom');
   }
+
+  // Pack starting items into a 4x4 grid representation
+  interface GridItem {
+    id: string;
+    emoji: string;
+    name: string;
+    root_r: number;
+    root_c: number;
+    w: number;
+    h: number;
+    color: string;
+  }
+  
+  let backpackGrid: (GridItem | null)[][] = [];
+  
+  export const ITEM_TEMPLATES = [
+    { id: 'weapon_sword', emoji: '⚔️', name: 'Sword', w: 1, h: 2, color: '#854d0e' },
+    { id: 'weapon_boomerang', emoji: '🪃', name: 'Boomerang', w: 1, h: 1, color: '#1d4ed8' },
+    { id: 'weapon_bomb', emoji: '💣', name: 'Bomb', w: 1, h: 1, color: '#b91c1c' },
+    { id: 'weapon_paint_gun', emoji: '🔫', name: 'Paint Gun', w: 1, h: 1, color: '#047857' },
+    { id: 'tool_hammer', emoji: '🔨', name: 'Hammer', w: 1, h: 2, color: '#b45309' },
+    { id: 'tool_lantern', emoji: '🏮', name: 'Lantern', w: 1, h: 1, color: '#c2410c' },
+    { id: 'mat_metal_scrap', emoji: '🔩', name: 'Metal', w: 1, h: 1, color: '#475569' },
+    { id: 'mat_fire_powder', emoji: '🌶️', name: 'Spice', w: 1, h: 1, color: '#ea580c' },
+    { id: 'mat_green_herb', emoji: '🌿', name: 'Herb', w: 1, h: 1, color: '#16a34a' },
+    { id: 'mat_sweet_honey', emoji: '🍯', name: 'Honey', w: 1, h: 1, color: '#ca8a04' }
+  ];
+
+  $: {
+    let tempGrid: (GridItem | null)[][] = Array(4).fill(null).map(() => Array(4).fill(null));
+    let selectedWithTemplates = startingItems
+      .map(id => ITEM_TEMPLATES.find(t => t.id === id))
+      .filter((t): t is typeof ITEM_TEMPLATES[number] => !!t);
+
+    for (const item of selectedWithTemplates) {
+      let w = item.w;
+      let h = item.h;
+      let fitted = false;
+      
+      for (let r = 0; r <= 4 - h; r++) {
+        for (let c = 0; c <= 4 - w; c++) {
+          let fits = true;
+          for (let dr = 0; dr < h; dr++) {
+            for (let dc = 0; dc < w; dc++) {
+              if (tempGrid[r + dr][c + dc] !== null) {
+                fits = false;
+                break;
+              }
+            }
+            if (!fits) break;
+          }
+          
+          if (fits) {
+            const gridItem: GridItem = {
+              id: item.id,
+              emoji: item.emoji,
+              name: item.name,
+              root_r: r,
+              root_c: c,
+              w,
+              h,
+              color: item.color
+            };
+            
+            for (let dr = 0; dr < h; dr++) {
+              for (let dc = 0; dc < w; dc++) {
+                tempGrid[r + dr][c + dc] = gridItem;
+              }
+            }
+            fitted = true;
+            break;
+          }
+        }
+        if (fitted) break;
+      }
+    }
+    backpackGrid = tempGrid;
+  }
 </script>
 
 {#if isHero}
@@ -110,18 +188,7 @@
   <div class="option-group starting-items-group">
     <span class="option-label-text">🎒 Starting Backpack Items:</span>
     <div class="items-grid">
-      {#each [
-        { id: 'weapon_sword', emoji: '⚔️', name: 'Sword' },
-        { id: 'weapon_boomerang', emoji: '🪃', name: 'Boomerang' },
-        { id: 'weapon_bomb', emoji: '💣', name: 'Bomb' },
-        { id: 'weapon_paint_gun', emoji: '🔫', name: 'Paint Gun' },
-        { id: 'tool_hammer', emoji: '🔨', name: 'Hammer' },
-        { id: 'tool_lantern', emoji: '🏮', name: 'Lantern' },
-        { id: 'mat_metal_scrap', emoji: '🔩', name: 'Metal' },
-        { id: 'mat_fire_powder', emoji: '🌶️', name: 'Spice' },
-        { id: 'mat_green_herb', emoji: '🌿', name: 'Herb' },
-        { id: 'mat_sweet_honey', emoji: '🍯', name: 'Honey' }
-      ] as item}
+      {#each ITEM_TEMPLATES as item}
         {@const hasItem = startingItems.includes(item.id)}
         <button
           type="button"
@@ -132,6 +199,28 @@
           {item.emoji} {item.name}
         </button>
       {/each}
+    </div>
+
+    <!-- Visual Tetris Grid Inventory Preview -->
+    <div class="backpack-preview-container">
+      <span class="preview-title">Visual Grid Preview:</span>
+      <div class="backpack-grid-ui">
+        {#each Array(4) as _, r}
+          {#each Array(4) as _, c}
+            {@const cell = backpackGrid[r] ? backpackGrid[r][c] : null}
+            {@const isRoot = cell && cell.root_r === r && cell.root_c === c}
+            <div 
+              class="grid-cell" 
+              class:occupied={cell !== null}
+              style={cell ? `background-color: ${cell.color}99; border-color: ${cell.color};` : ''}
+            >
+              {#if isRoot}
+                <span class="cell-emoji">{cell.emoji}</span>
+              {/if}
+            </div>
+          {/each}
+        {/each}
+      </div>
     </div>
   </div>
 
@@ -252,6 +341,56 @@
     font-weight: bold;
     color: #94a3b8;
     white-space: nowrap;
+  }
+
+  .backpack-preview-container {
+    margin-top: 12px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .preview-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .backpack-grid-ui {
+    display: grid;
+    grid-template-columns: repeat(4, 42px);
+    grid-template-rows: repeat(4, 42px);
+    gap: 4px;
+    background: #020617;
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid #1e293b;
+  }
+
+  .grid-cell {
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all 0.2s ease;
+  }
+
+  .grid-cell.occupied {
+    box-shadow: inset 0 0 4px rgba(255,255,255,0.1);
+  }
+
+  .cell-emoji {
+    font-size: 1.25rem;
   }
 </style>
 
