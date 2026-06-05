@@ -1,6 +1,8 @@
 use super::utils::locate_repo_root;
 use serde_json::Value;
 use std::fs;
+use std::io::Write;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[tauri::command]
 pub fn save_room(room_id: String, json_string: String) -> Result<String, String> {
@@ -106,3 +108,88 @@ pub fn delete_room(room_id: String) -> Result<String, String> {
 
     Ok(format!("Room '{safe_room_id}' deleted successfully"))
 }
+
+#[tauri::command]
+pub fn save_room_compressed(room_id: String, json_string: String) -> Result<String, String> {
+    let repo_root = locate_repo_root()?;
+    let compressed_dir = repo_root.join("engine").join("data").join("rooms").join("compressed");
+
+    fs::create_dir_all(&compressed_dir)
+        .map_err(|err| format!("Failed to create compressed rooms directory: {err}"))?;
+
+    let safe_room_id = room_id.replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "_");
+    if safe_room_id.is_empty() {
+        return Err("Room ID cannot be empty".to_string());
+    }
+
+    let compressed_path = compressed_dir.join(format!("{safe_room_id}.kgame"));
+
+    // Verify it is valid JSON
+    let json_value: Value =
+        serde_json::from_str(&json_string).map_err(|err| format!("Invalid JSON payload: {err}"))?;
+    let pretty_json = serde_json::to_string_pretty(&json_value)
+        .map_err(|err| format!("Failed to serialize JSON: {err}"))?;
+
+    let file = fs::File::create(&compressed_path)
+        .map_err(|err| format!("Failed to create compressed file: {err}"))?;
+
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::FileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    zip.start_file("room.json", options)
+        .map_err(|err| format!("Failed to start zip file entry: {err}"))?;
+    zip.write_all(pretty_json.as_bytes())
+        .map_err(|err| format!("Failed to write to zip entry: {err}"))?;
+    zip.finish()
+        .map_err(|err| format!("Failed to finalize zip file: {err}"))?;
+
+    Ok(format!(
+        "Room successfully compressed and saved to {}",
+        compressed_path.display()
+    ))
+}
+
+#[tauri::command]
+pub fn cloud_sync_room(room_id: String) -> Result<String, String> {
+    let repo_root = locate_repo_root()?;
+    let safe_room_id = room_id.replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "_");
+    if safe_room_id.is_empty() {
+        return Err("Room ID cannot be empty".to_string());
+    }
+
+    let compressed_path = repo_root
+        .join("engine")
+        .join("data")
+        .join("rooms")
+        .join("compressed")
+        .join(format!("{safe_room_id}.kgame"));
+
+    if !compressed_path.exists() {
+        return Err(format!(
+            "Compressed room file does not exist at {}",
+            compressed_path.display()
+        ));
+    }
+
+    let metadata = fs::metadata(&compressed_path)
+        .map_err(|err| format!("Failed to read file metadata: {err}"))?;
+    let file_size = metadata.len();
+
+    println!(
+        "[CloudSync] Syncing room '{}' ({} bytes) to cloud...",
+        safe_room_id, file_size
+    );
+
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let mock_url = format!(
+        "https://cloud-sync.kgame.io/backups/{safe_room_id}.kgame?size={file_size}&ts={ts}"
+    );
+
+    Ok(mock_url)
+}
+

@@ -13,6 +13,8 @@
   export let placedCount = 0;
   export let sessionStampsCount = 0;
   export let creationDurationSeconds = 0;
+  export let cloudSyncPending = false;
+  export let cloudSyncStatus = 'Not synced';
 
   const dispatch = createEventDispatcher<{
     browseRooms: void;
@@ -28,6 +30,7 @@
     ageModeChange: Partial<WorldSettings>;
     healthStyleChange: 'hearts' | 'diegetic';
     peerBlockingChange: boolean;
+    cloudSync: void;
   }>();
 
   // Math challenge gate state
@@ -149,7 +152,7 @@
       </div>
 
       <div class="panel-section">
-        <h4>Actions</h4>
+        <h4>Actions & Cloud</h4>
         <div class="panel-row">
           <button id="btn-save" class="save" on:click={(event) => dispatchClick(event, 'saveRoom')}>💾 SAVE</button>
           <button id="btn-export" class="export" on:click={(event) => dispatchClick(event, 'exportGame')}>📦 EXPORT</button>
@@ -157,6 +160,12 @@
             {peerBlockingEnabled ? '🔏 SHARING DISABLED' : '✨ SHARE TOYBOX (.ktoy)'}
           </button>
           <button id="btn-refresh-toybox" class="icon-btn refresh-btn" on:click={(event) => dispatchClick(event, 'refreshInventory')} title="Refresh Toybox from disk">🔄 RELOAD</button>
+        </div>
+        <div class="panel-row" style="margin-top: 8px;">
+          <button id="btn-cloud-sync" class="cloud-sync-btn" on:click={(event) => { animateClick(event); dispatch('cloudSync'); }} disabled={cloudSyncPending}>
+            {cloudSyncPending ? '⏳ SYNCING...' : '☁️ CLOUD BACKUP SYNC'}
+          </button>
+          <span class="cloud-status-text" class:syncing={cloudSyncPending}>{cloudSyncStatus}</span>
         </div>
       </div>
 
@@ -420,20 +429,108 @@
     width: 140px;
   }
 
+  /* Action buttons base style */
+  .save,
+  .export,
+  .share,
+  .icon-btn,
+  .bookshelf-btn {
+    border: none;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    cursor: pointer;
+    letter-spacing: 0.4px;
+    transition: transform 0.1s, box-shadow 0.1s, background 0.15s;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.35);
+  }
+
+  .save,
+  .export,
+  .share,
+  .icon-btn,
+  .bookshelf-btn {
+    color: white;
+  }
+
+  .save:hover,
+  .export:hover,
+  .share:hover:not(:disabled),
+  .icon-btn:hover,
+  .bookshelf-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 rgba(0,0,0,0.35);
+  }
+
+  .save:active,
+  .export:active,
+  .share:active:not(:disabled),
+  .icon-btn:active,
+  .bookshelf-btn:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 rgba(0,0,0,0.25);
+  }
+
+  .save {
+    background: #f59e0b;
+    box-shadow: 0 4px 0 #b45309;
+  }
+
+  .save:hover {
+    background: #d97706;
+    box-shadow: 0 6px 0 #92400e;
+  }
+
   .export {
     background: #10b981;
-    color: white;
+    box-shadow: 0 4px 0 #065f46;
+  }
+
+  .export:hover {
+    background: #059669;
   }
 
   .share {
     background: #a855f7;
-    color: white;
+    box-shadow: 0 4px 0 #6b21a8;
   }
 
   .share:disabled {
     background: #374151;
     color: #9ca3af;
     cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .icon-btn {
+    background: #334155;
+    box-shadow: 0 4px 0 #1e293b;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+
+  .icon-btn:hover {
+    background: #475569;
+  }
+
+  .bookshelf-btn {
+    background: #1d4ed8;
+    box-shadow: 0 4px 0 #1e3a8a;
+  }
+
+  .bookshelf-btn:hover {
+    background: #1e40af;
+  }
+
+  .refresh-btn {
+    background: #0f766e;
+    box-shadow: 0 4px 0 #134e4a;
+  }
+
+  .refresh-btn:hover {
+    background: #0d9488;
   }
 
   .calm-row {
@@ -532,6 +629,36 @@
     width: 18px;
     height: 18px;
     accent-color: #fbbf24;
+  }
+
+  .cloud-sync-btn {
+    background: #0284c7;
+    color: white;
+    box-shadow: 0 4px 0 #0369a1;
+  }
+
+  .cloud-sync-btn:hover:not(:disabled) {
+    background: #0369a1;
+  }
+
+  .cloud-sync-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .cloud-status-text {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #38bdf8;
+    max-width: 320px;
+    word-break: break-all;
+    line-height: 1.2;
+  }
+
+  .cloud-status-text.syncing {
+    color: #fbbf24;
   }
 </style>
 

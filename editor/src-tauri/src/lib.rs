@@ -20,6 +20,8 @@ pub fn run() {
             commands::load_room,
             commands::list_rooms,
             commands::delete_room,
+            commands::save_room_compressed,
+            commands::cloud_sync_room,
             commands::export_game,
             commands::save_child_sprite,
             commands::load_child_sprite,

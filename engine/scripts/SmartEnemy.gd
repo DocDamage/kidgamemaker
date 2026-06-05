@@ -53,6 +53,15 @@ var tail_broken: bool = false
 var horn_broken: bool = false
 var wing_broken: bool = false
 
+var _charge_timer: float = 0.0
+var _stomp_timer: float = 0.0
+var _is_charging: bool = false
+var _charge_duration: float = 0.8
+var _charge_duration_left: float = 0.0
+var _charge_dir: float = 1.0
+var _is_stomping: bool = false
+var _stomp_stage: String = "none"
+
 
 func _ready() -> void:
 	if has_meta("asset_id"):
@@ -126,15 +135,76 @@ func _on_damage_area_body_entered(body: Node) -> void:
 			var diff_y = body.global_position.y - global_position.y
 			var gravity_inv = body.get("gravity_inverted") if "gravity_inverted" in body else false
 			var is_on_top = diff_y < -12.0 if not gravity_inv else diff_y > 12.0
-			if is_on_top and body.velocity.y * (1.0 if not gravity_inv else -1.0) >= 0.0:
-				return # Player is stomping us, don't damage them
-		body.take_damage(damage_value)
+			if not (boss_mode and _is_charging):
+				if is_on_top and body.velocity.y * (1.0 if not gravity_inv else -1.0) >= 0.0:
+					return # Player is stomping us, don't damage them
+		
+		var final_damage = damage_value
+		if boss_mode and _is_charging:
+			var charge_dmg = damage_value * 2
+			if horn_broken:
+				charge_dmg = int(charge_dmg * 0.5)
+			final_damage = charge_dmg
+			
+		body.take_damage(final_damage)
 
 
 func _physics_process(delta: float) -> void:
 	if boss_mode:
 		queue_redraw()
 		_update_boss_part_labels()
+		
+		# Boss state ticks & transitions
+		if not is_sleeping and not is_frozen and not is_shocked and stun_timer <= 0.0 and knockback_timer <= 0.0:
+			_charge_timer += delta
+			_stomp_timer += delta
+			
+			if _is_charging:
+				_charge_duration_left -= delta
+				if _charge_duration_left <= 0.0:
+					_is_charging = false
+					modulate = Color.WHITE
+					if current_phase == 2:
+						modulate = Color(1.0, 0.6, 0.3)
+					elif current_phase == 3:
+						modulate = Color(1.0, 0.3, 0.3)
+			
+			if _is_stomping:
+				if _stomp_stage == "rising" and velocity.y >= 0.0:
+					_stomp_stage = "falling"
+					velocity.y = 500.0
+				elif _stomp_stage == "falling" and is_on_floor():
+					_is_stomping = false
+					_stomp_stage = "none"
+					_trigger_stomp_impact()
+			
+			if not _is_charging and not _is_stomping:
+				var main = get_tree().get_root().get_node_or_null("Main")
+				var player = main.active_player if main != null else null
+				if player != null:
+					var dist = global_position.distance_to(player.global_position)
+					if dist < 350.0:
+						if current_phase == 3 and _stomp_timer >= 5.5:
+							_stomp_timer = 0.0
+							_is_stomping = true
+							_stomp_stage = "rising"
+							var jump_force = -550.0
+							if wing_broken:
+								jump_force = -220.0
+							velocity.y = jump_force
+							if main != null and main.has_method("spawn_floating_text"):
+								main.spawn_floating_text("⚡ JUMP STOMP! ⚡", global_position + Vector2(0, -50), Color.RED)
+							if main != null and main.has_method("play_sfx"):
+								main.play_sfx("jump")
+						elif current_phase >= 2 and _charge_timer >= 4.0:
+							_charge_timer = 0.0
+							_is_charging = true
+							_charge_duration_left = _charge_duration
+							_charge_dir = 1.0 if player.global_position.x > global_position.x else -1.0
+							direction = int(_charge_dir)
+							modulate = Color(1.0, 0.0, 0.0)
+							if main != null and main.has_method("spawn_floating_text"):
+								main.spawn_floating_text("🔥 CHARGING SLAM! 🔥", global_position + Vector2(0, -50), Color.ORANGE)
 
 	# Sleeping: the enemy dozes off — Zzz particles, 30% speed, no attacks
 	if is_sleeping:
@@ -219,6 +289,20 @@ func _physics_process(delta: float) -> void:
 		velocity.x = 0.0
 		if active_behavior == "fly":
 			velocity.y = 0.0
+	elif _is_charging:
+		var speed_mult = 3.0
+		if tail_broken:
+			speed_mult = 1.5
+		var active_speed = patrol_speed * speed_mult
+		velocity.x = _charge_dir * active_speed
+	elif _is_stomping:
+		var main = get_tree().get_root().get_node_or_null("Main")
+		var player = main.active_player if main != null else null
+		if player != null:
+			var diff_x = player.global_position.x - global_position.x
+			velocity.x = clamp(diff_x * 2.0, -150.0, 150.0)
+		else:
+			velocity.x = 0.0
 	else:
 		var active_speed = patrol_speed
 		var main_node = get_tree().get_root().get_node_or_null("Main")
@@ -279,6 +363,31 @@ func _physics_process(delta: float) -> void:
 			if is_on_wall() or not _has_floor_ahead():
 				direction *= -1
 				_update_probe()
+
+
+func _trigger_stomp_impact() -> void:
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main != null:
+		if main.has_method("trigger_screen_shake"):
+			main.trigger_screen_shake(15.0, 0.4)
+		if main.has_method("play_sfx"):
+			main.play_sfx("hit")
+		if main.has_method("spawn_floating_text"):
+			main.spawn_floating_text("💥 STOMP SHOCKWAVE!", global_position + Vector2(0, -50), Color.RED)
+		
+		var player = main.get("active_player") if "active_player" in main else null
+		if player != null and is_instance_valid(player) and player.has_method("take_damage"):
+			var distance = global_position.distance_to(player.global_position)
+			var max_range = 160.0
+			if wing_broken:
+				max_range = 64.0
+			
+			if distance < max_range:
+				player.take_damage(15)
+				if "velocity" in player:
+					var dir = (player.global_position - global_position).normalized()
+					player.velocity += dir * 300.0
+
 
 
 func _has_floor_ahead() -> bool:

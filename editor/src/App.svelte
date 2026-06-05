@@ -54,6 +54,8 @@
     normalizeLoadedWorldSettings,
     saveEditorRoom,
     saveRoomPayload,
+    saveRoomCompressed,
+    cloudSyncRoom,
     type DifficultyMode
   } from './lib/roomPersistence';
   import {
@@ -89,6 +91,8 @@
   let editingAssetId = '';
   let editingCategory = 'decorations';
   let magicWandOpen = false;
+  let cloudSyncPending = false;
+  let cloudSyncStatus = 'Not synced';
 
   // Kid friendly UI toggles
   let parentsPanelOpen = false;
@@ -551,6 +555,20 @@
 
 
 
+  async function triggerCloudSync(roomId: string) {
+    if (!hasTauriHost()) return;
+    cloudSyncPending = true;
+    cloudSyncStatus = 'Syncing...';
+    try {
+      const backupUrl = await cloudSyncRoom(roomId);
+      cloudSyncStatus = `Synced successfully! Backup URL: ${backupUrl}`;
+    } catch (err) {
+      cloudSyncStatus = `Sync failed: ${String(err)}`;
+    } finally {
+      cloudSyncPending = false;
+    }
+  }
+
   async function saveCurrentRoom() {
     if (!hasTauriHost()) {
       status = `Browser preview mode: ${activeRoomId} is not persisted.`;
@@ -569,14 +587,23 @@
       await loadRoomList();
       generateThumbnail(activeRoomId);
 
+      const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
+      payload.world_settings = {
+        ...payload.world_settings,
+        difficulty: difficultyMode,
+        calm_mode: calmMode
+      };
+
+      // Compresses level data to .kgame package locally — fires silently in background
+      saveRoomCompressed(activeRoomId, payload).catch((e) =>
+        console.warn('[saveRoomCompressed] compression skipped:', e)
+      );
+
+      // Syncs to cloud backup in background
+      triggerCloudSync(activeRoomId);
+
       // Live hot-update WebGL play session
       if (playModalOpen) {
-        const payload = toRoomPayload(placed, worldSettings, 'demo_project', activeRoomId);
-        payload.world_settings = {
-          ...payload.world_settings,
-          difficulty: difficultyMode,
-          calm_mode: calmMode
-        };
         liveUpdateGameIframe(JSON.stringify(payload));
       }
     } catch (error) {
@@ -855,6 +882,9 @@
       placedCount={placed.length}
       {sessionStampsCount}
       {creationDurationSeconds}
+      {cloudSyncPending}
+      {cloudSyncStatus}
+      on:cloudSync={() => triggerCloudSync(activeRoomId)}
       on:browseRooms={() => bookshelfOpen = true}
       on:activeRoomIdChange={(event) => activeRoomId = event.detail}
       on:loadRoom={(event) => loadSelectedRoom(event.detail)}

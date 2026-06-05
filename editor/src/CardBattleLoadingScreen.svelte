@@ -58,6 +58,66 @@
       emoji: '🌀',
       description: 'Sprays ink in an X shape.',
       pattern: [[0, 0], [-1, -1], [1, 1], [-1, 1], [1, -1]]
+    },
+    {
+      id: 'mega_roller',
+      name: 'Mega Roller 🚀',
+      emoji: '🚀',
+      description: 'Inks a 5-cell horizontal line.',
+      pattern: [[0, 0], [-1, 0], [1, 0], [-2, 0], [2, 0]]
+    },
+    {
+      id: 'ink_mine_2',
+      name: 'Ink Mine 2.0 🎇',
+      emoji: '🎇',
+      description: 'Inks a T-shape.',
+      pattern: [[0, 0], [-1, 0], [1, 0], [0, 1], [0, 2]]
+    },
+    {
+      id: 'splat_charger',
+      name: 'Splat Charger 🎯',
+      emoji: '🎯',
+      description: 'Inks a 4-cell diagonal line.',
+      pattern: [[0, 0], [-1, -1], [1, 1], [2, 2]]
+    },
+    {
+      id: 'sprinkler',
+      name: 'Sprinkler 💧',
+      emoji: '💧',
+      description: 'Inks a hollow 3x3 ring.',
+      pattern: [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+    }
+  ];
+
+  interface Opponent {
+    name: string;
+    avatar: string;
+    difficulty: 'Easy' | 'Medium' | 'Hard';
+    description: string;
+    badgeColor: string;
+  }
+
+  const OPPONENTS: Opponent[] = [
+    {
+      name: "Lil' Jelly 🟢",
+      avatar: '🟢',
+      difficulty: 'Easy',
+      description: 'Places cards randomly on the board.',
+      badgeColor: '#10b981'
+    },
+    {
+      name: 'Octo-Splat 🐙',
+      avatar: '🐙',
+      difficulty: 'Medium',
+      description: 'Claims empty and stolen grid cells greedily.',
+      badgeColor: '#3b82f6'
+    },
+    {
+      name: 'Inklord 👑',
+      avatar: '👑',
+      difficulty: 'Hard',
+      description: 'Aggressively targets player ink to steal territory.',
+      badgeColor: '#ef4444'
     }
   ];
 
@@ -69,6 +129,7 @@
 
   // Game state variables
   let selectedBonus = BONUSES[0];
+  let currentOpponent = OPPONENTS[0];
   let grid: number[][] = Array(6).fill(null).map(() => Array(6).fill(0)); // 0: empty, 1: player, 2: AI
   let deck: Card[] = [];
   let hand: Card[] = [];
@@ -104,13 +165,14 @@
 
   function initGame() {
     selectedBonus = BONUSES[Math.floor(Math.random() * BONUSES.length)];
+    currentOpponent = OPPONENTS[Math.floor(Math.random() * OPPONENTS.length)];
     grid = Array(6).fill(null).map(() => Array(6).fill(0));
     currentRound = 1;
     isGameOver = false;
     winner = null;
     selectedCardIndex = null;
     hoverCell = null;
-    statusText = 'Your turn! Choose an Ink Card and claim territory.';
+    statusText = `Your turn! Choose an Ink Card and claim territory from ${currentOpponent.name}.`;
 
     // Create a deck of 8 cards
     deck = [];
@@ -188,7 +250,7 @@
 
     // Check if player finished turn
     if (currentRound <= maxRounds) {
-      statusText = 'AI is playing...';
+      statusText = `${currentOpponent.name} is playing...`;
       setTimeout(playAiTurn, 800);
     }
   }
@@ -199,24 +261,63 @@
     // Pick a random card template
     const aiCard = CARD_TEMPLATES[Math.floor(Math.random() * CARD_TEMPLATES.length)];
 
-    // Find a good place to ink (prioritize overlapping player ink or empty spaces)
     let bestR = Math.floor(Math.random() * 6);
     let bestC = Math.floor(Math.random() * 6);
-    let bestScore = -999;
 
-    for (let r = 0; r < 6; r++) {
-      for (let c = 0; c < 6; c++) {
-        const cells = getCoveredCells(aiCard, r, c);
-        let score = 0;
-        for (const [tr, tc] of cells) {
-          if (grid[tr][tc] === 0) score += 2; // Empty cells are good
-          else if (grid[tr][tc] === 1) score += 3; // Stealing player cells is great!
-          else if (grid[tr][tc] === 2) score -= 1; // Overlapping self is bad
+    if (currentOpponent.difficulty === 'Easy') {
+      // Lil' Jelly: places cards at random coordinates
+      bestR = Math.floor(Math.random() * 6);
+      bestC = Math.floor(Math.random() * 6);
+    } else if (currentOpponent.difficulty === 'Medium') {
+      // Octo-Splat: Greedy heuristic. Prioritizes empty + stolen - overlap (self)
+      let bestScore = -999;
+      for (let r = 0; r < 6; r++) {
+        for (let c = 0; c < 6; c++) {
+          const cells = getCoveredCells(aiCard, r, c);
+          let score = 0;
+          for (const [tr, tc] of cells) {
+            if (grid[tr][tc] === 0) {
+              score += 2; // Empty cells are good
+            } else if (grid[tr][tc] === 1) {
+              score += 3; // Stealing player cells is great!
+            } else if (grid[tr][tc] === 2) {
+              score -= 1; // Overlapping self is bad
+            }
+          }
+          if (score > bestScore) {
+            bestScore = score;
+            bestR = r;
+            bestC = c;
+          }
         }
-        if (score > bestScore) {
-          bestScore = score;
-          bestR = r;
-          bestC = c;
+      }
+    } else {
+      // Inklord: Aggressive heuristic. Specifically targets and overlaps player-colored cells
+      let bestScore = -999;
+      for (let r = 0; r < 6; r++) {
+        for (let c = 0; c < 6; c++) {
+          const cells = getCoveredCells(aiCard, r, c);
+          let score = 0;
+          let playerOverlapCount = 0;
+          for (const [tr, tc] of cells) {
+            if (grid[tr][tc] === 1) {
+              score += 5; // Heavily weight stealing player's cells
+              playerOverlapCount++;
+            } else if (grid[tr][tc] === 0) {
+              score += 1; // Empty cells are minor bonus
+            } else if (grid[tr][tc] === 2) {
+              score -= 2; // Overlapping self is worse
+            }
+          }
+          // Extra bonus if we overlap at least one player cell (making it aggressive)
+          if (playerOverlapCount > 0) {
+            score += 4;
+          }
+          if (score > bestScore) {
+            bestScore = score;
+            bestR = r;
+            bestC = c;
+          }
         }
       }
     }
@@ -243,11 +344,11 @@
     updateScores();
     if (playerCellCount > opponentCellCount) {
       winner = 'player';
-      statusText = `🎉 VICTORY! Captured more territory. Bonus Unlocked: ${selectedBonus.name}!`;
+      statusText = `🎉 VICTORY! You defeated ${currentOpponent.name}. Bonus Unlocked: ${selectedBonus.name}!`;
       playSfx('chime');
     } else if (playerCellCount < opponentCellCount) {
       winner = 'opponent';
-      statusText = 'Defeat! AI colored more grid. Better luck next time!';
+      statusText = `Defeat! ${currentOpponent.name} captured more grid. Better luck next time!`;
     } else {
       winner = 'tie';
       statusText = 'Draw! Grid territory is equal.';
@@ -321,7 +422,8 @@
   <div class="card-battle-card">
     <div class="card-battle-header">
       <div class="title-row">
-        <h3>🎨 Territory Card Battle! ⚔️</h3>
+        <h3>🎨 Territory Card Battle vs {currentOpponent.avatar} {currentOpponent.name}! ⚔️</h3>
+        <span class="difficulty-badge" style="background-color: {currentOpponent.badgeColor}">{currentOpponent.difficulty} Mode</span>
         <span class="prize-tag">Prize: {selectedBonus.label}</span>
       </div>
       <p class="status-subtitle">{statusText}</p>
@@ -361,7 +463,7 @@
           </div>
           <div class="legend-item opponent">
             <span class="dot opponent-dot"></span>
-            <span>AI: {opponentCellCount} cells ({Math.round((opponentCellCount / 36) * 100)}%)</span>
+            <span>{currentOpponent.name}: {opponentCellCount} cells ({Math.round((opponentCellCount / 36) * 100)}%)</span>
           </div>
         </div>
       </div>
@@ -452,6 +554,16 @@
     font-size: 1.6rem;
     color: #f43f5e;
     text-shadow: 0 0 8px rgba(244, 63, 94, 0.4);
+  }
+
+  .difficulty-badge {
+    color: white;
+    font-weight: 900;
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 
   .prize-tag {

@@ -48,6 +48,14 @@ export async function saveRoomPayload(roomId: string, payload: RoomPayload): Pro
   return invoke<string>('save_room', { roomId, jsonString: JSON.stringify(payload) });
 }
 
+export async function saveRoomCompressed(roomId: string, payload: RoomPayload): Promise<string> {
+  return invoke<string>('save_room_compressed', { roomId, jsonString: JSON.stringify(payload) });
+}
+
+export async function cloudSyncRoom(roomId: string): Promise<string> {
+  return invoke<string>('cloud_sync_room', { roomId });
+}
+
 export async function saveEditorRoom(options: {
   roomId: string;
   placed: PlacedEntity[];
