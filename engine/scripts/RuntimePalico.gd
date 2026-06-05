@@ -8,6 +8,7 @@ var speed: float = 140.0
 var jump_force: float = -300.0
 var attack_cooldown: float = 0.0
 var cookie_cooldown: float = 0.0
+var followers := []
 
 
 func _ready() -> void:
@@ -19,6 +20,11 @@ func _ready() -> void:
 		modulate = Color(1.0, 0.5, 0.7)
 	elif palico_color == "green":
 		modulate = Color(0.4, 0.8, 0.4)
+
+	# Spawn 5 mini followers trailing in a chain
+	for i in range(5):
+		var follower = _spawn_mini_follower("kitten", i)
+		followers.append(follower)
 
 	var label := Label.new()
 	label.text = "CAT"
@@ -125,3 +131,49 @@ func _spawn_healing_cookie() -> void:
 	var tween := main.create_tween()
 	tween.tween_property(cookie, "position:y", cookie.position.y - 30.0, 0.35).set_ease(Tween.EASE_OUT)
 	tween.tween_property(cookie, "position:y", cookie.position.y, 0.35).set_ease(Tween.EASE_IN)
+
+
+func _spawn_mini_follower(type: String, index: int) -> CharacterBody2D:
+	var main = get_tree().get_root().get_node_or_null("Main")
+	if main == null: return null
+	
+	var follower := CharacterBody2D.new()
+	follower.name = "%s_follower_%d" % [name, index]
+	
+	var script = load("res://scripts/RuntimeSwarmFollower.gd")
+	follower.set_script(script)
+	follower.set("follower_type", type)
+	follower.set("follower_index", index)
+	
+	var collision := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 8.0
+	collision.shape = circle
+	follower.add_child(collision)
+	
+	var label := Label.new()
+	label.text = "🐱"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var settings := LabelSettings.new()
+	settings.font_size = 14
+	label.label_settings = settings
+	label.size = Vector2(16, 16)
+	label.position = -Vector2(8, 8)
+	label.pivot_offset = Vector2(8, 8)
+	follower.add_child(label)
+	
+	if index == 0:
+		follower.set("leader", self)
+	else:
+		var prev = followers[index - 1]
+		follower.set("leader", prev)
+		
+	main.call_deferred("add_child", follower)
+	follower.global_position = global_position + Vector2(-16 * (index + 1), 0)
+	
+	var spawned = main.get("spawned_entities")
+	if spawned is Array:
+		spawned.append(follower)
+		
+	return follower

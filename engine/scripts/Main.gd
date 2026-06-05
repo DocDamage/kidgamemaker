@@ -57,6 +57,7 @@ const RUNTIME_GHOST_REPLAY_SCRIPT := preload("res://scripts/RuntimeGhostReplay.g
 const RUNTIME_VICTORY_CONDITIONS_SCRIPT := preload("res://scripts/RuntimeVictoryConditions.gd")
 const RUNTIME_COLLECTIBLE_REWARDS_SCRIPT := preload("res://scripts/RuntimeCollectibleRewards.gd")
 const RUNTIME_RECOVERY_GHOST_FACTORY_SCRIPT := preload("res://scripts/RuntimeRecoveryGhostFactory.gd")
+const RUNTIME_AMBIENT_CREATURE_SCRIPT := preload("res://scripts/RuntimeAmbientCreature.gd")
 const RUNTIME_COMMERCE_SCRIPT := preload("res://scripts/RuntimeCommerce.gd")
 const RUNTIME_RISING_HAZARD_FACTORY_SCRIPT := preload("res://scripts/RuntimeRisingHazardFactory.gd")
 const RUNTIME_ZONAI_DEVICE_FACTORY_SCRIPT := preload("res://scripts/RuntimeZonaiDeviceFactory.gd")
@@ -1156,6 +1157,20 @@ func _make_pet(data: Dictionary, sidecar: Dictionary) -> Node2D:
 
 func _make_shopkeeper(data: Dictionary, sidecar: Dictionary) -> Area2D:
 	return RUNTIME_GAMEPLAY_OBJECT_FACTORY_SCRIPT.create_shopkeeper(self, data, sidecar, RUNTIME_SHOPKEEPER_SCRIPT)
+
+
+func _make_ambient_creature(data: Dictionary, sidecar: Dictionary) -> CharacterBody2D:
+	var node := CharacterBody2D.new()
+	var size: Vector2 = _collision_size(sidecar, Vector2(24, 24), data)
+	_add_box_collision(node, size)
+	node.set_meta("asset_id", data.get("asset_id", "ambient_butterfly"))
+	node.set_meta("collision_size", size)
+	var type := "butterfly"
+	if str(data.get("asset_id", "")).contains("squirrel"):
+		type = "squirrel"
+	node.set_meta("creature_type", type)
+	node.set_script(RUNTIME_AMBIENT_CREATURE_SCRIPT)
+	return node
 
 
 func _make_destructible_terrain(data: Dictionary, sidecar: Dictionary) -> StaticBody2D:

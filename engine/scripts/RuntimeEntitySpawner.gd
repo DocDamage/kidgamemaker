@@ -141,6 +141,8 @@ static func _create_node(
 			return app._make_logic_gate(data, sidecar, "not")
 		"compass":
 			return app._make_compass(data, sidecar)
+		"ambient_creature":
+			return app._make_ambient_creature(data, sidecar)
 		_:
 			return app._make_decoration(data, sidecar)
 
