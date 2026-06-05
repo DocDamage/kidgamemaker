@@ -72,6 +72,7 @@ export type EntityModifiers = {
   wind_force?: number;
   zonai_direction?: string;
   combined_with?: string;
+  socketed_gems?: string[];
   [key: string]: EntityModifierValue;
 };
 

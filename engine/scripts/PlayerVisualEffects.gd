@@ -195,6 +195,10 @@ static func draw_player_overlays(player: Node2D) -> void:
 	if bool(player.get("is_star_mode")):
 		player.draw_arc(Vector2.ZERO, 28.0, 0, TAU, 24, Color(1.0, 0.85, 0.1, 0.5), 3.0)
 		player.draw_arc(Vector2.ZERO, 32.0, 0, TAU, 24, Color(1.0, 0.6, 0.1, 0.3), 2.0)
+	if bool(player.get("shield_active")):
+		player.draw_circle(Vector2.ZERO, 30.0, Color(1.0, 0.3, 0.8, 0.18))
+		player.draw_arc(Vector2.ZERO, 30.0, 0, TAU, 32, Color(1.0, 0.5, 0.9, 0.75), 2.0)
+		player.draw_circle(Vector2(-10, -10), 3.5, Color(1, 1, 1, 0.85))
 	if bool(player.get("is_charge_jump_charging")):
 		var charge_timer: float = player.get("charge_jump_timer")
 		var time_per_level: float = player.get("charge_jump_time_per_level")

@@ -232,6 +232,8 @@ var loop_accumulated_angle: float = 0.0
 var emeralds_collected: int = 0
 var is_golden_flight: bool = false
 var golden_flight_timer: float = 0.0
+var _magnet_gem_timer: float = 0.0
+var _shield_regen_timer: float = 0.0
 
 
 # Speed Booster & Shinespark
@@ -294,6 +296,25 @@ func _ready() -> void:
 		max_health += 30
 	elif hero_class == "rogue":
 		movement_speed *= 1.25
+		double_jump_enabled = true
+
+	# Apply socketed gems
+	var gems := []
+	if has_meta("socketed_gems"):
+		var raw_gems = get_meta("socketed_gems")
+		if typeof(raw_gems) == TYPE_ARRAY:
+			gems = raw_gems
+	
+	for gem in gems:
+		match str(gem):
+			"gem_speed":
+				movement_speed *= 1.25
+			"gem_jump":
+				jump_force *= 1.20
+			"gem_heart":
+				max_health += 25
+			"gem_shield":
+				shield_active = true
 
 	current_health = max_health
 	_ready_trail_particles()
@@ -856,7 +877,7 @@ func _physics_process(delta: float) -> void:
 				main.spawn_floating_text("⬇️ SLAM!", global_position, Color.ORANGE)
 
 	# Handle Shield Block & Parry Input
-	if is_block_pressed() and is_on_floor() and not is_dashing:
+	if hero_class == "warrior" and is_block_pressed() and is_on_floor() and not is_dashing:
 		if not is_blocking:
 			is_blocking = true
 			parry_window_timer = 0.18 # 180ms parry window
@@ -1159,6 +1180,30 @@ func _physics_process(delta: float) -> void:
 	if trail_particles != null:
 		PlayerVisualEffects.update_hero_trail(trail_particles, velocity, modulate)
 
+	# Magical Badge Passive Processing
+	var gems_list := []
+	if has_meta("socketed_gems"):
+		var raw_gems = get_meta("socketed_gems")
+		if typeof(raw_gems) == TYPE_ARRAY:
+			gems_list = raw_gems
+	
+	var has_magnet_gem := "gem_magnet" in gems_list
+	var has_shield_gem := "gem_shield" in gems_list
+
+	if has_magnet_gem:
+		_magnet_gem_timer += delta
+		if _magnet_gem_timer >= 0.25:
+			_magnet_gem_timer = 0.0
+			_pull_gems_magnet(main)
+
+	if has_shield_gem and not shield_active:
+		_shield_regen_timer += delta
+		if _shield_regen_timer >= 10.0:
+			_shield_regen_timer = 0.0
+			shield_active = true
+			if main != null and main.has_method("spawn_floating_text"):
+				main.spawn_floating_text("🛡️ SHIELD REGENERATED!", global_position, Color.MAGENTA)
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	PlayerInputActions.handle(self, event)
@@ -1302,3 +1347,18 @@ func activate_golden_flight() -> void:
 		main.play_sfx("coin")
 	if main != null and main.has_method("spawn_floating_text"):
 		main.spawn_floating_text("🌟 GOLDEN SUPER FLIGHT MODE! 🌟", global_position, Color.GOLD)
+
+
+func _pull_gems_magnet(main_node: Node) -> void:
+	if main_node == null:
+		return
+	var spawned: Variant = main_node.get("spawned_entities")
+	if not spawned is Array:
+		return
+
+	for ent in spawned:
+		var item := ent as Node2D
+		if item != null and is_instance_valid(item) and item.has_meta("is_collectible"):
+			if global_position.distance_to(item.global_position) < 180.0:
+				var tween := item.create_tween()
+				tween.tween_property(item, "global_position", global_position, 0.25)

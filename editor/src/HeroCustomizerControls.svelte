@@ -41,6 +41,19 @@
     entity.modifiers.starting_items = items;
     dispatch('saveRoom');
   }
+
+  let socketedGems: string[] = [];
+  $: socketedGems = entity.modifiers.socketed_gems || ['', '', ''];
+
+  function updateGem(slotIndex: number, gemId: string) {
+    let gems = [...socketedGems];
+    while (gems.length < 3) {
+      gems.push('');
+    }
+    gems[slotIndex] = gemId;
+    entity.modifiers.socketed_gems = gems;
+    dispatch('saveRoom');
+  }
 </script>
 
 {#if isHero}
@@ -121,6 +134,29 @@
       {/each}
     </div>
   </div>
+
+  <div class="option-group starting-items-group">
+    <span class="option-label-text">🔮 Magical Badge Sockets:</span>
+    <div class="sockets-grid">
+      {#each [0, 1, 2] as idx}
+        <div class="socket-col">
+          <span class="socket-label">Slot {idx + 1}:</span>
+          <select
+            class="option-select"
+            value={socketedGems[idx] || ''}
+            on:change={(e) => updateGem(idx, e.currentTarget.value)}
+          >
+            <option value="">❌ Empty</option>
+            <option value="gem_speed">💨 Speed Gem</option>
+            <option value="gem_jump">🦘 Jump Gem</option>
+            <option value="gem_magnet">🧲 Magnet Gem</option>
+            <option value="gem_shield">🛡️ Shield Gem</option>
+            <option value="gem_heart">💖 Heart Gem</option>
+          </select>
+        </div>
+      {/each}
+    </div>
+  </div>
 {/if}
 
 <style>
@@ -177,6 +213,45 @@
   .active-option {
     background: var(--option-color);
     color: #0f172a;
+  }
+
+  .option-select {
+    width: 100%;
+    background: #0f172a;
+    color: white;
+    border: 2px solid #334155;
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .option-select:focus {
+    border-color: #fbbf24;
+  }
+
+  .sockets-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .socket-col {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .socket-label {
+    font-size: 0.85rem;
+    font-weight: bold;
+    color: #94a3b8;
+    white-space: nowrap;
   }
 </style>
 
